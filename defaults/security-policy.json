@@ -1,0 +1,93 @@
+{
+  "name": "security-policy",
+  "version": "1.0.0",
+  "description": "Default security gate policy for security-mcp. Copy to .mcp/policies/security-policy.json and customize for your project.",
+  "required_checks": {
+    "secrets_scan": { "severity_block": ["HIGH", "CRITICAL"] },
+    "dependency_scan": { "severity_block": ["CRITICAL"] },
+    "sast": { "severity_block": ["CRITICAL"] },
+    "iac_scan": { "severity_block": ["HIGH", "CRITICAL"] }
+  },
+  "requirements": [
+    {
+      "id": "ZERO_TRUST",
+      "type": "gate",
+      "description": "All services enforce authentication + authorization. No implicit trust for any request.",
+      "evidence": ["deny_by_default_authz", "service_to_service_auth"]
+    },
+    {
+      "id": "SECRET_MANAGER_ONLY",
+      "type": "gate",
+      "description": "Secrets stored only in a dedicated secret manager. Never in code, env files, logs, or images.",
+      "evidence": ["no_hardcoded_secrets", "secret_manager_refs"]
+    },
+    {
+      "id": "TLS_13",
+      "type": "gate",
+      "description": "TLS 1.3 mandatory for all in-transit data. TLS 1.0/1.1 strictly prohibited.",
+      "evidence": ["tls_config_verified"]
+    },
+    {
+      "id": "CSP_NO_INLINE",
+      "type": "gate",
+      "description": "Content Security Policy enforced. No unsafe-inline, no unsafe-eval. Nonce-based CSP only.",
+      "evidence": ["security_headers_present"]
+    },
+    {
+      "id": "CSRF",
+      "type": "gate",
+      "description": "CSRF protection on all state-mutating endpoints.",
+      "evidence": ["csrf_protection_present", "csrf_tests_present"]
+    },
+    {
+      "id": "SSRF",
+      "type": "gate",
+      "description": "SSRF guards on all server-side HTTP calls. Private IP ranges and metadata endpoints blocked.",
+      "evidence": ["ssrf_guard_present", "ssrf_tests_present"]
+    },
+    {
+      "id": "MOBILE_MASVS",
+      "type": "gate",
+      "description": "Mobile apps meet OWASP MASVS L2. iOS ATS strict, Android NSC strict, release builds not debuggable.",
+      "evidence": ["ios_ats_strict", "android_nsc_strict", "release_not_debuggable"]
+    },
+    {
+      "id": "AI_BOUNDED_OUTPUTS",
+      "type": "gate",
+      "description": "AI/LLM outputs validated against JSON schema. Tool calls routed through an allowlist.",
+      "evidence": ["json_schema_validation", "tool_allowlist_router"]
+    }
+  ],
+  "artifacts_required": [
+    {
+      "pattern": "security/threat-models/*.md",
+      "description": "A threat model document is required for any change touching these paths.",
+      "on_changes": [
+        "src/**",
+        "app/**",
+        "api/**",
+        "server/**",
+        "infra/**",
+        "terraform/**",
+        "k8s/**",
+        "helm/**",
+        "mobile/**",
+        "ios/**",
+        "android/**",
+        "ai/**",
+        "ml/**"
+      ]
+    }
+  ],
+  "vulnerability_slas": {
+    "CRITICAL": "24h",
+    "HIGH": "7d",
+    "MEDIUM": "30d",
+    "LOW": "90d",
+    "CISA_KEV": "24h"
+  },
+  "exceptions": {
+    "require_ticket": true,
+    "approval_roles": ["SecurityLead", "GRC", "CTO"]
+  }
+}

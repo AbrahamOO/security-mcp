@@ -1,0 +1,126 @@
+{
+  "_description": "Maps security gate evidence IDs to file glob patterns. Copy to .mcp/mappings/evidence-map.json and customize for your project layout.",
+  "deny_by_default_authz": [
+    "src/**/auth*.ts",
+    "src/**/auth*.js",
+    "src/**/middleware*.ts",
+    "src/**/middleware*.js",
+    "middleware.ts",
+    "middleware.js",
+    "app/api/**",
+    "src/api/**",
+    "server/middleware/**"
+  ],
+  "service_to_service_auth": [
+    "src/**/service*.ts",
+    "src/**/client*.ts",
+    "infra/**",
+    "k8s/**",
+    "helm/**"
+  ],
+  "no_hardcoded_secrets": [
+    "**/*.ts",
+    "**/*.js",
+    "**/*.py",
+    "**/*.go",
+    "**/*.java",
+    "**/*.env*",
+    "**/*.yaml",
+    "**/*.yml",
+    "**/*.json",
+    "**/*.toml",
+    "**/*.ini",
+    "**/*.conf"
+  ],
+  "secret_manager_refs": [
+    "infra/**",
+    "terraform/**",
+    "k8s/**",
+    "helm/**",
+    "src/**",
+    "app/**"
+  ],
+  "tls_config_verified": [
+    "infra/**",
+    "terraform/**",
+    "k8s/**",
+    "helm/**",
+    "src/**/tls*.ts",
+    "src/**/ssl*.ts",
+    "nginx/**",
+    "caddy/**"
+  ],
+  "security_headers_present": [
+    "middleware.ts",
+    "middleware.js",
+    "src/**/middleware*.ts",
+    "src/**/security*.ts",
+    "src/**/headers*.ts",
+    "next.config.*",
+    "nginx/**",
+    "caddy/**",
+    "infra/**"
+  ],
+  "csrf_protection_present": [
+    "app/api/**",
+    "src/api/**",
+    "server/routes/**",
+    "src/**/csrf*.ts",
+    "src/**/csrf*.js"
+  ],
+  "csrf_tests_present": [
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "**/*.test.js",
+    "**/*.spec.js",
+    "tests/**",
+    "test/**",
+    "__tests__/**"
+  ],
+  "ssrf_guard_present": [
+    "src/**/ssrf*.ts",
+    "src/**/ssrf*.js",
+    "src/**/http-client*.ts",
+    "src/**/fetch*.ts",
+    "src/**/url-validator*.ts",
+    "src/**/request*.ts",
+    "lib/**/http*.ts",
+    "lib/**/fetch*.ts"
+  ],
+  "ssrf_tests_present": [
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "tests/**",
+    "test/**"
+  ],
+  "ios_ats_strict": [
+    "**/Info.plist",
+    "ios/**"
+  ],
+  "android_nsc_strict": [
+    "**/network_security_config.xml",
+    "**/AndroidManifest.xml",
+    "android/**"
+  ],
+  "release_not_debuggable": [
+    "**/AndroidManifest.xml",
+    "**/build.gradle",
+    "**/build.gradle.kts",
+    "android/**"
+  ],
+  "json_schema_validation": [
+    "ai/**",
+    "ml/**",
+    "src/**/ai*.ts",
+    "src/**/llm*.ts",
+    "src/**/agent*.ts",
+    "src/**/schema*.ts"
+  ],
+  "tool_allowlist_router": [
+    "ai/**",
+    "ml/**",
+    "src/**/tool-router*.ts",
+    "src/**/tool*.ts",
+    "src/**/agent*.ts"
+  ]
+}

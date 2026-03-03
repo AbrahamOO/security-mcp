@@ -1,0 +1,45 @@
+{
+	"name": "security-policy",
+	"version": "1.0.0",
+	"required_checks": {
+		"secrets_scan": { "severity_block": ["HIGH", "CRITICAL"] },
+		"dependency_scan": { "severity_block": ["CRITICAL"] },
+		"sast": { "severity_block": ["CRITICAL"] },
+		"iac_scan": { "severity_block": ["HIGH", "CRITICAL"] }
+	},
+	"requirements": [
+		{ "id": "ZERO_TRUST", "type": "gate", "evidence": ["deny_by_default_authz", "service_to_service_auth"] },
+		{ "id": "SECRET_MANAGER_ONLY", "type": "gate", "evidence": ["no_hardcoded_secrets", "secret_manager_refs"] },
+		{ "id": "TLS_13", "type": "gate", "evidence": ["tls_config_verified"] },
+		{ "id": "CSP_NO_INLINE", "type": "gate", "evidence": ["security_headers_present"] },
+		{ "id": "CSRF", "type": "gate", "evidence": ["csrf_protection_present", "csrf_tests_present"] },
+		{ "id": "SSRF", "type": "gate", "evidence": ["ssrf_guard_present", "ssrf_tests_present"] },
+		{
+			"id": "MOBILE_MASVS",
+			"type": "gate",
+			"evidence": ["ios_ats_strict", "android_nsc_strict", "release_not_debuggable"]
+		},
+		{ "id": "AI_BOUNDED_OUTPUTS", "type": "gate", "evidence": ["json_schema_validation", "tool_allowlist_router"] }
+	],
+	"artifacts_required": [
+		{
+			"pattern": "security/threat-models/*.md",
+			"on_changes": [
+				"app/**",
+				"pages/**",
+				"components/**",
+				"src/**",
+				"api/**",
+				"server/**",
+				"infra/**",
+				"ios/**",
+				"android/**",
+				"ai/**"
+			]
+		}
+	],
+	"exceptions": {
+		"require_ticket": true,
+		"approval_roles": ["SecurityLead", "GRC", "CTO"]
+	}
+}

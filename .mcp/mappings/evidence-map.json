@@ -1,0 +1,12 @@
+{
+	"deny_by_default_authz": ["src/**/auth*.ts", "middleware.ts", "app/api/**"],
+	"secret_manager_refs": ["infra/**", "terraform/**", "app/**"],
+	"tls_config_verified": ["infra/**", "cloudrun/**"],
+	"security_headers_present": ["middleware.ts", "next.config.*"],
+	"csrf_protection_present": ["app/api/**", "src/api/**"],
+	"ssrf_guard_present": ["src/**/ssrf*.ts", "src/**/http-client*.ts"],
+	"ios_ats_strict": ["**/Info.plist"],
+	"android_nsc_strict": ["**/network_security_config.xml", "**/AndroidManifest.xml"],
+	"json_schema_validation": ["ai/**", "src/**/ai*.ts"],
+	"tool_allowlist_router": ["ai/**", "src/**/tool-router*.ts"]
+}
