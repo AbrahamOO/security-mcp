@@ -128,6 +128,29 @@ function writeVsCodeSettings(configPath: string, dryRun: boolean): string {
   return configPath;
 }
 
+function installPolicy(dryRun: boolean): void {
+  const policySrc = join(PKG_ROOT, "defaults", "security-policy.json");
+  const policyDest = join(process.cwd(), ".mcp", "policies", "security-policy.json");
+  const evidenceSrc = join(PKG_ROOT, "defaults", "evidence-map.json");
+  const evidenceDest = join(process.cwd(), ".mcp", "mappings", "evidence-map.json");
+
+  for (const { src, dest } of [{ src: policySrc, dest: policyDest }, { src: evidenceSrc, dest: evidenceDest }]) {
+    if (!existsSync(src)) {
+      process.stdout.write(`  [skip] ${src} not found in package\n`);
+      continue;
+    }
+    if (existsSync(dest)) {
+      process.stdout.write(`  [skip] already exists: ${dest}\n`);
+      continue;
+    }
+    if (!dryRun) {
+      mkdirSync(dirname(dest), { recursive: true });
+      copyFileSync(src, dest);
+    }
+    process.stdout.write(`  ${dryRun ? "[dry-run] would copy" : "installed"}: ${dest}\n`);
+  }
+}
+
 function installSkill(dryRun: boolean): void {
   const skillSrc = join(PKG_ROOT, "skills", "senior-security-engineer", "SKILL.md");
   const skillDest = resolveHome("~/.claude/skills/senior-security-engineer/SKILL.md");
@@ -183,6 +206,9 @@ export async function runInstall(opts: InstallOptions): Promise<void> {
     installSkill(dryRun);
   }
 
+  process.stdout.write("\nInstalling security policy...\n");
+  installPolicy(dryRun);
+
   process.stdout.write("\n");
   process.stdout.write(
     dryRun
@@ -192,7 +218,5 @@ export async function runInstall(opts: InstallOptions): Promise<void> {
   process.stdout.write("\nNext steps:\n");
   process.stdout.write("  1. Restart your editor.\n");
   process.stdout.write('  2. In Claude Code, type /senior-security-engineer to activate the security persona.\n');
-  process.stdout.write('  3. Ask your AI: "Run security.run_pr_gate" to check your current diff.\n');
-  process.stdout.write("  4. Copy defaults/security-policy.json to .mcp/policies/security-policy.json\n");
-  process.stdout.write("     and customize it for your project.\n\n");
+  process.stdout.write('  3. Ask your AI: "Run security.run_pr_gate" to check your current diff.\n\n');
 }
