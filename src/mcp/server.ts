@@ -1,8 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { readFileSync, existsSync } from "fs";
-import { dirname, join, resolve } from "path";
-import { fileURLToPath } from "url";
+import { readFileSync, existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { runPrGate } from "../gate/policy.js";
 import { readFileSafe } from "../repo/fs.js";
@@ -40,6 +40,24 @@ function asTextResponse(data: unknown) {
   return { content: [{ type: "text" as const, text }] };
 }
 
+/**
+ * Wraps a tool handler so that unhandled exceptions never leak internal paths,
+ * stack traces, or system details back to the MCP caller. CWE-209.
+ */
+function safeTool(
+  handler: (args: unknown, extra: unknown) => Promise<ReturnType<typeof asTextResponse>>
+): (args: unknown, extra: unknown) => Promise<ReturnType<typeof asTextResponse>> {
+  return async (args, extra) => {
+    try {
+      return await handler(args, extra);
+    } catch (err) {
+      // Return only the sanitized message — never the stack or internal path.
+      const msg = err instanceof Error ? err.message : "An internal error occurred";
+      return asTextResponse(`[security-mcp error] ${msg}`);
+    }
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Existing tools (unchanged)
 // ---------------------------------------------------------------------------
@@ -55,7 +73,7 @@ tool(
   "security.run_pr_gate",
   "Run the security policy gate against the current workspace. Returns PASS/FAIL plus findings and required actions.",
   RunPrGateParams as unknown as Record<string, z.ZodTypeAny>,
-  async (args: unknown, _extra: unknown) => {
+  safeTool(async (args: unknown, _extra: unknown) => {
     const { baseRef, headRef, policyPath } = RunPrGateSchema.parse(args);
     const result = await runPrGate({
       baseRef,
@@ -63,7 +81,7 @@ tool(
       policyPath: policyPath ?? ".mcp/policies/security-policy.json"
     });
     return asTextResponse(result);
-  }
+  })
 );
 
 const ReadFileParams = {
@@ -75,11 +93,11 @@ tool(
   "repo.read_file",
   "Read a file from the repo workspace.",
   ReadFileParams as unknown as Record<string, z.ZodTypeAny>,
-  async (args: unknown, _extra: unknown) => {
+  safeTool(async (args: unknown, _extra: unknown) => {
     const { path } = ReadFileSchema.parse(args);
     const data = await readFileSafe(path);
     return asTextResponse(data);
-  }
+  })
 );
 
 const SearchParams = {
@@ -93,11 +111,11 @@ tool(
   "repo.search",
   "Search the repo for a regex or string. Returns matches with file + line numbers.",
   SearchParams as unknown as Record<string, z.ZodTypeAny>,
-  async (args: unknown, _extra: unknown) => {
+  safeTool(async (args: unknown, _extra: unknown) => {
     const { query, isRegex, maxMatches } = SearchSchema.parse(args);
     const matches = await searchRepo({ query, isRegex: !!isRegex, maxMatches: maxMatches ?? 200 });
     return asTextResponse(matches);
-  }
+  })
 );
 
 // ---------------------------------------------------------------------------
@@ -122,7 +140,7 @@ tool(
   "security.get_system_prompt",
   "Return the full security engineering system prompt. Optionally customized with your stack, cloud provider, and payment processor. Use this as the system prompt to configure Claude as an elite security engineer for your project.",
   GetSystemPromptParams as unknown as Record<string, z.ZodTypeAny>,
-  async (args: unknown, _extra: unknown) => {
+  safeTool(async (args: unknown, _extra: unknown) => {
     const { stack, cloud, payment_processor } = GetSystemPromptSchema.parse(args);
 
     let prompt = SECURITY_PROMPT;
@@ -144,7 +162,7 @@ tool(
     }
 
     return asTextResponse(prompt);
-  }
+  })
 );
 
 // ---------------------------------------------------------------------------
@@ -166,7 +184,7 @@ tool(
   "security.threat_model",
   "Generate a STRIDE + PASTA + ATT&CK threat model template for a described feature or component. Returns a structured Markdown document ready to fill in.",
   ThreatModelParams as unknown as Record<string, z.ZodTypeAny>,
-  async (args: unknown, _extra: unknown) => {
+  safeTool(async (args: unknown, _extra: unknown) => {
     const { feature, surfaces } = ThreatModelSchema.parse(args);
     const surfaceList = surfaces ?? ["web", "api", "mobile", "ai", "infra", "data"];
 
@@ -281,7 +299,7 @@ Describe Level 0 (context) and Level 1 (process) flows in prose or embed a diagr
 `;
 
     return asTextResponse(template);
-  }
+  })
 );
 
 // ---------------------------------------------------------------------------
@@ -381,7 +399,7 @@ tool(
   "security.checklist",
   "Return the pre-release security checklist, optionally filtered by attack surface (web, api, mobile, ai, infra, payments, all).",
   ChecklistParams as unknown as Record<string, z.ZodTypeAny>,
-  async (args: unknown, _extra: unknown) => {
+  safeTool(async (args: unknown, _extra: unknown) => {
     const { surface } = ChecklistSchema.parse(args);
 
     if (!surface || surface === "all") {
@@ -413,7 +431,7 @@ tool(
     const section = lines.slice(start, sectionEnd === -1 ? undefined : sectionEnd).join("\n");
 
     return asTextResponse(`# Pre-Release Security Checklist (${surface})\n\n${allSurfaces}\n\n${section}`);
-  }
+  })
 );
 
 // ---------------------------------------------------------------------------
@@ -433,7 +451,7 @@ tool(
   "security.generate_policy",
   "Generate a security-policy.json for your project based on your active surfaces and cloud provider. Save the output to .mcp/policies/security-policy.json.",
   GeneratePolicyParams as unknown as Record<string, z.ZodTypeAny>,
-  async (args: unknown, _extra: unknown) => {
+  safeTool(async (args: unknown, _extra: unknown) => {
     const { surfaces, cloud } = GeneratePolicySchema.parse(args);
     const activeSurfaces = surfaces ?? ["web", "api", "infra"];
 
@@ -502,7 +520,7 @@ tool(
       "// See https://github.com/AbrahamOO/security-mcp for full documentation.\n\n";
 
     return asTextResponse(comment + JSON.stringify(policy, null, 2));
-  }
+  })
 );
 
 // ---------------------------------------------------------------------------

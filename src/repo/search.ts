@@ -9,6 +9,30 @@ type SearchOptions = {
 	maxMatches: number;
 };
 
+// Maximum allowed regex pattern length. Longer patterns significantly raise
+// the risk of catastrophic backtracking (ReDoS). CWE-1333.
+const MAX_REGEX_LEN = 256;
+
+// Detects nested quantifiers — the most common ReDoS trigger — without being
+// overly complex itself. Matches patterns like (a+)+, (a*)*, (\w+)+.
+const NESTED_QUANTIFIER_RE = /\([^)]*[+*][^)]*\)[+*?{]/;
+
+/**
+ * Validates and compiles a user-supplied regex string.
+ * Throws if the pattern is dangerously long, contains known ReDoS signatures,
+ * or is syntactically invalid. Returns the compiled RegExp on success.
+ * CWE-1333 / MITRE ATT&CK T1499 (resource exhaustion via ReDoS).
+ */
+function compileUserRegex(pattern: string): RegExp {
+	if (pattern.length > MAX_REGEX_LEN) {
+		throw new Error(`Regex pattern too long (max ${MAX_REGEX_LEN} chars)`);
+	}
+	if (NESTED_QUANTIFIER_RE.test(pattern)) {
+		throw new Error("Regex pattern contains nested quantifiers that risk catastrophic backtracking (ReDoS)");
+	}
+	return new RegExp(pattern, "i"); // throws SyntaxError on invalid patterns
+}
+
 const MAX_PREVIEW_LEN = 240;
 
 function isHit(line: string, query: string, re: RegExp | null): boolean {
@@ -42,7 +66,7 @@ export async function searchRepo(opts: SearchOptions): Promise<RepoMatch[]> {
 		ignore: ["**/node_modules/**", "**/.git/**", "**/dist/**"]
 	});
 
-	const re = opts.isRegex ? new RegExp(opts.query, "i") : null;
+	const re = opts.isRegex ? compileUserRegex(opts.query) : null;
 	const matches: RepoMatch[] = [];
 
 	for (const file of files) {
