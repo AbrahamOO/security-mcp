@@ -129,11 +129,11 @@ function writeVsCodeSettings(configPath: string, dryRun: boolean): string {
 }
 
 function installSkill(dryRun: boolean): void {
-  const skillSrc = join(PKG_ROOT, "skills", "security-review", "SKILL.md");
-  const skillDest = resolveHome("~/.claude/skills/security-review/SKILL.md");
+  const skillSrc = join(PKG_ROOT, "skills", "senior-security-engineer", "SKILL.md");
+  const skillDest = resolveHome("~/.claude/skills/senior-security-engineer/SKILL.md");
 
   if (!existsSync(skillSrc)) {
-    process.stdout.write("  [skip] skills/security-review/SKILL.md not found in package\n");
+    process.stdout.write("  [skip] skills/senior-security-engineer/SKILL.md not found in package\n");
     return;
   }
 
@@ -191,7 +191,7 @@ export async function runInstall(opts: InstallOptions): Promise<void> {
   );
   process.stdout.write("\nNext steps:\n");
   process.stdout.write("  1. Restart your editor.\n");
-  process.stdout.write('  2. In Claude Code, type /security-review to invoke the security skill.\n');
+  process.stdout.write('  2. In Claude Code, type /senior-security-engineer to activate the security persona.\n');
   process.stdout.write('  3. Ask your AI: "Run security.run_pr_gate" to check your current diff.\n');
   process.stdout.write("  4. Copy defaults/security-policy.json to .mcp/policies/security-policy.json\n");
   process.stdout.write("     and customize it for your project.\n\n");

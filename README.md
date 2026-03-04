@@ -1,23 +1,56 @@
-# security-mcp
+# security-mcp -- Your AI's Built-In Security Expert
 
 [![npm version](https://img.shields.io/npm/v/security-mcp.svg)](https://www.npmjs.com/package/security-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)](https://nodejs.org)
 [![CI](https://github.com/AbrahamOO/security-mcp/actions/workflows/security-gate.yml/badge.svg)](https://github.com/AbrahamOO/security-mcp/actions)
 
-**AI security MCP server and automated gate for Claude Code, GitHub Copilot, Cursor, Codex, Replit, and any MCP-compatible editor** -- enforcing OWASP, MITRE ATT&CK, NIST 800-53, Zero Trust, PCI DSS 4.0, and 20+ security frameworks on every code change before it ships.
+**Stop shipping vulnerable code.** security-mcp gives your AI assistant the knowledge of a Senior Security Engineer who actively **finds and fixes** security issues in your code -- not just lists them.
+
+Works with Claude Code, GitHub Copilot, Cursor, Codex, Replit, and any MCP-compatible editor.
+
+---
+
+## Who Is This For?
+
+You don't need a security background to use this. It's built for:
+
+- **Vibe coders** building fast and shipping faster -- who need security to just work
+- **Indie hackers and solo founders** who can't afford a dedicated security team
+- **Full-stack developers** who know their code works but aren't sure if it's safe
+- **Startups and small teams** shipping web apps, mobile apps, APIs, and SaaS products
+- **AI-assisted developers** using Claude Code, Copilot, Cursor, or Codex to write code
+- **Anyone who's ever shipped code and wondered "wait, is this secure?"**
+
+You write the code. Your AI + security-mcp enforces the security.
+
+---
+
+## What It Fortifies
+
+security-mcp actively hardens every surface of your software:
+
+| Surface | What Gets Fortified |
+| --- | --- |
+| **Web Apps** | XSS, CSRF, injection attacks, insecure headers, authentication flaws, session bugs |
+| **APIs (REST, GraphQL, gRPC)** | Auth gaps, IDOR, rate limiting, input validation, CORS misconfigs, SSRF |
+| **Mobile Apps (iOS + Android)** | Insecure storage, certificate pinning, network security, reverse engineering exposure |
+| **Cloud Infrastructure (AWS, GCP, Azure)** | Open firewall rules, public buckets, wildcard IAM, missing encryption, exposed metadata |
+| **AI / LLMs** | Prompt injection, jailbreaks, RAG access control, output validation, data leakage |
+| **Code and Dependencies** | Hardcoded secrets, vulnerable packages, supply chain risks, insecure crypto |
+| **CI/CD Pipelines** | Secrets in logs, overprivileged deploy credentials, unvalidated artifacts |
 
 ---
 
 ## Quick Start
 
-Install the MCP security server into all detected editors with one command:
-
 ```bash
 npx security-mcp install
 ```
 
-Target a specific editor:
+That's it. The tool auto-detects your editor and writes the MCP config. Restart your editor -- done.
+
+To target a specific editor:
 
 ```bash
 npx security-mcp install --claude-code
@@ -25,83 +58,105 @@ npx security-mcp install --cursor
 npx security-mcp install --vscode
 ```
 
-Preview what would be installed without writing anything:
+Preview without writing anything:
 
 ```bash
 npx security-mcp install --dry-run
 ```
 
-After installation, restart your editor. The `security-mcp` MCP server starts automatically.
-
-In **Claude Code**, invoke the skill directly:
+In **Claude Code**, activate the security engineer:
 
 ```text
-/security-review
+/senior-security-engineer
 ```
+
+Your AI will now **find and fix** security issues instead of just mentioning them.
 
 ---
 
-## What It Does
+## How It Works
 
-`security-mcp` gives your AI coding assistant the knowledge and tools of a **Principal Security Engineer** who has internalized every major security framework. It operates at four levels:
+When you invoke `/senior-security-engineer` or call any security-mcp MCP tool, your AI shifts into the role of a Senior Security Engineer. It will:
 
-### 1. MCP Server (Real-Time Tools)
+1. **Scan your code** for vulnerabilities, misconfigurations, and security anti-patterns
+2. **Fix what it finds** -- not just flag it; it rewrites the insecure code with the secure version
+3. **Enforce policies** -- set up input validation, auth middleware, security headers, and rate limiting
+4. **Block dangerous patterns** -- refuse to implement code that introduces known vulnerabilities
+5. **Explain everything in plain English** -- no security jargon required
 
-The MCP server exposes tools that your AI can call during any coding session:
+### MCP Tools (Your AI Uses These Automatically)
 
 | Tool | What It Does |
 | --- | --- |
-| `security.get_system_prompt` | Returns the full elite security prompt (optionally filtered by stack, cloud provider, or payment processor) |
-| `security.threat_model` | Generates a complete STRIDE + PASTA + ATT&CK + D3FEND threat model template for any described feature |
-| `security.checklist` | Returns the pre-release security checklist, filterable by surface (web, api, mobile, ai, infra, payments) |
-| `security.generate_policy` | Generates a `security-policy.json` tailored to your project surfaces and cloud provider |
-| `security.run_pr_gate` | Runs the security policy gate against the current Git diff and reports findings |
-| `repo.read_file` | Reads a file from the workspace |
-| `repo.search` | Searches the codebase for patterns |
+| `security.get_system_prompt` | Loads the full security directive into your AI session -- activates the Senior Security Engineer mode |
+| `security.threat_model` | Generates a complete threat model for any feature before a single line of code is written |
+| `security.checklist` | Returns a hardened pre-ship checklist specific to your surface (web, API, mobile, AI, cloud) |
+| `security.generate_policy` | Writes a `security-policy.json` for your project that the gate enforces on every PR |
+| `security.run_pr_gate` | Scans your current code diff and **blocks merge** if it introduces CRITICAL or HIGH vulnerabilities |
+| `repo.read_file` | Reads files from your workspace for analysis |
+| `repo.search` | Searches your codebase for vulnerable patterns |
 
-### 2. MCP Prompts
-
-Two reusable prompts are registered in the MCP server:
-
-- **`security-engineer`** - Loads the full security system prompt, turning your AI into a Principal Security Engineer persona for the session.
-- **`threat-model-template`** - Accepts a `feature` argument and returns a ready-to-fill threat model template.
-
-### 3. Claude Code Skill
-
-The `/security-review` skill is a 24-section, 900-line security directive that embeds the complete security framework directly into Claude Code's context. It covers:
-
-- STRIDE + PASTA + LINDDUN + DREAD threat modeling
-- MITRE ATT&CK (Enterprise, Cloud, Mobile) coverage table
-- MITRE D3FEND countermeasure mapping
-- MITRE ATLAS adversarial ML threat coverage
-- Zero Trust architecture enforcement (NIST 800-207)
-- Cloud security rules (GCP, AWS, Azure) with absolute prohibitions
-- Container and Kubernetes hardening (CIS Benchmark Level 2)
-- Supply chain security (SLSA L3, SBOM, Sigstore)
-- DevSecOps pipeline gates (SAST, SCA, IaC, DAST)
-- Input validation - three-layer defense for every field type
-- AI/LLM security (prompt injection defense, RAG access control, output validation)
-- PCI DSS 4.0 payment flow controls
-- GDPR/CCPA/HIPAA data flow compliance
-- Vulnerability SLAs (CRITICAL: 24h, HIGH: 7d, MEDIUM: 30d)
-- Pre-release security checklist (Section 22E)
-
-### 4. Security Gate (CI/CD)
-
-The policy gate runs in CI and blocks PRs that violate security policy:
+### Security Gate (Blocks Bad Code from Shipping)
 
 ```bash
 npx security-mcp ci:pr-gate
 ```
 
-Gate checks cover hardcoded secrets, dependency vulnerabilities, IaC misconfigurations,
-auth and authorization gaps, SSRF and CSRF exposure, and AI/LLM output bounding.
+Add this to your CI pipeline. It scans every PR and **blocks the merge** if it finds:
+
+- Hardcoded secrets or credentials
+- Known vulnerable dependencies (CRITICAL/HIGH CVEs)
+- Dangerous IaC patterns (open firewall rules, world-readable storage, wildcard IAM)
+- Auth gaps, SSRF, CSRF exposure
+- AI/LLM output that isn't properly bounded or validated
+
+---
+
+## What Gets Fixed Automatically
+
+When your AI has security-mcp active, it will **fix these automatically** -- not just warn about them:
+
+### Secrets and Authentication
+
+- Moves hardcoded secrets to environment variables / secret managers
+- Implements proper JWT validation (signature, expiry, issuer, audience)
+- Adds rate limiting and account lockout to auth endpoints
+- Enforces MFA requirements and session timeout policies
+- Implements Argon2id password hashing (not MD5, not SHA-1)
+
+### Input Validation and Injection
+
+- Adds server-side schema validation (Zod / Yup) to every API route
+- Blocks SQL injection, XSS, command injection, path traversal, SSRF
+- Sanitizes file uploads (validates magic bytes, strips filenames, scans for malware)
+- Normalizes and validates all user inputs with allowlist rules
+
+### Network and Cloud
+
+- Removes `0.0.0.0/0` ingress rules and replaces with source-restricted rules
+- Locks down S3/GCS/Azure Blob buckets that are world-readable
+- Removes wildcard IAM permissions and replaces with least-privilege policies
+- Enforces TLS 1.3 and rejects weak cipher suites
+
+### Web Security
+
+- Sets mandatory security headers (CSP, HSTS, X-Frame-Options, Permissions-Policy)
+- Removes inline JavaScript; enforces nonce-based CSP
+- Fixes CORS configurations that allow `*` on authenticated endpoints
+- Adds CSRF protection to all state-mutating endpoints
+
+### AI / LLM Security
+
+- Separates user content from system prompts (prevents prompt injection)
+- Adds output schema validation so models can't return arbitrary dangerous content
+- Enforces access control on RAG document retrieval
+- Adds rate limiting specific to AI endpoints
 
 ---
 
 ## Supported Editors
 
-| Editor | Installation Method | Config Location |
+| Editor | Install Command | Config Location |
 | --- | --- | --- |
 | Claude Code | `npx security-mcp install --claude-code` | `~/.claude/settings.json` |
 | Cursor (global) | `npx security-mcp install --cursor` | `~/.cursor/mcp.json` |
@@ -110,44 +165,36 @@ auth and authorization gaps, SSRF and CSRF exposure, and AI/LLM output bounding.
 | GitHub Copilot | Manual config (see below) | `.vscode/settings.json` |
 | Codex | Manual config (see below) | Editor config |
 | Replit | Manual config (see below) | `.replit` config |
-| Any MCP-compatible | `npx security-mcp config` for snippet | Paste into editor config |
+| Any MCP-compatible | `npx security-mcp config` | Paste into editor config |
 
 ---
 
-## Security Frameworks Covered
+## Security Frameworks Applied (Automatically)
 
-- OWASP Top 10 (Web + API)
-- OWASP ASVS Level 2/3
-- OWASP MASVS (Mobile)
-- OWASP SAMM
-- OWASP Top 10 for LLMs
-- MITRE ATT&CK Enterprise v14+
-- MITRE ATT&CK Cloud
-- MITRE ATT&CK Mobile
-- MITRE CAPEC
-- MITRE D3FEND
-- MITRE ATLAS (adversarial ML)
-- NIST 800-53 Rev 5
-- NIST CSF 2.0
-- NIST 800-207 (Zero Trust Architecture)
-- NIST 800-218 (SSDF)
-- NIST AI RMF
-- NIST 800-190 (Container Security)
-- PCI DSS 4.0
-- SOC 2 Type II
-- ISO/IEC 27001:2022
-- ISO/IEC 42001:2023 (AI Management)
-- GDPR / CCPA / HIPAA
-- CIS Benchmarks Level 2
-- CSA CCM v4
-- SLSA Level 3
-- FedRAMP Moderate
-- CVSS v4.0 + EPSS
-- CWE/SANS Top 25
+You don't need to know what these are. They're the standards that the world's top security teams use.
+security-mcp applies all of them on your behalf:
+
+- OWASP Top 10 (Web + API) -- the most common attack patterns
+- OWASP ASVS Level 2/3 -- application security verification
+- OWASP MASVS -- mobile app security
+- OWASP Top 10 for LLMs -- AI-specific vulnerabilities
+- MITRE ATT&CK Enterprise, Cloud, and Mobile -- real attacker playbooks
+- MITRE D3FEND -- defensive countermeasures mapped to every attack
+- MITRE ATLAS -- adversarial ML/AI attack techniques
+- NIST 800-53 Rev 5 -- the US government's security control catalog
+- NIST 800-207 -- Zero Trust Architecture
+- NIST AI RMF -- AI risk management
+- PCI DSS 4.0 -- payment card security (if you handle payments)
+- SOC 2 Type II -- cloud service security (if you serve enterprise customers)
+- ISO 27001:2022 -- international security management standard
+- GDPR / CCPA / HIPAA -- data privacy compliance
+- SLSA Level 3 -- supply chain security
+- CIS Benchmarks Level 2 -- hardened configurations for cloud and containers
+- CVSS v4.0 + EPSS -- vulnerability scoring and exploit probability
 
 ---
 
-## Manual Configuration
+## Manual Editor Configuration
 
 ### Claude Code (`~/.claude/settings.json`)
 
@@ -188,7 +235,7 @@ auth and authorization gaps, SSRF and CSRF exposure, and AI/LLM output bounding.
 }
 ```
 
-Print the recommended config snippet for any editor:
+Print the config snippet for any editor:
 
 ```bash
 npx security-mcp config
@@ -196,26 +243,22 @@ npx security-mcp config
 
 ---
 
-## Security Policy
+## Security Policy (CI/CD Gate)
 
-Copy the default security policy to your project and customize it:
+Copy the default policy into your project:
 
 ```bash
 cp node_modules/security-mcp/defaults/security-policy.json .mcp/policies/security-policy.json
 cp node_modules/security-mcp/defaults/evidence-map.json .mcp/mappings/evidence-map.json
 ```
 
-Or generate a policy tailored to your project via the MCP tool:
+Or generate one tailored to your project:
 
 ```text
 Ask your AI: "Run security.generate_policy with surfaces=[web, api, ai] and cloud=aws"
 ```
 
----
-
-## CI/CD Integration
-
-Add the security gate to your GitHub Actions workflow:
+Add the gate to GitHub Actions:
 
 ```yaml
 name: Security Gate
@@ -236,49 +279,28 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Run security gate
+      - name: Block insecure code from merging
         run: npx -y security-mcp ci:pr-gate
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-The gate exits non-zero on CRITICAL or HIGH findings, blocking the PR merge.
-
 ---
 
-## Threat Modeling
+## The 10 Rules That Are Never Broken
 
-Ask your AI to generate a threat model for any feature:
+No matter what your AI is asked to do, these rules are enforced without exception:
 
-```text
-Run security.threat_model with feature="user authentication with OAuth 2.0" and surfaces=["web", "api"]
-```
-
-The tool returns a complete STRIDE + PASTA + ATT&CK + D3FEND template covering:
-
-- Asset inventory and trust boundaries
-- STRIDE analysis per component and trust boundary
-- ATT&CK technique mapping with D3FEND countermeasures
-- NIST 800-53 Rev 5 control IDs
-- Residual risk register with owner and review date
-- Pre-release security checklist
-
----
-
-## Non-Negotiable Rules (Always Enforced)
-
-The security persona enforces these rules without exception:
-
-- No `0.0.0.0/0` ingress or egress rules anywhere
-- All internal services communicate via private VPC paths only (VPC endpoints, PrivateLink)
-- Secrets stored only in a dedicated secret manager - never in code, env files, or logs
-- TLS 1.3 for all in-transit data; TLS 1.0/1.1 strictly prohibited
-- Argon2id (or bcrypt cost 14+) for password hashing - no MD5, SHA-1, or unsalted hashes
-- Server-side schema validation (Zod, Yup, Valibot) on every API input
-- No inline JavaScript; CSP nonce-based only
-- FIDO2/WebAuthn passkey for admin and privileged operations
-- Threat model required before implementing auth, payment, or AI features
-- Zero Trust: never trust, always verify - every request, every token, every service call
+1. No `0.0.0.0/0` firewall rules -- ever
+2. All internal services talk over private VPC only (no public internet)
+3. Secrets live in a secret manager only -- never in code, env files, or logs
+4. TLS 1.3 for everything in transit -- 1.0 and 1.1 are blocked
+5. Passwords hashed with Argon2id or bcrypt (cost 14+) -- no MD5, no SHA-1
+6. Every API input validated server-side with a schema -- no exceptions
+7. No inline JavaScript -- CSP nonce-based only
+8. Admin interfaces require FIDO2/WebAuthn passkey -- not just a password
+9. Threat model written before building any auth, payment, or AI feature
+10. Zero Trust: every request authenticated and authorized regardless of origin
 
 ---
 
@@ -286,9 +308,9 @@ The security persona enforces these rules without exception:
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Security Disclosure
+## Responsible Disclosure
 
-See [SECURITY.md](SECURITY.md) for responsible disclosure policy.
+See [SECURITY.md](SECURITY.md).
 
 ## License
 
