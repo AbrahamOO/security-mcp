@@ -4,15 +4,16 @@
  * Auto-detects installed editors and writes MCP server config + Claude Code skill.
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync } from "fs";
-import { dirname, join, resolve } from "path";
-import { homedir, platform } from "os";
-import { fileURLToPath } from "url";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { homedir, platform } from "node:os";
+import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = resolve(__dirname, "../..");
 
 const MCP_ENTRY = {
+  type: "stdio",
   command: "npx",
   args: ["-y", "security-mcp", "serve"]
 };
@@ -48,7 +49,7 @@ function getVsCodeSettingsPath(): string {
 }
 
 function getEditorTargets(opts: InstallOptions): EditorTarget[] {
-  const claudeCodePath = resolveHome("~/.claude/settings.json");
+  const claudeCodePath = resolveHome("~/.claude.json");
   const cursorGlobalPath = resolveHome("~/.cursor/mcp.json");
   const cursorLocalPath = ".cursor/mcp.json";
   const vscodePath = getVsCodeSettingsPath();
