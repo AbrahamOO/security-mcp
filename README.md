@@ -45,7 +45,7 @@ security-mcp actively hardens every surface of your software:
 ## Quick Start
 
 ```bash
-npx security-mcp install
+npx -y security-mcp@latest install
 ```
 
 That's it. The tool auto-detects your editor and writes the MCP config. Restart your editor -- done.
@@ -53,15 +53,15 @@ That's it. The tool auto-detects your editor and writes the MCP config. Restart 
 To target a specific editor:
 
 ```bash
-npx security-mcp install --claude-code
-npx security-mcp install --cursor
-npx security-mcp install --vscode
+npx -y security-mcp@latest install --claude-code
+npx -y security-mcp@latest install --cursor
+npx -y security-mcp@latest install --vscode
 ```
 
 Preview without writing anything:
 
 ```bash
-npx security-mcp install --dry-run
+npx -y security-mcp@latest install --dry-run
 ```
 
 ### Global Install
@@ -69,7 +69,7 @@ npx security-mcp install --dry-run
 Install the package globally, then configure editors to call the global binary directly:
 
 ```bash
-npm install -g security-mcp
+npm install -g security-mcp@latest
 security-mcp install-global
 ```
 
@@ -77,6 +77,19 @@ Preview the global install flow without writing:
 
 ```bash
 security-mcp install-global --dry-run
+```
+
+### Update Behavior
+
+- `npx -y security-mcp@latest ...` always runs the latest published npm version.
+- Global installs (`npm install -g security-mcp`) do not auto-upgrade by themselves.
+- The CLI now checks npm for new releases and prints an update prompt when a newer version is available.
+
+Global update command:
+
+```bash
+npm install -g security-mcp@latest
+security-mcp install-global
 ```
 
 In **Claude Code**, activate the security engineer:
@@ -122,7 +135,7 @@ When you invoke `/senior-security-engineer` or call any security-mcp MCP tool, y
 ### Security Gate (Blocks Bad Code from Shipping)
 
 ```bash
-npx security-mcp ci:pr-gate
+npx -y security-mcp@latest ci:pr-gate
 ```
 
 Add this to your CI pipeline. It scans every PR and **blocks the merge** if it finds:
@@ -181,17 +194,17 @@ When your AI has security-mcp active, it will **fix these automatically** -- not
 
 | Editor | Install Command | Config Location |
 | --- | --- | --- |
-| Claude Code | `npx security-mcp install --claude-code` | `~/.claude/settings.json` |
+| Claude Code | `npx -y security-mcp@latest install --claude-code` | `~/.claude/settings.json` |
 | Claude Code (global binary) | `security-mcp install-global --claude-code` | `~/.claude/settings.json` |
-| Cursor (global) | `npx security-mcp install --cursor` | `~/.cursor/mcp.json` |
+| Cursor (global) | `npx -y security-mcp@latest install --cursor` | `~/.cursor/mcp.json` |
 | Cursor (global binary) | `security-mcp install-global --cursor` | `~/.cursor/mcp.json` |
-| Cursor (workspace) | `npx security-mcp install --cursor` | `.cursor/mcp.json` |
-| VS Code | `npx security-mcp install --vscode` | User `settings.json` |
+| Cursor (workspace) | `npx -y security-mcp@latest install --cursor` | `.cursor/mcp.json` |
+| VS Code | `npx -y security-mcp@latest install --vscode` | User `settings.json` |
 | VS Code (global binary) | `security-mcp install-global --vscode` | User `settings.json` |
 | GitHub Copilot | Manual config (see below) | `.vscode/settings.json` |
 | Codex | Manual config (see below) | Editor config |
 | Replit | Manual config (see below) | `.replit` config |
-| Any MCP-compatible | `npx security-mcp config` or `security-mcp config --use-global-binary` | Paste into editor config |
+| Any MCP-compatible | `npx -y security-mcp@latest config` or `security-mcp config --use-global-binary` | Paste into editor config |
 
 ---
 
@@ -229,7 +242,7 @@ security-mcp applies all of them on your behalf:
   "mcpServers": {
     "security-mcp": {
       "command": "npx",
-      "args": ["-y", "security-mcp", "serve"]
+      "args": ["-y", "security-mcp@latest", "serve"]
     }
   }
 }
@@ -255,7 +268,7 @@ security-mcp applies all of them on your behalf:
   "mcpServers": {
     "security-mcp": {
       "command": "npx",
-      "args": ["-y", "security-mcp", "serve"]
+      "args": ["-y", "security-mcp@latest", "serve"]
     }
   }
 }
@@ -268,7 +281,7 @@ security-mcp applies all of them on your behalf:
   "mcp.servers": {
     "security-mcp": {
       "command": "npx",
-      "args": ["-y", "security-mcp", "serve"]
+      "args": ["-y", "security-mcp@latest", "serve"]
     }
   }
 }
@@ -277,7 +290,7 @@ security-mcp applies all of them on your behalf:
 Print the config snippet for any editor:
 
 ```bash
-npx security-mcp config
+npx -y security-mcp@latest config
 security-mcp config --use-global-binary
 ```
 

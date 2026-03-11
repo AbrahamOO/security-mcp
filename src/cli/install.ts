@@ -106,7 +106,7 @@ function getMcpEntry(useGlobalBinary: boolean): Record<string, unknown> {
     : {
         type: "stdio",
         command: "npx",
-        args: ["-y", "security-mcp", "serve"]
+        args: ["-y", "security-mcp@latest", "serve"]
       };
 }
 
@@ -201,7 +201,7 @@ export async function runInstall(opts: InstallOptions): Promise<void> {
     process.stdout.write(
       "No supported editors detected automatically.\n" +
       "Run with --claude-code, --cursor, or --vscode to target a specific editor.\n" +
-      'Or add the config manually (run "npx security-mcp config" for the snippet).\n\n'
+      'Or add the config manually (run "npx -y security-mcp@latest config" for the snippet).\n\n'
     );
     return;
   }
@@ -238,7 +238,7 @@ export async function runInstall(opts: InstallOptions): Promise<void> {
       : "Done! Restart your editor to activate the security-mcp server.\n"
   );
   process.stdout.write(
-    `Install mode: ${opts.useGlobalBinary ? "global binary (security-mcp serve)" : "npx (npx -y security-mcp serve)"}\n`
+    `Install mode: ${opts.useGlobalBinary ? "global binary (security-mcp serve)" : "npx (npx -y security-mcp@latest serve)"}\n`
   );
   process.stdout.write("\nNext steps:\n");
   process.stdout.write("  1. Restart your editor.\n");

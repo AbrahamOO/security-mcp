@@ -15,6 +15,7 @@ import { fileURLToPath } from "url";
 import { dirname, resolve } from "path";
 import { runInstall } from "./install.js";
 import { main as runServer } from "../mcp/server.js";
+import { notifyIfUpdateAvailable } from "./update.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -40,7 +41,7 @@ function getConfigSnippet(useGlobalBinary: boolean): Record<string, unknown> {
           }
         : {
             command: "npx",
-            args: ["-y", "security-mcp", "serve"]
+            args: ["-y", "security-mcp@latest", "serve"]
           }
     }
   };
@@ -52,7 +53,7 @@ security-mcp v${VERSION}
   AI security MCP server and gate for Claude Code, Cursor, Copilot, Codex, Replit, and any MCP-compatible editor.
 
 USAGE
-  npx security-mcp <command> [options]
+  npx -y security-mcp@latest <command> [options]
 
 COMMANDS
   serve            Start the MCP server over stdio (default for editors)
@@ -74,23 +75,23 @@ OPTIONS (general)
 
 EXAMPLES
   # Start MCP server (called automatically by editors):
-  npx -y security-mcp serve
+  npx -y security-mcp@latest serve
 
   # Install into all detected editors:
-  npx security-mcp install
+  npx -y security-mcp@latest install
 
   # Install globally once, then configure editors to use the global binary:
-  npm install -g security-mcp
+  npm install -g security-mcp@latest
   security-mcp install-global
 
   # Install into Claude Code only:
-  npx security-mcp install --claude-code
+  npx -y security-mcp@latest install --claude-code
 
   # Preview install without writing:
-  npx security-mcp install --dry-run
+  npx -y security-mcp@latest install --dry-run
 
   # Print JSON config snippet:
-  npx security-mcp config
+  npx -y security-mcp@latest config
   security-mcp config --use-global-binary
 
 EDITOR CONFIG (add manually if install fails):
@@ -98,7 +99,7 @@ EDITOR CONFIG (add manually if install fails):
     "mcpServers": {
       "security-mcp": {
         "command": "npx",
-        "args": ["-y", "security-mcp", "serve"]
+        "args": ["-y", "security-mcp@latest", "serve"]
       }
     }
   }
@@ -126,6 +127,12 @@ async function main(): Promise<void> {
   }
 
   const command = args[0] ?? "serve";
+
+  if (command === "serve") {
+    void notifyIfUpdateAvailable(VERSION);
+  } else {
+    await notifyIfUpdateAvailable(VERSION);
+  }
 
   switch (command) {
     case "serve": {
