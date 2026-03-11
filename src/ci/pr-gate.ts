@@ -1,7 +1,7 @@
 import { runPrGate } from "../gate/policy.js";
 
-// Allowlist refs to the same safe character set enforced in diff.ts. CWE-88.
-const SAFE_REF_RE = /^[a-zA-Z0-9_.\-/]+$/;
+// Allow safe git revision operators (~ and ^) plus ref/path characters. CWE-88.
+const SAFE_REF_RE = /^[a-zA-Z0-9_./~^-]+$/;
 
 function safeEnvRef(envVar: string, defaultValue: string): string {
   const val = process.env[envVar] || defaultValue;

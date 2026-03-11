@@ -2,11 +2,11 @@ import { execa } from "execa";
 
 // Allowlist for git ref strings. Blocks option injection (e.g. --upload-pack=…)
 // and git pathspec magic characters. CWE-88 / MITRE ATT&CK T1059.
-const SAFE_REF_RE = /^[a-zA-Z0-9_.\-/]+$/;
+const SAFE_REF_RE = /^[a-zA-Z0-9_./~^-]+$/;
 
 function validateRef(name: string, value: string): void {
   if (!value || !SAFE_REF_RE.test(value)) {
-    throw new Error(`Invalid git ref for ${name}: must contain only alphanumerics, _, ., -, /`);
+    throw new Error(`Invalid git ref for ${name}: must contain only alphanumerics, _, ., -, /, ~, ^`);
   }
 }
 
