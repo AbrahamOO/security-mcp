@@ -181,8 +181,8 @@ When your AI has security-mcp active, it will **fix these automatically** -- not
 
 | Editor | Install Command | Config Location |
 | --- | --- | --- |
-| Claude Code | `npx security-mcp install --claude-code` | `~/.claude.json` |
-| Claude Code (global binary) | `security-mcp install-global --claude-code` | `~/.claude.json` |
+| Claude Code | `npx security-mcp install --claude-code` | `~/.claude/settings.json` |
+| Claude Code (global binary) | `security-mcp install-global --claude-code` | `~/.claude/settings.json` |
 | Cursor (global) | `npx security-mcp install --cursor` | `~/.cursor/mcp.json` |
 | Cursor (global binary) | `security-mcp install-global --cursor` | `~/.cursor/mcp.json` |
 | Cursor (workspace) | `npx security-mcp install --cursor` | `.cursor/mcp.json` |
@@ -222,7 +222,7 @@ security-mcp applies all of them on your behalf:
 
 ## Manual Editor Configuration
 
-### Claude Code (`~/.claude.json`)
+### Claude Code (`~/.claude/settings.json`)
 
 ```json
 {
@@ -235,7 +235,7 @@ security-mcp applies all of them on your behalf:
 }
 ```
 
-### Claude Code With Global Binary (`~/.claude.json`)
+### Claude Code With Global Binary (`~/.claude/settings.json`)
 
 ```json
 {

@@ -103,7 +103,7 @@ EDITOR CONFIG (add manually if install fails):
     }
   }
 
-  Claude Code:  ~/.claude.json
+  Claude Code:  ~/.claude/settings.json
   Cursor:       ~/.cursor/mcp.json  or  .cursor/mcp.json
   VS Code:      .vscode/mcp.json   (workspace)
 
@@ -164,7 +164,7 @@ async function main(): Promise<void> {
     case "config": {
       process.stdout.write(JSON.stringify(getConfigSnippet(useGlobalBinary), null, 2) + "\n");
       process.stdout.write("\nAdd the above to your editor's MCP config file.\n");
-      process.stdout.write("  Claude Code:  ~/.claude.json\n");
+      process.stdout.write("  Claude Code:  ~/.claude/settings.json\n");
       process.stdout.write("  Cursor:       ~/.cursor/mcp.json\n");
       process.stdout.write("  VS Code:      .vscode/mcp.json\n");
       break;

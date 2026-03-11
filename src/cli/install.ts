@@ -44,7 +44,7 @@ function getVsCodeSettingsPath(): string {
 }
 
 function getEditorTargets(opts: InstallOptions): EditorTarget[] {
-  const claudeCodePath = resolveHome("~/.claude.json");
+  const claudeCodePath = resolveHome("~/.claude/settings.json");
   const cursorGlobalPath = resolveHome("~/.cursor/mcp.json");
   const cursorLocalPath = ".cursor/mcp.json";
   const vscodePath = getVsCodeSettingsPath();
