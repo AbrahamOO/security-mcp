@@ -1,0 +1,23 @@
+{
+  "name": "fixture-web-policy",
+  "version": "1.0.0",
+  "artifacts_required": [],
+  "required_checks": {},
+  "requirements": [
+    {
+      "id": "CSP_NO_INLINE",
+      "type": "gate",
+      "evidence": ["security_headers_present"]
+    },
+    {
+      "id": "CSRF",
+      "type": "gate",
+      "evidence": ["csrf_protection_present", "csrf_tests_present"]
+    },
+    {
+      "id": "SSRF",
+      "type": "gate",
+      "evidence": ["ssrf_guard_present", "ssrf_tests_present"]
+    }
+  ]
+}

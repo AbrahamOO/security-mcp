@@ -30,6 +30,22 @@ function getVersion(): string {
 
 const VERSION = getVersion();
 
+function getConfigSnippet(useGlobalBinary: boolean): Record<string, unknown> {
+  return {
+    mcpServers: {
+      "security-mcp": useGlobalBinary
+        ? {
+            command: "security-mcp",
+            args: ["serve"]
+          }
+        : {
+            command: "npx",
+            args: ["-y", "security-mcp", "serve"]
+          }
+    }
+  };
+}
+
 const HELP = `
 security-mcp v${VERSION}
 
@@ -41,6 +57,7 @@ USAGE
 COMMANDS
   serve            Start the MCP server over stdio (default for editors)
   install          Auto-detect installed editors and write MCP configs
+  install-global   Install using the globally installed security-mcp binary
   config           Print MCP config JSON for manual editor setup
 
 OPTIONS (install)
@@ -48,6 +65,7 @@ OPTIONS (install)
   --cursor         Write config for Cursor only
   --vscode         Write config for VS Code only
   --global         Write to global editor config (default)
+  --use-global-binary  Write configs that execute "security-mcp serve" instead of npx
   --dry-run        Print what would change without writing
 
 OPTIONS (general)
@@ -61,6 +79,10 @@ EXAMPLES
   # Install into all detected editors:
   npx security-mcp install
 
+  # Install globally once, then configure editors to use the global binary:
+  npm install -g security-mcp
+  security-mcp install-global
+
   # Install into Claude Code only:
   npx security-mcp install --claude-code
 
@@ -69,6 +91,7 @@ EXAMPLES
 
   # Print JSON config snippet:
   npx security-mcp config
+  security-mcp config --use-global-binary
 
 EDITOR CONFIG (add manually if install fails):
   {
@@ -80,7 +103,7 @@ EDITOR CONFIG (add manually if install fails):
     }
   }
 
-  Claude Code:  ~/.claude/settings.json
+  Claude Code:  ~/.claude.json
   Cursor:       ~/.cursor/mcp.json  or  .cursor/mcp.json
   VS Code:      .vscode/mcp.json   (workspace)
 
@@ -88,17 +111,9 @@ MORE INFO
   https://github.com/AbrahamOO/security-mcp
 `;
 
-const CONFIG_SNIPPET = {
-  mcpServers: {
-    "security-mcp": {
-      command: "npx",
-      args: ["-y", "security-mcp", "serve"]
-    }
-  }
-};
-
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
+  const useGlobalBinary = args.includes("--use-global-binary");
 
   if (args.includes("--version") || args.includes("-v")) {
     process.stdout.write(`security-mcp v${VERSION}\n`);
@@ -125,6 +140,7 @@ async function main(): Promise<void> {
         cursor: args.includes("--cursor"),
         vscode: args.includes("--vscode"),
         dryRun: args.includes("--dry-run"),
+        useGlobalBinary,
         // If no editor flag specified, install to all detected
         all: !args.includes("--claude-code") && !args.includes("--cursor") && !args.includes("--vscode")
       };
@@ -132,10 +148,23 @@ async function main(): Promise<void> {
       break;
     }
 
+    case "install-global": {
+      const options = {
+        claudeCode: args.includes("--claude-code"),
+        cursor: args.includes("--cursor"),
+        vscode: args.includes("--vscode"),
+        dryRun: args.includes("--dry-run"),
+        useGlobalBinary: true,
+        all: !args.includes("--claude-code") && !args.includes("--cursor") && !args.includes("--vscode")
+      };
+      await runInstall(options);
+      break;
+    }
+
     case "config": {
-      process.stdout.write(JSON.stringify(CONFIG_SNIPPET, null, 2) + "\n");
+      process.stdout.write(JSON.stringify(getConfigSnippet(useGlobalBinary), null, 2) + "\n");
       process.stdout.write("\nAdd the above to your editor's MCP config file.\n");
-      process.stdout.write("  Claude Code:  ~/.claude/settings.json\n");
+      process.stdout.write("  Claude Code:  ~/.claude.json\n");
       process.stdout.write("  Cursor:       ~/.cursor/mcp.json\n");
       process.stdout.write("  VS Code:      .vscode/mcp.json\n");
       break;

@@ -12,18 +12,13 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = resolve(__dirname, "../..");
 
-const MCP_ENTRY = {
-  type: "stdio",
-  command: "npx",
-  args: ["-y", "security-mcp", "serve"]
-};
-
 interface InstallOptions {
   claudeCode: boolean;
   cursor: boolean;
   vscode: boolean;
   all: boolean;
   dryRun: boolean;
+  useGlobalBinary: boolean;
 }
 
 interface EditorTarget {
@@ -101,10 +96,24 @@ function readJsonSafe(filePath: string): Record<string, unknown> {
   }
 }
 
-function writeMcpServersJson(configPath: string, dryRun: boolean): string {
+function getMcpEntry(useGlobalBinary: boolean): Record<string, unknown> {
+  return useGlobalBinary
+    ? {
+        type: "stdio",
+        command: "security-mcp",
+        args: ["serve"]
+      }
+    : {
+        type: "stdio",
+        command: "npx",
+        args: ["-y", "security-mcp", "serve"]
+      };
+}
+
+function writeMcpServersJson(configPath: string, dryRun: boolean, useGlobalBinary: boolean): string {
   const existing = readJsonSafe(configPath);
   const servers = (existing["mcpServers"] as Record<string, unknown>) ?? {};
-  servers["security-mcp"] = MCP_ENTRY;
+  servers["security-mcp"] = getMcpEntry(useGlobalBinary);
   existing["mcpServers"] = servers;
 
   const content = JSON.stringify(existing, null, 2) + "\n";
@@ -115,10 +124,10 @@ function writeMcpServersJson(configPath: string, dryRun: boolean): string {
   return configPath;
 }
 
-function writeVsCodeSettings(configPath: string, dryRun: boolean): string {
+function writeVsCodeSettings(configPath: string, dryRun: boolean, useGlobalBinary: boolean): string {
   const existing = readJsonSafe(configPath);
   const servers = (existing["mcp.servers"] as Record<string, unknown>) ?? {};
-  servers["security-mcp"] = MCP_ENTRY;
+  servers["security-mcp"] = getMcpEntry(useGlobalBinary);
   existing["mcp.servers"] = servers;
 
   const content = JSON.stringify(existing, null, 2) + "\n";
@@ -134,8 +143,20 @@ function installPolicy(dryRun: boolean): void {
   const policyDest = join(process.cwd(), ".mcp", "policies", "security-policy.json");
   const evidenceSrc = join(PKG_ROOT, "defaults", "evidence-map.json");
   const evidenceDest = join(process.cwd(), ".mcp", "mappings", "evidence-map.json");
+  const catalogSrc = join(PKG_ROOT, "defaults", "control-catalog.json");
+  const catalogDest = join(process.cwd(), ".mcp", "catalog", "control-catalog.json");
+  const scannersSrc = join(PKG_ROOT, "defaults", "security-tools.json");
+  const scannersDest = join(process.cwd(), ".mcp", "scanners", "security-tools.json");
+  const exceptionsSrc = join(PKG_ROOT, "defaults", "security-exceptions.json");
+  const exceptionsDest = join(process.cwd(), ".mcp", "exceptions", "security-exceptions.json");
 
-  for (const { src, dest } of [{ src: policySrc, dest: policyDest }, { src: evidenceSrc, dest: evidenceDest }]) {
+  for (const { src, dest } of [
+    { src: policySrc, dest: policyDest },
+    { src: evidenceSrc, dest: evidenceDest },
+    { src: catalogSrc, dest: catalogDest },
+    { src: scannersSrc, dest: scannersDest },
+    { src: exceptionsSrc, dest: exceptionsDest }
+  ]) {
     if (!existsSync(src)) {
       process.stdout.write(`  [skip] ${src} not found in package\n`);
       continue;
@@ -190,9 +211,9 @@ export async function runInstall(opts: InstallOptions): Promise<void> {
     try {
       let written: string;
       if (target.type === "vscode-settings") {
-        written = writeVsCodeSettings(target.configPath, dryRun);
+        written = writeVsCodeSettings(target.configPath, dryRun, opts.useGlobalBinary);
       } else {
-        written = writeMcpServersJson(target.configPath, dryRun);
+        written = writeMcpServersJson(target.configPath, dryRun, opts.useGlobalBinary);
       }
       process.stdout.write(`  ${dryRun ? "[dry-run] would update" : "updated"}: ${written}\n`);
     } catch (err) {
@@ -216,8 +237,11 @@ export async function runInstall(opts: InstallOptions): Promise<void> {
       ? "Dry-run complete. Re-run without --dry-run to apply.\n"
       : "Done! Restart your editor to activate the security-mcp server.\n"
   );
+  process.stdout.write(
+    `Install mode: ${opts.useGlobalBinary ? "global binary (security-mcp serve)" : "npx (npx -y security-mcp serve)"}\n`
+  );
   process.stdout.write("\nNext steps:\n");
   process.stdout.write("  1. Restart your editor.\n");
   process.stdout.write('  2. In Claude Code, type /senior-security-engineer to activate the security persona.\n');
-  process.stdout.write('  3. Ask your AI: "Run security.run_pr_gate" to check your current diff.\n\n');
+  process.stdout.write('  3. Ask your AI: "Run security.start_review with mode=recent_changes" to begin an auditable review.\n\n');
 }

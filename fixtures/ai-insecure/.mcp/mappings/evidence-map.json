@@ -1,0 +1,4 @@
+{
+  "json_schema_validation": ["src/**/schema*.ts", "ai/**/schema*.ts"],
+  "tool_allowlist_router": ["src/**/tool-router*.ts", "src/**/agent*.ts"]
+}

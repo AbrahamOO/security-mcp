@@ -1,6 +1,6 @@
 {
   "name": "security-mcp",
-  "version": "1.0.4",
+  "version": "1.1.0",
   "description": "AI security MCP server and enforcement gate for Claude Code, Cursor, GitHub Copilot, Codex, Replit, and any MCP-compatible editor. Applies OWASP, MITRE ATT&CK, NIST, Zero Trust, PCI DSS, SOC 2, and ISO 27001.",
   "type": "module",
   "license": "MIT",
@@ -53,21 +53,31 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "lint": "eslint . --max-warnings=0",
     "prepublishOnly": "npm run build",
     "start": "node dist/cli/index.js serve",
     "mcp:server": "node dist/mcp/server.js",
-    "ci:pr-gate": "node dist/ci/pr-gate.js"
+    "ci:pr-gate": "node dist/ci/pr-gate.js",
+    "test": "npm run build && node dist/tests/run.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "execa": "^9.5.2",
     "fast-glob": "^3.3.3",
     "picomatch": "^3.0.1",
     "zod": "^3.24.1"
   },
+  "overrides": {
+    "express-rate-limit": "^8.2.2",
+    "hono": "^4.12.7"
+  },
   "devDependencies": {
+    "@eslint/js": "^9.22.0",
     "@types/node": "^22.13.5",
     "@types/picomatch": "^2.3.4",
+    "eslint": "^9.22.0",
+    "globals": "^16.0.0",
+    "typescript-eslint": "^8.26.0",
     "typescript": "^5.7.3"
   },
   "engines": {

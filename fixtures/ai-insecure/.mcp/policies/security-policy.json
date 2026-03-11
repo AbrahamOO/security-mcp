@@ -1,0 +1,13 @@
+{
+  "name": "fixture-ai-policy",
+  "version": "1.0.0",
+  "artifacts_required": [],
+  "required_checks": {},
+  "requirements": [
+    {
+      "id": "AI_BOUNDED_OUTPUTS",
+      "type": "gate",
+      "evidence": ["json_schema_validation", "tool_allowlist_router"]
+    }
+  ]
+}

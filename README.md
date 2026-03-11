@@ -64,6 +64,21 @@ Preview without writing anything:
 npx security-mcp install --dry-run
 ```
 
+### Global Install
+
+Install the package globally, then configure editors to call the global binary directly:
+
+```bash
+npm install -g security-mcp
+security-mcp install-global
+```
+
+Preview the global install flow without writing:
+
+```bash
+security-mcp install-global --dry-run
+```
+
 In **Claude Code**, activate the security engineer:
 
 ```text
@@ -78,21 +93,29 @@ Your AI will now **find and fix** security issues instead of just mentioning the
 
 When you invoke `/senior-security-engineer` or call any security-mcp MCP tool, your AI shifts into the role of a Senior Security Engineer. It will:
 
-1. **Scan your code** for vulnerabilities, misconfigurations, and security anti-patterns
-2. **Fix what it finds** -- not just flag it; it rewrites the insecure code with the secure version
-3. **Enforce policies** -- set up input validation, auth middleware, security headers, and rate limiting
-4. **Block dangerous patterns** -- refuse to implement code that introduces known vulnerabilities
-5. **Explain everything in plain English** -- no security jargon required
+1. **Ask scan scope first** -- folder-by-folder, file-by-file, or recent changes
+2. **Start a review run** -- carry a `runId` for ordered execution and attestation
+3. **Scan your code** for vulnerabilities, misconfigurations, and security anti-patterns
+4. **Fix what it finds** -- not just flag it; it rewrites the insecure code with the secure version
+5. **Enforce policies** -- set up input validation, auth middleware, security headers, and rate limiting
+6. **Block dangerous patterns** -- refuse to implement code that introduces known vulnerabilities
+7. **Produce an attestation** -- emit a confidence summary and integrity hash for the completed review
 
 ### MCP Tools (Your AI Uses These Automatically)
 
 | Tool | What It Does |
 | --- | --- |
+| `security.start_review` | Starts a stateful review run and returns the `runId` used for ordered execution and attestation |
 | `security.get_system_prompt` | Loads the full security directive into your AI session -- activates the Senior Security Engineer mode |
 | `security.threat_model` | Generates a complete threat model for any feature before a single line of code is written |
 | `security.checklist` | Returns a hardened pre-ship checklist specific to your surface (web, API, mobile, AI, cloud) |
+| `security.scan_strategy` | Forces scan mode selection (`folder_by_folder`, `file_by_file`, `recent_changes`) and builds an exhaustive review plan |
 | `security.generate_policy` | Writes a `security-policy.json` for your project that the gate enforces on every PR |
-| `security.run_pr_gate` | Scans your current code diff and **blocks merge** if it introduces CRITICAL or HIGH vulnerabilities |
+| `security.terraform_hardening_blueprint` | Produces an advanced Terraform hardening baseline (network, IAM, data, logging, CI controls) |
+| `security.generate_opa_rego` | Generates preventive OPA/Rego policies for Terraform plans, CI pipelines, and Kubernetes admission (requires explicit consent) |
+| `security.self_heal_loop` | Proposes self-healing improvements, but requires explicit human approval before any change |
+| `security.attest_review` | Writes an auditable review attestation with integrity hash and confidence summary |
+| `security.run_pr_gate` | Scans recent changes, selected folders, or selected files and **blocks merge** on CRITICAL/HIGH vulnerabilities; requires `runId` in MCP usage |
 | `repo.read_file` | Reads files from your workspace for analysis |
 | `repo.search` | Searches your codebase for vulnerable patterns |
 
@@ -158,14 +181,17 @@ When your AI has security-mcp active, it will **fix these automatically** -- not
 
 | Editor | Install Command | Config Location |
 | --- | --- | --- |
-| Claude Code | `npx security-mcp install --claude-code` | `~/.claude/settings.json` |
+| Claude Code | `npx security-mcp install --claude-code` | `~/.claude.json` |
+| Claude Code (global binary) | `security-mcp install-global --claude-code` | `~/.claude.json` |
 | Cursor (global) | `npx security-mcp install --cursor` | `~/.cursor/mcp.json` |
+| Cursor (global binary) | `security-mcp install-global --cursor` | `~/.cursor/mcp.json` |
 | Cursor (workspace) | `npx security-mcp install --cursor` | `.cursor/mcp.json` |
 | VS Code | `npx security-mcp install --vscode` | User `settings.json` |
+| VS Code (global binary) | `security-mcp install-global --vscode` | User `settings.json` |
 | GitHub Copilot | Manual config (see below) | `.vscode/settings.json` |
 | Codex | Manual config (see below) | Editor config |
 | Replit | Manual config (see below) | `.replit` config |
-| Any MCP-compatible | `npx security-mcp config` | Paste into editor config |
+| Any MCP-compatible | `npx security-mcp config` or `security-mcp config --use-global-binary` | Paste into editor config |
 
 ---
 
@@ -196,7 +222,7 @@ security-mcp applies all of them on your behalf:
 
 ## Manual Editor Configuration
 
-### Claude Code (`~/.claude/settings.json`)
+### Claude Code (`~/.claude.json`)
 
 ```json
 {
@@ -204,6 +230,19 @@ security-mcp applies all of them on your behalf:
     "security-mcp": {
       "command": "npx",
       "args": ["-y", "security-mcp", "serve"]
+    }
+  }
+}
+```
+
+### Claude Code With Global Binary (`~/.claude.json`)
+
+```json
+{
+  "mcpServers": {
+    "security-mcp": {
+      "command": "security-mcp",
+      "args": ["serve"]
     }
   }
 }
@@ -239,6 +278,7 @@ Print the config snippet for any editor:
 
 ```bash
 npx security-mcp config
+security-mcp config --use-global-binary
 ```
 
 ---
@@ -250,6 +290,9 @@ Copy the default policy into your project:
 ```bash
 cp node_modules/security-mcp/defaults/security-policy.json .mcp/policies/security-policy.json
 cp node_modules/security-mcp/defaults/evidence-map.json .mcp/mappings/evidence-map.json
+cp node_modules/security-mcp/defaults/control-catalog.json .mcp/catalog/control-catalog.json
+cp node_modules/security-mcp/defaults/security-tools.json .mcp/scanners/security-tools.json
+cp node_modules/security-mcp/defaults/security-exceptions.json .mcp/exceptions/security-exceptions.json
 ```
 
 Or generate one tailored to your project:

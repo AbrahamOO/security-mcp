@@ -1,0 +1,41 @@
+{
+  "version": "1.0.0",
+  "fail_closed": true,
+  "scanners": {
+    "gitleaks": {
+      "command": "gitleaks",
+      "args": ["version"],
+      "required_for": ["all"]
+    },
+    "semgrep": {
+      "command": "semgrep",
+      "args": ["--version"],
+      "required_for": ["web", "api", "ai"]
+    },
+    "osv-scanner": {
+      "command": "osv-scanner",
+      "args": ["--version"],
+      "required_for": ["web", "api", "ai"]
+    },
+    "checkov": {
+      "command": "checkov",
+      "args": ["--version"],
+      "required_for": ["infra"]
+    },
+    "trivy": {
+      "command": "trivy",
+      "args": ["--version"],
+      "required_for": ["infra"]
+    },
+    "conftest": {
+      "command": "conftest",
+      "args": ["--version"],
+      "required_for": ["infra"]
+    },
+    "zaproxy": {
+      "command": "zaproxy",
+      "args": ["-version"],
+      "required_for": ["web", "api"]
+    }
+  }
+}

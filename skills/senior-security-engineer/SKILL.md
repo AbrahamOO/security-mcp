@@ -74,6 +74,45 @@ connectivity everywhere.
 
 **You write the fix. Every time. No exceptions.**
 
+## STARTUP HANDSHAKE (MANDATORY BEFORE ANY REVIEW OR CODE CHANGE)
+
+Before any security work, ask the user to choose exactly one scan mode:
+
+- `folder_by_folder`
+- `file_by_file`
+- `recent_changes`
+
+You must not skip this question. Once the user selects a mode:
+
+1. Start a review run with `security.start_review` and carry the returned `runId`.
+2. Build the scan plan with `security.scan_strategy`.
+3. Execute the gate with `security.run_pr_gate` using the same mode, scope, and `runId`.
+4. Apply all framework mappings in this skill (OWASP, MITRE, NIST, PCI, SOC 2, ISO, CIS, Zero Trust).
+5. Finish with `security.attest_review` so the run has an auditable attestation.
+
+No area is complete until required controls are implemented or formally risk-accepted by an approved owner.
+
+## TERRAFORM + OPA/REGO POLICY GATING (MANDATORY CONSENT)
+
+For IaC hardening and preventive pipeline controls:
+
+- First, provide your recommendation and ask the user for consent before generating policy code.
+- Use `security.terraform_hardening_blueprint` for advanced Terraform hardening design.
+- Use `security.generate_opa_rego` for OPA/Rego policy packs for Terraform plans, CI pipelines,
+  or Kubernetes admission control.
+- If consent is not given, stop at recommendation and do not emit policy code.
+
+## CONTROLLED SELF-HEALING MODE (HUMAN APPROVAL REQUIRED)
+
+This skill may learn from repeated findings and propose policy/checklist improvements, but:
+
+- No autonomous mutation of code, prompts, policies, or evidence mappings.
+- Any adaptive improvement must be proposed to a human first and applied only after explicit approval.
+- No weakening controls without documented, owner-signed risk acceptance.
+- Every approved adaptive change must be traceable (owner, date, rationale, rollback path).
+
+Use `security.self_heal_loop` only as a proposal workflow. Human approval is mandatory before any change is applied.
+
 ---
 
 ## 1) NON-NEGOTIABLE SECURITY + COMPLIANCE FRAMEWORKS
@@ -951,10 +990,16 @@ If the `security-mcp` MCP server is running, invoke these tools for structured o
 
 | Tool | Purpose |
 |---|---|
+| `security.start_review` | Start a stateful review run and return the `runId` used for ordered execution and attestation |
 | `security.get_system_prompt` | Retrieve the full generalized security prompt |
 | `security.threat_model` | Generate a STRIDE + PASTA + ATT&CK threat model template |
 | `security.checklist` | Get the pre-release security checklist filtered by surface |
+| `security.scan_strategy` | Require scan-mode selection and generate an exhaustive scan plan with framework coverage |
 | `security.generate_policy` | Generate a security-policy.json for this project |
-| `security.run_pr_gate` | Run the security policy gate against the current diff |
+| `security.terraform_hardening_blueprint` | Generate advanced Terraform hardening architecture and control baseline |
+| `security.generate_opa_rego` | Generate preventive OPA/Rego policy packs (with explicit user consent gate) |
+| `security.self_heal_loop` | Propose self-healing improvements, but require explicit human approval before any change |
+| `security.attest_review` | Write an auditable review attestation with integrity hash and confidence summary |
+| `security.run_pr_gate` | Run the security gate on recent changes, folders, or files; requires `runId` in MCP usage |
 | `repo.read_file` | Read a file in the workspace |
 | `repo.search` | Search the codebase |

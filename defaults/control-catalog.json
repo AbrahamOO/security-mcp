@@ -1,0 +1,157 @@
+{
+  "version": "1.0.0",
+  "controls": [
+    {
+      "id": "SCAN_MODE_SELECTED",
+      "description": "A review mode is selected before scanning begins.",
+      "automation": "workflow",
+      "surfaces": ["all"],
+      "frameworks": ["NIST 800-218", "OWASP SAMM"],
+      "required_steps": ["scan_strategy"]
+    },
+    {
+      "id": "THREAT_MODEL_COMPLETED",
+      "description": "Threat modeling is completed before security review signoff.",
+      "automation": "workflow",
+      "surfaces": ["web", "api", "mobile", "ai", "infra"],
+      "frameworks": ["STRIDE", "PASTA", "MITRE ATT&CK"],
+      "required_steps": ["threat_model"]
+    },
+    {
+      "id": "CHECKLIST_COMPLETED",
+      "description": "Surface-specific security checklist completed.",
+      "automation": "workflow",
+      "surfaces": ["all"],
+      "frameworks": ["OWASP ASVS", "NIST CSF 2.0"],
+      "required_steps": ["checklist"]
+    },
+    {
+      "id": "ZERO_TRUST",
+      "description": "All services enforce authentication and authorization with no implicit trust.",
+      "automation": "evidence",
+      "surfaces": ["web", "api", "infra"],
+      "frameworks": ["NIST 800-207", "OWASP ASVS"],
+      "evidence": ["deny_by_default_authz", "service_to_service_auth"]
+    },
+    {
+      "id": "SECRET_MANAGER_ONLY",
+      "description": "Secrets stored only in a dedicated secret manager.",
+      "automation": "evidence",
+      "surfaces": ["all"],
+      "frameworks": ["NIST 800-53", "SOC 2"],
+      "evidence": ["no_hardcoded_secrets", "secret_manager_refs"]
+    },
+    {
+      "id": "TLS_13",
+      "description": "TLS configuration is verified.",
+      "automation": "evidence",
+      "surfaces": ["web", "api", "infra"],
+      "frameworks": ["NIST 800-53", "PCI DSS 4.0"],
+      "evidence": ["tls_config_verified"]
+    },
+    {
+      "id": "CSP_NO_INLINE",
+      "description": "CSP is configured without unsafe inline execution.",
+      "automation": "evidence",
+      "surfaces": ["web"],
+      "frameworks": ["OWASP ASVS", "CWE-79"],
+      "evidence": ["security_headers_present"]
+    },
+    {
+      "id": "CSRF",
+      "description": "CSRF protections and tests are present.",
+      "automation": "evidence",
+      "surfaces": ["web", "api"],
+      "frameworks": ["OWASP Top 10", "OWASP ASVS"],
+      "evidence": ["csrf_protection_present", "csrf_tests_present"]
+    },
+    {
+      "id": "SSRF",
+      "description": "SSRF guards and tests are present.",
+      "automation": "evidence",
+      "surfaces": ["web", "api", "infra"],
+      "frameworks": ["OWASP Top 10", "CWE-918"],
+      "evidence": ["ssrf_guard_present", "ssrf_tests_present"]
+    },
+    {
+      "id": "MOBILE_MASVS",
+      "description": "Mobile release configuration meets MASVS baseline.",
+      "automation": "evidence",
+      "surfaces": ["mobile"],
+      "frameworks": ["OWASP MASVS"],
+      "evidence": ["ios_ats_strict", "android_nsc_strict", "release_not_debuggable"]
+    },
+    {
+      "id": "AI_BOUNDED_OUTPUTS",
+      "description": "AI outputs are schema-validated and tools are allowlisted.",
+      "automation": "evidence",
+      "surfaces": ["ai"],
+      "frameworks": ["OWASP LLM Top 10", "MITRE ATLAS"],
+      "evidence": ["json_schema_validation", "tool_allowlist_router"]
+    },
+    {
+      "id": "SECRETS_SCANNER_READY",
+      "description": "A dedicated secrets scanner is installed and runnable.",
+      "automation": "tooling",
+      "surfaces": ["all"],
+      "frameworks": ["NIST 800-218", "SLSA"],
+      "required_scanners": ["gitleaks"]
+    },
+    {
+      "id": "SAST_SCANNER_READY",
+      "description": "A static analysis scanner is installed and runnable.",
+      "automation": "tooling",
+      "surfaces": ["web", "api", "ai"],
+      "frameworks": ["OWASP Top 10", "OWASP SAMM"],
+      "required_scanners": ["semgrep"]
+    },
+    {
+      "id": "DEPENDENCY_SCANNER_READY",
+      "description": "A dependency scanner is installed and runnable.",
+      "automation": "tooling",
+      "surfaces": ["web", "api", "ai"],
+      "frameworks": ["SLSA", "NIST 800-218"],
+      "required_scanners": ["osv-scanner"]
+    },
+    {
+      "id": "IAC_SCANNER_READY",
+      "description": "Infrastructure scanners and policy-as-code tooling are installed and runnable.",
+      "automation": "tooling",
+      "surfaces": ["infra"],
+      "frameworks": ["CIS", "NIST 800-53"],
+      "required_scanners": ["checkov", "conftest"]
+    },
+    {
+      "id": "CONTAINER_SCANNER_READY",
+      "description": "A container scanner is installed and runnable.",
+      "automation": "tooling",
+      "surfaces": ["infra"],
+      "frameworks": ["NIST 800-190", "CIS"],
+      "required_scanners": ["trivy"]
+    },
+    {
+      "id": "DAST_SCANNER_READY",
+      "description": "A DAST scanner is installed and runnable.",
+      "automation": "tooling",
+      "surfaces": ["web", "api"],
+      "frameworks": ["OWASP Testing Guide"],
+      "required_scanners": ["zaproxy"]
+    },
+    {
+      "id": "HUMAN_APPROVED_REGO",
+      "description": "OPA/Rego generation only happens after explicit human approval.",
+      "automation": "approval",
+      "surfaces": ["infra"],
+      "frameworks": ["NIST 800-218"],
+      "required_steps": ["generate_opa_rego"]
+    },
+    {
+      "id": "HUMAN_APPROVED_SELF_HEALING",
+      "description": "Self-healing changes only happen after explicit human approval.",
+      "automation": "approval",
+      "surfaces": ["all"],
+      "frameworks": ["NIST 800-218", "SOC 2"],
+      "required_steps": ["self_heal_loop"]
+    }
+  ]
+}

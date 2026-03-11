@@ -25,8 +25,11 @@ jobs:
       - name: Install deps
         run: npm ci
 
-      - name: Build gate
-        run: npm run build
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
 
       # 1) Secret scanning
       - name: Gitleaks
@@ -62,5 +65,9 @@ jobs:
         env:
           SECURITY_GATE_BASE_REF: "origin/main"
           SECURITY_GATE_HEAD_REF: "HEAD"
-          SECURITY_GATE_POLICY: ".mcp/policies/security-policy.json"
+          SECURITY_GATE_POLICY: "defaults/security-policy.json"
+          SECURITY_GATE_EVIDENCE_MAP: "defaults/evidence-map.json"
+          SECURITY_GATE_CONTROL_CATALOG: "defaults/control-catalog.json"
+          SECURITY_GATE_EXCEPTIONS: "defaults/security-exceptions.json"
+          SECURITY_GATE_SCANNERS: ".github/security-tools-ci.json"
         run: npm run ci:pr-gate

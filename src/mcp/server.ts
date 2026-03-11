@@ -7,6 +7,7 @@ import { z } from "zod";
 import { runPrGate } from "../gate/policy.js";
 import { readFileSafe } from "../repo/fs.js";
 import { searchRepo } from "../repo/search.js";
+import { createReviewAttestation, createReviewRun, readReviewRun, updateReviewStep } from "../review/store.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = resolve(__dirname, "../..");
@@ -24,7 +25,6 @@ function loadPromptFile(name: string): string {
 
 const SECURITY_PROMPT = loadPromptFile("SECURITY_PROMPT.md");
 
-/* eslint-disable deprecation/deprecation */
 const server = new McpServer({
   name: "security-mcp",
   version: "1.0.0"
@@ -59,10 +59,122 @@ function safeTool(
 }
 
 // ---------------------------------------------------------------------------
-// Existing tools (unchanged)
+// Review workflow
+// ---------------------------------------------------------------------------
+
+const ReviewRunIdParam = {
+  runId: z.string().uuid().optional().describe("Optional security review run ID created by security.start_review.")
+};
+
+const StartReviewParams = {
+  mode: z.enum(["recent_changes", "folder_by_folder", "file_by_file"]).describe(
+    "Required scan scope mode for this review."
+  ),
+  targets: z.array(z.string()).optional().describe(
+    "Required for folder_by_folder and file_by_file modes. Relative folders/files to evaluate."
+  ),
+  baseRef: z.string().optional().describe("Only for recent_changes mode. Base git ref, default origin/main."),
+  headRef: z.string().optional().describe("Only for recent_changes mode. Head git ref, default HEAD.")
+};
+const StartReviewSchema = z.object(StartReviewParams);
+
+tool(
+  "security.start_review",
+  "Start a stateful security review run, lock the scan mode, and return a run ID for ordered execution and attestation.",
+  StartReviewParams as unknown as Record<string, z.ZodTypeAny>,
+  safeTool(async (args: unknown, _extra: unknown) => {
+    const { mode, targets, baseRef, headRef } = StartReviewSchema.parse(args);
+    const cleanTargets = (targets ?? []).map((target) => target.trim()).filter(Boolean);
+    if ((mode === "folder_by_folder" || mode === "file_by_file") && cleanTargets.length === 0) {
+      throw new Error(`Mode "${mode}" requires one or more relative targets.`);
+    }
+    const run = await createReviewRun({ mode, targets, baseRef, headRef });
+    await updateReviewStep(run.id, "scan_strategy", "completed", {
+      mode,
+      targets: cleanTargets,
+      baseRef: baseRef ?? "origin/main",
+      headRef: headRef ?? "HEAD"
+    });
+
+    return asTextResponse({
+      runId: run.id,
+      mode,
+      targets: cleanTargets,
+      baseRef: baseRef ?? "origin/main",
+      headRef: headRef ?? "HEAD",
+      requiredSteps: run.requiredSteps,
+      nextSteps: [
+        "Run security.threat_model with this runId.",
+        "Run security.checklist with this runId.",
+        "Run security.run_pr_gate with this runId.",
+        "Run security.attest_review after remediation is complete."
+      ]
+    });
+  })
+);
+
+const AttestReviewParams = {
+  runId: z.string().uuid().describe("Security review run ID."),
+  signatureEnvVar: z.string().optional().describe(
+    "Optional environment variable containing an HMAC key for attestation signing."
+  )
+};
+const AttestReviewSchema = z.object(AttestReviewParams);
+
+tool(
+  "security.attest_review",
+  "Generate a security review attestation with integrity hash and optional HMAC signature.",
+  AttestReviewParams as unknown as Record<string, z.ZodTypeAny>,
+  safeTool(async (args: unknown, _extra: unknown) => {
+    const { runId, signatureEnvVar } = AttestReviewSchema.parse(args);
+    const run = await readReviewRun(runId);
+    const required = new Set(run.requiredSteps);
+    const completed = Array.from(required).filter((step) => {
+      const status = run.steps[step]?.status;
+      return status === "completed" || status === "approved";
+    });
+    const missing = Array.from(required).filter((step) => !completed.includes(step));
+    const latestGate = run.steps["run_pr_gate"]?.details ?? {};
+    const payload = {
+      runId: run.id,
+      createdAt: run.createdAt,
+      updatedAt: run.updatedAt,
+      mode: run.mode,
+      targets: run.targets,
+      steps: run.steps,
+      coverage: {
+        required: Array.from(required),
+        completed,
+        missing
+      },
+      latestGate
+    };
+    const signatureKey = signatureEnvVar ? process.env[signatureEnvVar] : undefined;
+    const attestation = await createReviewAttestation(runId, payload, signatureKey);
+
+    return asTextResponse({
+      attestationPath: attestation.path,
+      sha256: attestation.sha256,
+      ...(attestation.hmacSha256 ? { hmacSha256: attestation.hmacSha256 } : {}),
+      completedSteps: completed,
+      missingSteps: missing,
+      confidence: (latestGate as Record<string, unknown>)["confidence"] ?? null
+    });
+  })
+);
+
+// ---------------------------------------------------------------------------
+// Existing tools
 // ---------------------------------------------------------------------------
 
 const RunPrGateParams = {
+  ...ReviewRunIdParam,
+  mode: z.enum(["recent_changes", "folder_by_folder", "file_by_file"]).optional().describe(
+    "Scan scope mode. recent_changes (default) uses git diff; folder_by_folder scans one or more folders; file_by_file scans explicit files."
+  ),
+  targets: z.array(z.string()).optional().describe(
+    "Required for folder_by_folder and file_by_file modes. Relative folders/files to evaluate."
+  ),
   baseRef: z.string().optional().describe("Base git ref for diff (e.g. origin/main). Optional."),
   headRef: z.string().optional().describe("Head git ref for diff (e.g. HEAD). Optional."),
   policyPath: z.string().optional().describe("Override policy path. Default: .mcp/policies/security-policy.json")
@@ -71,14 +183,32 @@ const RunPrGateSchema = z.object(RunPrGateParams);
 
 tool(
   "security.run_pr_gate",
-  "Run the security policy gate against the current workspace. Returns PASS/FAIL plus findings and required actions.",
+  "Run the security policy gate for recent changes, selected folders, or selected files. Returns PASS/FAIL plus findings and required actions.",
   RunPrGateParams as unknown as Record<string, z.ZodTypeAny>,
   safeTool(async (args: unknown, _extra: unknown) => {
-    const { baseRef, headRef, policyPath } = RunPrGateSchema.parse(args);
+    const { runId, mode, targets, baseRef, headRef, policyPath } = RunPrGateSchema.parse(args);
+    if (!runId) {
+      return asTextResponse({
+        requires_run_id: true,
+        question: "Start the review with security.start_review before running the gate.",
+        next_step: "Call security.start_review, then re-run security.run_pr_gate with the returned runId."
+      });
+    }
     const result = await runPrGate({
+      mode,
+      targets,
       baseRef,
       headRef,
       policyPath: policyPath ?? ".mcp/policies/security-policy.json"
+    });
+    await updateReviewStep(runId, "run_pr_gate", "completed", {
+      status: result.status,
+      confidence: result.confidence,
+      findings: result.findings.map((finding) => ({ id: finding.id, severity: finding.severity })),
+      suppressedFindings: result.suppressedFindings?.map((entry) => ({
+        id: entry.finding.id,
+        exceptionId: entry.exceptionId
+      })) ?? []
     });
     return asTextResponse(result);
   })
@@ -170,6 +300,7 @@ tool(
 // ---------------------------------------------------------------------------
 
 const ThreatModelParams = {
+  ...ReviewRunIdParam,
   feature: z.string().describe(
     "One or two sentences describing the feature or component to threat-model. " +
     "Example: 'OAuth 2.0 login flow with PKCE and session cookies'."
@@ -185,7 +316,7 @@ tool(
   "Generate a STRIDE + PASTA + ATT&CK threat model template for a described feature or component. Returns a structured Markdown document ready to fill in.",
   ThreatModelParams as unknown as Record<string, z.ZodTypeAny>,
   safeTool(async (args: unknown, _extra: unknown) => {
-    const { feature, surfaces } = ThreatModelSchema.parse(args);
+    const { runId, feature, surfaces } = ThreatModelSchema.parse(args);
     const surfaceList = surfaces ?? ["web", "api", "mobile", "ai", "infra", "data"];
 
     const template = `# Threat Model: ${feature}
@@ -298,6 +429,13 @@ Describe Level 0 (context) and Level 1 (process) flows in prose or embed a diagr
 - [ ] Compliance requirements addressed and documented
 `;
 
+    if (runId) {
+      await updateReviewStep(runId, "threat_model", "completed", {
+        feature,
+        surfaces: surfaceList
+      });
+    }
+
     return asTextResponse(template);
   })
 );
@@ -307,6 +445,7 @@ Describe Level 0 (context) and Level 1 (process) flows in prose or embed a diagr
 // ---------------------------------------------------------------------------
 
 const ChecklistParams = {
+  ...ReviewRunIdParam,
   surface: z.enum(["web", "api", "mobile", "ai", "infra", "payments", "all"]).optional()
     .describe("Filter checklist by attack surface. Default: all.")
 };
@@ -400,9 +539,12 @@ tool(
   "Return the pre-release security checklist, optionally filtered by attack surface (web, api, mobile, ai, infra, payments, all).",
   ChecklistParams as unknown as Record<string, z.ZodTypeAny>,
   safeTool(async (args: unknown, _extra: unknown) => {
-    const { surface } = ChecklistSchema.parse(args);
+    const { runId, surface } = ChecklistSchema.parse(args);
 
     if (!surface || surface === "all") {
+      if (runId) {
+        await updateReviewStep(runId, "checklist", "completed", { surface: "all" });
+      }
       return asTextResponse(CHECKLIST_ALL);
     }
 
@@ -429,6 +571,10 @@ tool(
     const allSurfaces = lines.slice(0, allSurfacesEnd).join("\n");
     const sectionEnd = lines.findIndex((l, i) => i > start + 1 && l.startsWith("## "));
     const section = lines.slice(start, sectionEnd === -1 ? undefined : sectionEnd).join("\n");
+
+    if (runId) {
+      await updateReviewStep(runId, "checklist", "completed", { surface });
+    }
 
     return asTextResponse(`# Pre-Release Security Checklist (${surface})\n\n${allSurfaces}\n\n${section}`);
   })
@@ -520,6 +666,386 @@ tool(
       "// See https://github.com/AbrahamOO/security-mcp for full documentation.\n\n";
 
     return asTextResponse(comment + JSON.stringify(policy, null, 2));
+  })
+);
+
+// ---------------------------------------------------------------------------
+// New tool: security.scan_strategy
+// ---------------------------------------------------------------------------
+
+const ScanStrategyParams = {
+  ...ReviewRunIdParam,
+  mode: z.enum(["folder_by_folder", "file_by_file", "recent_changes"]).optional().describe(
+    "Required scan mode. Ask the user to choose before starting review."
+  ),
+  targets: z.array(z.string()).optional().describe(
+    "Required for folder_by_folder and file_by_file. Relative folders/files to evaluate."
+  ),
+  baseRef: z.string().optional().describe("Only for recent_changes mode. Base git ref, default origin/main."),
+  headRef: z.string().optional().describe("Only for recent_changes mode. Head git ref, default HEAD.")
+};
+const ScanStrategySchema = z.object(ScanStrategyParams);
+
+tool(
+  "security.scan_strategy",
+  "Create an exhaustive security scan plan and enforce a required user choice: folder_by_folder, file_by_file, or recent_changes.",
+  ScanStrategyParams as unknown as Record<string, z.ZodTypeAny>,
+  safeTool(async (args: unknown, _extra: unknown) => {
+    const { runId, mode, targets, baseRef, headRef } = ScanStrategySchema.parse(args);
+
+    if (!mode) {
+      return asTextResponse({
+        required_user_decision: true,
+        question: "Choose scan mode before running security checks.",
+        options: ["folder_by_folder", "file_by_file", "recent_changes"],
+        next_step: "Call security.scan_strategy again with the selected mode."
+      });
+    }
+
+    const cleanTargets = (targets ?? []).map((t) => t.trim()).filter(Boolean);
+    if ((mode === "folder_by_folder" || mode === "file_by_file") && cleanTargets.length === 0) {
+      return asTextResponse({
+        required_user_decision: true,
+        question: `Mode "${mode}" requires explicit targets. Provide relative ${mode === "folder_by_folder" ? "folders" : "files"}.`,
+        next_step: "Call security.scan_strategy with mode + targets."
+      });
+    }
+
+    const frameworkCoverage = {
+      threat_modeling: ["STRIDE", "PASTA", "LINDDUN", "DREAD", "ATT&CK Navigator", "Attack Trees", "TRIKE"],
+      appsec_and_adversary: [
+        "OWASP Top 10 (Web/API)",
+        "OWASP ASVS L2/L3",
+        "OWASP MASVS",
+        "MITRE ATT&CK",
+        "MITRE D3FEND",
+        "MITRE CAPEC",
+        "MITRE ATLAS"
+      ],
+      governance_and_compliance: [
+        "NIST 800-53 Rev5",
+        "NIST CSF 2.0",
+        "NIST 800-207 (Zero Trust)",
+        "NIST 800-218 (SSDF)",
+        "PCI DSS 4.0",
+        "SOC 2 Type II",
+        "ISO 27001/27002/42001",
+        "GDPR/CCPA"
+      ],
+      pipeline_controls: [
+        "SAST",
+        "SCA",
+        "Secrets Scanning",
+        "IaC Scanning",
+        "Container Scanning",
+        "DAST",
+        "SBOM + Provenance"
+      ]
+    };
+
+    const runGateTemplate =
+      mode === "recent_changes"
+        ? {
+            tool: "security.run_pr_gate",
+            args: {
+              mode: "recent_changes",
+              baseRef: baseRef ?? "origin/main",
+              headRef: headRef ?? "HEAD"
+            }
+          }
+        : {
+            tool: "security.run_pr_gate",
+            args: {
+              mode,
+              targets: cleanTargets
+            }
+          };
+
+    if (runId) {
+      await updateReviewStep(runId, "scan_strategy", "completed", {
+        mode,
+        targets: cleanTargets,
+        baseRef: baseRef ?? "origin/main",
+        headRef: headRef ?? "HEAD"
+      });
+    }
+
+    return asTextResponse({
+      decision_confirmed: true,
+      mode,
+      targets: cleanTargets,
+      git_range: mode === "recent_changes" ? { baseRef: baseRef ?? "origin/main", headRef: headRef ?? "HEAD" } : null,
+      execution_plan: [
+        "1) Inventory scope and adjacent blast radius components.",
+        "2) Run threat model coverage (STRIDE + PASTA + ATT&CK + D3FEND).",
+        "3) Run policy gate + static/dynamic/IaC/container/security checks.",
+        "4) Map findings to OWASP/NIST/PCI/SOC2/ISO controls.",
+        "5) Apply code/config fixes immediately and re-run gate until PASS.",
+        "6) Produce residual-risk register with owner, date, and review cadence."
+      ],
+      framework_coverage: frameworkCoverage,
+      run_gate_template: runGateTemplate,
+      completion_rule: "No section is complete until all required controls are either implemented or formally risk-accepted."
+    });
+  })
+);
+
+// ---------------------------------------------------------------------------
+// New tool: security.terraform_hardening_blueprint
+// ---------------------------------------------------------------------------
+
+const TerraformHardeningParams = {
+  cloud: z.enum(["aws", "gcp", "azure", "multi"]).optional().describe("Target cloud platform. Default: multi."),
+  criticality: z.enum(["standard", "high", "regulated"]).optional().describe("Security strictness profile."),
+  environment: z.string().optional().describe("Environment name (e.g., prod, staging).")
+};
+const TerraformHardeningSchema = z.object(TerraformHardeningParams);
+
+tool(
+  "security.terraform_hardening_blueprint",
+  "Generate an advanced Terraform hardening blueprint with secure module design, guardrails, and control mappings.",
+  TerraformHardeningParams as unknown as Record<string, z.ZodTypeAny>,
+  safeTool(async (args: unknown, _extra: unknown) => {
+    const { cloud, criticality, environment } = TerraformHardeningSchema.parse(args);
+    const selectedCloud = cloud ?? "multi";
+    const selectedCriticality = criticality ?? "high";
+
+    const blueprint = {
+      target: { cloud: selectedCloud, criticality: selectedCriticality, environment: environment ?? "unspecified" },
+      module_layout: [
+        "modules/network: private subnets, no default public ingress, egress allowlists",
+        "modules/identity: least-privilege IAM roles, short-lived credentials, no wildcard actions",
+        "modules/data: encryption at rest with CMEK/KMS, backup + PITR, private endpoints",
+        "modules/observability: audit logs + flow logs + SIEM forwarding + immutable retention",
+        "modules/security: WAF, DDoS controls, threat detection, guardrail SCP/org-policies"
+      ],
+      mandatory_terraform_controls: [
+        "Pin providers and modules to exact versions; no floating ranges.",
+        "Use remote state with encryption + locking + restricted access.",
+        "Enforce policy checks: Checkov/tfsec/Terrascan + OPA Conftest in CI.",
+        "Block 0.0.0.0/0 ingress/egress unless explicit risk acceptance.",
+        "Disable public object storage by default.",
+        "Require tags/labels for owner, data classification, and environment.",
+        "Enable cloud audit logging on every managed resource."
+      ],
+      secure_cicd_flow: [
+        "terraform fmt/validate -> terraform plan -> policy checks (OPA/Checkov/tfsec) -> manual approval -> terraform apply",
+        "Store plan output artifact and sign provenance before apply.",
+        "Run drift detection nightly and alert on unauthorized changes."
+      ],
+      control_mapping: {
+        nist_800_53: ["AC-3", "AC-6", "AU-2", "AU-12", "SC-7", "SC-8", "SC-12", "SI-4"],
+        cis: ["CIS cloud benchmark level 2", "CIS IaC policy enforcement"],
+        zero_trust: ["explicit authn/authz for service paths", "micro-segmentation", "continuous verification"]
+      }
+    };
+
+    return asTextResponse(blueprint);
+  })
+);
+
+// ---------------------------------------------------------------------------
+// New tool: security.generate_opa_rego
+// ---------------------------------------------------------------------------
+
+const GenerateOpaRegoParams = {
+  ...ReviewRunIdParam,
+  policyPack: z.enum(["terraform_plan", "ci_pipeline", "kubernetes"]).optional().describe(
+    "Policy pack to generate. Default: terraform_plan."
+  ),
+  cloud: z.enum(["aws", "gcp", "azure", "multi"]).optional().describe("Cloud context for policy wording."),
+  applySuggestion: z.boolean().optional().describe(
+    "Must be true before generating policy code. This forces explicit user consent."
+  )
+};
+const GenerateOpaRegoSchema = z.object(GenerateOpaRegoParams);
+
+tool(
+  "security.generate_opa_rego",
+  "Generate preventive OPA/Rego policy code for Terraform plans or CI pipelines. Requires explicit user consent first.",
+  GenerateOpaRegoParams as unknown as Record<string, z.ZodTypeAny>,
+  safeTool(async (args: unknown, _extra: unknown) => {
+    const { runId, policyPack, cloud, applySuggestion } = GenerateOpaRegoSchema.parse(args);
+    const selectedPack = policyPack ?? "terraform_plan";
+
+    if (!applySuggestion) {
+      return asTextResponse({
+        requires_user_confirmation: true,
+        question:
+          "Do you want security-mcp to generate preventive OPA/Rego policies for your pipeline and Terraform plan checks?",
+        next_step: "Re-run security.generate_opa_rego with applySuggestion=true."
+      });
+    }
+
+    const terraformPolicy = `package security.terraform
+
+import rego.v1
+
+deny contains msg if {
+  some rc in input.resource_changes
+  rc.type == "aws_security_group_rule"
+  lower(rc.change.after.type) == "ingress"
+  rc.change.after.cidr_blocks[_] == "0.0.0.0/0"
+  msg := "deny: public ingress 0.0.0.0/0 is not allowed"
+}
+
+deny contains msg if {
+  some rc in input.resource_changes
+  rc.type in {"aws_s3_bucket", "google_storage_bucket", "azurerm_storage_account"}
+  not is_private_storage(rc.change.after)
+  msg := sprintf("deny: storage resource %s must not be public", [rc.address])
+}
+
+deny contains msg if {
+  some rc in input.resource_changes
+  is_data_resource(rc.type)
+  not encryption_enabled(rc.change.after)
+  msg := sprintf("deny: encryption at rest is required for %s", [rc.address])
+}
+
+is_private_storage(after) if {
+  not after.public
+}
+
+encryption_enabled(after) if {
+  after.encryption == true
+}
+
+is_data_resource(kind) if {
+  kind in {"aws_db_instance", "google_sql_database_instance", "azurerm_postgresql_flexible_server"}
+}`;
+
+    const ciPolicy = `package security.cicd
+
+import rego.v1
+
+required_jobs := {"sast", "sca", "secrets", "iac", "container", "dast"}
+
+deny contains msg if {
+  some job in required_jobs
+  not input.pipeline.jobs[job]
+  msg := sprintf("deny: missing required security job '%s'", [job])
+}
+
+deny contains msg if {
+  input.pipeline.context.allow_high_findings == true
+  msg := "deny: pipeline cannot allow HIGH/CRITICAL findings by default"
+}
+
+deny contains msg if {
+  not input.pipeline.provenance.signed
+  msg := "deny: release artifacts must include signed provenance/SBOM attestations"
+}`;
+
+    const k8sPolicy = `package security.kubernetes
+
+import rego.v1
+
+deny contains msg if {
+  input.kind == "Deployment"
+  some c in input.spec.template.spec.containers
+  not c.securityContext.runAsNonRoot
+  msg := sprintf("deny: container '%s' must run as non-root", [c.name])
+}
+
+deny contains msg if {
+  input.kind == "Deployment"
+  some c in input.spec.template.spec.containers
+  c.securityContext.privileged == true
+  msg := sprintf("deny: privileged container '%s' is not allowed", [c.name])
+}`;
+
+    const policyByPack: Record<string, { path: string; policy: string; conftest_command: string }> = {
+      terraform_plan: {
+        path: "policy/terraform/security.rego",
+        policy: terraformPolicy,
+        conftest_command: "terraform show -json tfplan.binary > tfplan.json && conftest test tfplan.json -p policy/terraform"
+      },
+      ci_pipeline: {
+        path: "policy/ci/security.rego",
+        policy: ciPolicy,
+        conftest_command: "conftest test pipeline-input.json -p policy/ci"
+      },
+      kubernetes: {
+        path: "policy/kubernetes/security.rego",
+        policy: k8sPolicy,
+        conftest_command: "conftest test k8s-manifest.yaml -p policy/kubernetes"
+      }
+    };
+
+    const selected = policyByPack[selectedPack];
+    if (runId) {
+      await updateReviewStep(runId, "generate_opa_rego", "approved", {
+        policyPack: selectedPack,
+        cloud: cloud ?? "multi"
+      });
+    }
+    return asTextResponse({
+      generated_for: { policyPack: selectedPack, cloud: cloud ?? "multi" },
+      files: [selected],
+      install_notes: [
+        "Run this in CI before deployment apply/admission.",
+        "Fail the pipeline when any deny rules are returned.",
+        "Version-control the policy and require security-owner approval for policy exceptions."
+      ]
+    });
+  })
+);
+
+// ---------------------------------------------------------------------------
+// New tool: security.self_heal_loop
+// ---------------------------------------------------------------------------
+
+const SelfHealLoopParams = {
+  ...ReviewRunIdParam,
+  useCase: z.string().optional().describe("Short description of recurring security issues in this codebase."),
+  findings: z.array(z.string()).optional().describe("Recent recurring findings or control gaps."),
+  approveAdaptiveUpdates: z.boolean().optional().describe(
+    "Must be true before suggesting any adaptive improvement. Human approval is mandatory."
+  )
+};
+const SelfHealLoopSchema = z.object(SelfHealLoopParams);
+
+tool(
+  "security.self_heal_loop",
+  "Propose a human-approved self-healing improvement loop for this security setup. No adaptive change may be applied without explicit human approval.",
+  SelfHealLoopParams as unknown as Record<string, z.ZodTypeAny>,
+  safeTool(async (args: unknown, _extra: unknown) => {
+    const { runId, useCase, findings, approveAdaptiveUpdates } = SelfHealLoopSchema.parse(args);
+
+    if (!approveAdaptiveUpdates) {
+      return asTextResponse({
+        requires_human_approval: true,
+        question:
+          "Do you want security-mcp to propose adaptive updates to policies/checklists based on recurring findings in your use case?",
+        next_step: "Re-run security.self_heal_loop with approveAdaptiveUpdates=true."
+      });
+    }
+
+    if (runId) {
+      await updateReviewStep(runId, "self_heal_loop", "approved", {
+        useCase: useCase ?? "unspecified"
+      });
+    }
+
+    return asTextResponse({
+      adaptive_security_loop: [
+        "1) Capture repeated findings from gate outputs and incident reports.",
+        "2) Cluster by root cause (authz gaps, IaC misconfig, secrets, AI injection, dependency risk).",
+        "3) Propose updates to .mcp/policies/security-policy.json and .mcp/mappings/evidence-map.json.",
+        "4) Require explicit human approval before applying any policy, prompt, or checklist mutation.",
+        "5) Re-run security.run_pr_gate in the selected scan mode and compare residual risk trend."
+      ],
+      guardrails: [
+        "No autonomous code or policy mutation without explicit human approval.",
+        "No weakening of controls without signed risk acceptance metadata.",
+        "Every approved adaptive update must be logged with owner, date, rationale, and rollback path."
+      ],
+      input_summary: {
+        useCase: useCase ?? "unspecified",
+        findings: findings ?? []
+      }
+    });
   })
 );
 

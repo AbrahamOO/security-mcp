@@ -1,0 +1,7 @@
+{
+  "security_headers_present": ["middleware.ts", "src/**/middleware*.ts", "next.config.*"],
+  "csrf_protection_present": ["src/**/csrf*.ts", "src/api/**"],
+  "csrf_tests_present": ["tests/**", "**/*.test.ts"],
+  "ssrf_guard_present": ["src/**/ssrf*.ts", "src/**/http-client*.ts"],
+  "ssrf_tests_present": ["tests/**", "**/*.test.ts"]
+}

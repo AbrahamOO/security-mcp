@@ -5,7 +5,12 @@ import { readFileSafe } from "../../repo/fs.js";
 export async function checkDependencies(_: { changedFiles: string[] }): Promise<Finding[]> {
 	const findings: Finding[] = [];
 
+	const manifests = await fg(["package.json"], { dot: true });
 	const lockfiles = await fg(["package-lock.json", "pnpm-lock.yaml", "yarn.lock"], { dot: true });
+	if (manifests.length === 0 && lockfiles.length === 0) {
+		return findings;
+	}
+
 	if (lockfiles.length === 0) {
 		findings.push({
 			id: "LOCKFILE_MISSING",

@@ -27,7 +27,6 @@ async function main() {
   }
 }
 
-// eslint-disable-next-line unicorn/prefer-top-level-await
 main().catch((err) => {
   console.error("security gate crashed:", err);
   process.exit(3);
