@@ -38,7 +38,7 @@ jobs:
           SECURITY_GATE_POLICY: "defaults/security-policy.json"
           SECURITY_GATE_EVIDENCE_MAP: "defaults/evidence-map.json"
           SECURITY_GATE_CONTROL_CATALOG: "defaults/control-catalog.json"
-          SECURITY_GATE_EXCEPTIONS: "defaults/security-exceptions.json"
+          SECURITY_GATE_EXCEPTIONS: ".github/security-exceptions-ci.json"
           SECURITY_GATE_SCANNERS: ".github/security-tools-ci.json"
         run: node dist/ci/pr-gate.js
 

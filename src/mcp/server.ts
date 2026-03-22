@@ -1456,7 +1456,7 @@ type RemediationTemplate = {
 
 const REMEDIATION_MAP: Record<string, RemediationTemplate> = {
   "POSSIBLE_SECRET": {
-    pattern: "const API_KEY = 'sk-live-abc123...'",
+    pattern: "const API_KEY = 'sk-...'  // hardcoded secret",
     fix: "const API_KEY = process.env['API_KEY']; // loaded from secret manager",
     explanation: "Hardcoded secrets are exposed in source control and logs. Load secrets from environment variables backed by a secret manager (AWS Secrets Manager, HashiCorp Vault, etc.).",
     references: ["CWE-798", "OWASP Top 10 A07:2021", "NIST 800-53 IA-5"]

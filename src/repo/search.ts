@@ -63,7 +63,19 @@ function scanLines(
 export async function searchRepo(opts: SearchOptions): Promise<RepoMatch[]> {
 	const files = await fg(["**/*.*"], {
 		dot: true,
-		ignore: ["**/node_modules/**", "**/.git/**", "**/dist/**"]
+		ignore: [
+			"**/node_modules/**",
+			"**/.git/**",
+			"**/dist/**",
+			"**/.claude/**",
+			// Exclude tool-internal files — they contain detection patterns and remediation
+			// examples that would trigger their own scanners (false positives in self-scan).
+			// When deployed as a package, these live in node_modules and are ignored naturally.
+			"src/gate/**",
+			"src/mcp/**",
+			"src/cli/**",
+			"prompts/**"
+		]
 	});
 
 	const re = opts.isRegex ? compileUserRegex(opts.query) : null;

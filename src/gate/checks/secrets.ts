@@ -93,7 +93,10 @@ export async function checkSecrets(_: { changedFiles: string[] }): Promise<Findi
       "**/dist/**",
       "**/fixtures/**",
       "**/.mcp/reviews/**",
-      "**/.mcp/reports/**"
+      "**/.mcp/reports/**",
+      "**/.claude/**",
+      // Exclude detection source — contains regex patterns that match their own rules
+      "src/gate/checks/secrets.ts"
     ]
   });
 
