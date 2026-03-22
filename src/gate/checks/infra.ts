@@ -1,15 +1,18 @@
 import { Finding } from "../result.js";
 import { searchRepo } from "../../repo/search.js";
 
-// Patterns that indicate a supported secret manager is in use — cloud-agnostic.
-// Covers: AWS Secrets Manager, AWS SSM Parameter Store, GCP Secret Manager,
-// Azure Key Vault, HashiCorp Vault, Doppler, 1Password Secrets Automation.
-const SECRET_MANAGER_PATTERN = [
-  "secretsmanager",                            // AWS Secrets Manager (SDK + SDK v3)
+// Split into two patterns to stay under the 256-char ReDoS guard in searchRepo.
+// AWS + GCP secret managers
+const SECRET_MANAGER_PATTERN_A = [
+  "secretsmanager",                            // AWS Secrets Manager
   "ssm:GetParameter|GetSecretValue",           // AWS SSM Parameter Store
   String.raw`secretmanager\.googleapis`,       // GCP Secret Manager REST/gRPC
   "google_secret_manager",                     // GCP Terraform resource
   "SecretManagerServiceClient",                // GCP Secret Manager client lib
+].join("|");
+
+// Azure + HashiCorp Vault + Doppler + 1Password
+const SECRET_MANAGER_PATTERN_B = [
   "@azure/keyvault",                           // Azure Key Vault SDK (JS/TS)
   String.raw`azure\.keyvault`,                 // Azure Key Vault (Python)
   "KeyVaultSecret|SecretClient",               // Azure Key Vault client classes
@@ -58,12 +61,13 @@ const ENCRYPTION_DISABLED_PATTERN =
 export async function checkInfra(_: { changedFiles: string[] }): Promise<Finding[]> {
   const findings: Finding[] = [];
 
-  // 1. Secret manager usage — cloud-agnostic check
-  const secretManagerRefs = await searchRepo({
-    query: SECRET_MANAGER_PATTERN,
-    isRegex: true,
-    maxMatches: 5
-  });
+  // 1. Secret manager usage — cloud-agnostic check (split across two searches
+  //    to stay under the 256-char ReDoS guard in searchRepo)
+  const [smRefsA, smRefsB] = await Promise.all([
+    searchRepo({ query: SECRET_MANAGER_PATTERN_A, isRegex: true, maxMatches: 5 }),
+    searchRepo({ query: SECRET_MANAGER_PATTERN_B, isRegex: true, maxMatches: 5 })
+  ]);
+  const secretManagerRefs = [...smRefsA, ...smRefsB];
   if (secretManagerRefs.length === 0) {
     findings.push({
       id: "SECRET_MANAGER_NOT_DETECTED",
