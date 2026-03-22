@@ -68,13 +68,11 @@ export async function searchRepo(opts: SearchOptions): Promise<RepoMatch[]> {
 			"**/.git/**",
 			"**/dist/**",
 			"**/.claude/**",
-			// Exclude tool-internal files — they contain detection patterns and remediation
-			// examples that would trigger their own scanners (false positives in self-scan).
-			// When deployed as a package, these live in node_modules and are ignored naturally.
-			"src/gate/**",
-			"src/mcp/**",
-			"src/cli/**",
-			"prompts/**"
+			// Exclude detection-engine source — these files define the regex patterns that
+			// the checks search for, so they would trigger their own scanners. When deployed
+			// as an npm package the compiled dist/ is what runs; src/ lives in node_modules
+			// which is excluded above. This ignore only affects the tool's self-scan.
+			"src/gate/**"
 		]
 	});
 

@@ -52,9 +52,14 @@
       "expires_on": "2027-01-01"
     },
     {
-      "id": "self-scan-graphql",
-      "finding_ids": ["GRAPHQL_INTROSPECTION_ENABLED", "GRAPHQL_NO_DEPTH_LIMIT", "GRAPHQL_NO_BATCH_LIMIT", "GRAPHQL_NO_DATALOADER"],
-      "justification": "GraphQL patterns found in security-mcp are documentation examples and checklist references (README.md, SKILL.md, control catalog), not actual GraphQL server implementations. The tool does not expose a GraphQL API.",
+      "id": "self-scan-remediation-map",
+      "finding_ids": [
+        "GRAPHQL_INTROSPECTION_ENABLED", "GRAPHQL_NO_DEPTH_LIMIT", "GRAPHQL_NO_BATCH_LIMIT", "GRAPHQL_NO_DATALOADER",
+        "DB_TLS_DISABLED", "DB_SQL_INJECTION_RISK", "DB_ADMIN_CREDENTIALS", "DB_HARDCODED_PASSWORD",
+        "CRYPTO_WEAK_HASH", "CRYPTO_WEAK_CIPHER", "CRYPTO_INSECURE_RANDOM", "CRYPTO_WEAK_JWT_ALGO",
+        "DLP_REQUEST_BODY_LOGGED", "DLP_STACK_TRACE_IN_RESPONSE", "DLP_SERVER_HEADER_DISCLOSURE"
+      ],
+      "justification": "These findings come from the REMEDIATION_MAP in src/mcp/server.ts, which contains intentional 'before' example code patterns (e.g., sslmode=disable, md5 hashing, console.log(req.body)) used to show developers how to fix vulnerabilities. The patterns appear in string literals as educational examples, not as actual application code. This is a known false-positive class for security tools that document their own remediation guidance. Also covers GraphQL patterns found only in documentation and checklists (README.md, SKILL.md), not in a real GraphQL server.",
       "owner": "security-mcp-team",
       "approver": "security-mcp-team",
       "approval_role": "SecurityLead",

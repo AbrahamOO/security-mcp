@@ -343,6 +343,47 @@ jobs:
 
 ---
 
+## Environment Variables
+
+### CI / Gate variables
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `GITHUB_TOKEN` | set by GitHub Actions | Authenticates git operations in CI |
+| `SECURITY_GATE_BASE_REF` | `origin/main` | Branch to compare against when scanning PRs |
+| `SECURITY_GATE_HEAD_REF` | `HEAD` | Branch being scanned |
+| `SECURITY_GATE_POLICY` | `.mcp/policies/security-policy.json` | Path to a custom security policy file |
+
+### Config overrides (swap out default files)
+
+| Variable | What it does |
+| --- | --- |
+| `SECURITY_GATE_CONTROL_CATALOG` | Path to a custom control catalog JSON |
+| `SECURITY_GATE_EXCEPTIONS` | Path to a custom exceptions / waivers file |
+| `SECURITY_GATE_SCANNERS` | Path to a custom scanner config file |
+| `SECURITY_GATE_EVIDENCE_MAP` | Path to a custom evidence map file |
+
+### Integrations (all optional — only needed if you connect external services)
+
+| Variable | What it does |
+| --- | --- |
+| `SECURITY_SLACK_WEBHOOK` | Slack incoming webhook URL — sends findings to a Slack channel |
+| `SECURITY_JIRA_URL` | Jira base URL — creates tickets for security findings |
+| `SECURITY_JIRA_TOKEN` | Jira API token |
+| `SECURITY_JIRA_PROJECT` | Jira project key (default: `SECURITY`) |
+| `SECURITY_PAGERDUTY_KEY` | PagerDuty Events API key — pages on-call for critical findings |
+| `SECURITY_WEBHOOK_URL` | Generic webhook — sends findings as JSON POST to any URL |
+
+### Scanning
+
+| Variable | What it does |
+| --- | --- |
+| `SECURITY_STAGING_URL` | URL of your staging environment — enables live runtime checks |
+| `SECURITY_AUTO_SBOM` | Set to `true` to auto-generate a software bill of materials on each gate run |
+| `SECURITY_AI_ENDPOINT` | URL of your AI endpoint — enables live red-team probing |
+
+---
+
 ## The 10 Rules That Are Never Broken
 
 No matter what your AI is asked to do, these rules are enforced without exception:
