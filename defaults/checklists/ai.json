@@ -1,0 +1,25 @@
+{
+  "surface": "ai",
+  "items": [
+    { "id": "ai_input_sanitization", "description": "All AI inputs sanitized and validated before being passed to models", "critical": true },
+    { "id": "ai_prompt_separation", "description": "System prompt structurally separated from user content — no string concatenation", "critical": true },
+    { "id": "ai_rag_untrusted", "description": "Indirect prompt injection: retrieved RAG context treated as untrusted and isolated", "critical": true },
+    { "id": "ai_output_schema", "description": "Model outputs validated against JSON schema before acting on them", "critical": true },
+    { "id": "ai_pii_scan", "description": "Output PII scan in place — no SSN, card numbers, tokens in model responses", "critical": true },
+    { "id": "ai_rate_limiting", "description": "AI endpoints rate-limited independently from regular API — token budgets enforced", "critical": true },
+    { "id": "ai_access_logging", "description": "Model access logging enabled — user, timestamp, token counts, model version logged", "critical": false },
+    { "id": "ai_redteam_done", "description": "Red-team test cases executed — jailbreak, injection, PII exfil probes reviewed", "critical": true },
+    { "id": "ai_tool_allowlist", "description": "AI agent tool calls routed through allowlist — no unconstrained tool execution", "critical": true },
+    { "id": "ai_human_in_loop", "description": "Human-in-the-loop approval required for high-impact agentic actions (delete, send, execute)", "critical": true },
+    { "id": "ai_no_eval_output", "description": "Model output never passed to eval() or executed as code", "critical": true },
+    { "id": "ai_no_shell_exec", "description": "Model output never passed directly to shell commands — allowlisted templates only", "critical": true },
+    { "id": "ai_data_minimization", "description": "Only minimum necessary data included in prompts — no bulk data injection", "critical": false },
+    { "id": "ai_model_versioning", "description": "Model version pinned — changes to model version go through security review", "critical": false },
+    { "id": "ai_abuse_monitoring", "description": "Abuse monitoring in place — anomaly detection on token usage and response patterns", "critical": false },
+    { "id": "ai_threat_model", "description": "AI-specific threat model completed — MITRE ATLAS and OWASP LLM Top 10 reviewed", "critical": true },
+    { "id": "ai_rag_authz", "description": "RAG retrieval enforces authorization — documents filtered by user permissions", "critical": true },
+    { "id": "ai_no_pii_in_prompts", "description": "No PII, credentials, or secrets in prompt templates", "critical": true },
+    { "id": "ai_fallback_handling", "description": "Model failures handled gracefully — no sensitive error details exposed to users", "critical": false },
+    { "id": "ai_owasp_llm_top10", "description": "OWASP LLM Top 10 controls reviewed and addressed for this AI surface", "critical": true }
+  ]
+}

@@ -122,5 +122,199 @@
     "src/**/tool-router*.ts",
     "src/**/tool*.ts",
     "src/**/agent*.ts"
+  ],
+  "mfa_enforced": [
+    "src/**/mfa*.ts",
+    "src/**/mfa*.js",
+    "src/**/totp*.ts",
+    "src/**/webauthn*.ts",
+    "src/**/passkey*.ts",
+    "src/**/two-factor*.ts",
+    "src/**/2fa*.ts",
+    "infra/**",
+    "terraform/**",
+    "k8s/**"
+  ],
+  "audit_logging_configured": [
+    "src/**/audit*.ts",
+    "src/**/audit*.js",
+    "src/**/logger*.ts",
+    "src/**/logging*.ts",
+    "src/**/log*.ts",
+    "lib/**/audit*.ts",
+    "infra/**",
+    "terraform/**",
+    "k8s/**",
+    "helm/**"
+  ],
+  "log_retention_policy": [
+    "infra/**",
+    "terraform/**",
+    "k8s/**",
+    "helm/**",
+    "docs/**",
+    "security/**",
+    ".mcp/**"
+  ],
+  "alerting_configured": [
+    "infra/**",
+    "terraform/**",
+    "k8s/**",
+    "helm/**",
+    "src/**/alert*.ts",
+    "src/**/alarm*.ts",
+    "src/**/monitor*.ts",
+    "src/**/pagerduty*.ts",
+    "src/**/opsgenie*.ts"
+  ],
+  "email_filtering": [
+    "infra/**",
+    "terraform/**",
+    "docs/**",
+    "security/**"
+  ],
+  "public_surface_hardened": [
+    "infra/**",
+    "terraform/**",
+    "k8s/**",
+    "helm/**",
+    "src/**/waf*.ts",
+    "src/**/ddos*.ts",
+    "nginx/**",
+    "caddy/**"
+  ],
+  "rate_limiting_present": [
+    "src/**/rate-limit*.ts",
+    "src/**/rateLimit*.ts",
+    "src/**/throttle*.ts",
+    "src/**/middleware*.ts",
+    "middleware.ts",
+    "middleware.js",
+    "app/api/**",
+    "src/api/**"
+  ],
+  "egress_controls": [
+    "infra/**",
+    "terraform/**",
+    "k8s/**",
+    "helm/**",
+    "src/**/egress*.ts",
+    "src/**/firewall*.ts",
+    "src/**/network*.ts"
+  ],
+  "dlp_configured": [
+    "src/**/dlp*.ts",
+    "src/**/dlp*.js",
+    "src/**/pii*.ts",
+    "src/**/redact*.ts",
+    "src/**/sanitize*.ts",
+    "infra/**",
+    "terraform/**"
+  ],
+  "artifact_signing": [
+    ".github/workflows/**",
+    ".gitlab-ci.yml",
+    "cloudbuild.yaml",
+    "Makefile",
+    "scripts/**",
+    "infra/**",
+    "cosign.pub",
+    "*.pub"
+  ],
+  "hermetic_build_configured": [
+    ".github/workflows/**",
+    ".gitlab-ci.yml",
+    "cloudbuild.yaml",
+    "Makefile",
+    "scripts/**",
+    "BUILD",
+    "BUILD.bazel"
+  ],
+  "ir_playbook_present": [
+    "security/**",
+    "docs/security/**",
+    "runbooks/**",
+    "playbooks/**",
+    ".mcp/**"
+  ],
+  "ir_playbook_tested": [
+    "security/**",
+    "docs/security/**",
+    "runbooks/**",
+    "playbooks/**"
+  ],
+  "network_segmentation": [
+    "infra/**",
+    "terraform/**",
+    "k8s/**",
+    "helm/**"
+  ],
+  "zero_trust_network": [
+    "infra/**",
+    "terraform/**",
+    "k8s/**",
+    "helm/**",
+    "src/**/mtls*.ts",
+    "src/**/spiffe*.ts",
+    "src/**/zero-trust*.ts"
+  ],
+  "backup_encryption": [
+    "infra/**",
+    "terraform/**",
+    "k8s/**"
+  ],
+  "backup_tested": [
+    "docs/**",
+    "security/**",
+    "runbooks/**"
+  ],
+  "dns_monitoring": [
+    "infra/**",
+    "terraform/**"
+  ],
+  "pan_encryption_configured": [
+    "infra/**",
+    "terraform/**",
+    "src/**/payment*.ts",
+    "src/**/card*.ts",
+    "src/**/stripe*.ts",
+    "src/**/braintree*.ts"
+  ],
+  "no_plaintext_pan": [
+    "**/*.ts",
+    "**/*.js",
+    "**/*.py",
+    "**/*.go",
+    "**/*.java"
+  ],
+  "input_validation_schema": [
+    "src/**",
+    "app/**",
+    "lib/**",
+    "server/**"
+  ],
+  "output_encoding_present": [
+    "src/**",
+    "app/**",
+    "lib/**"
+  ],
+  "service_account_per_workload": [
+    "infra/**",
+    "terraform/**",
+    "k8s/**",
+    "helm/**"
+  ],
+  "human_in_loop_for_actions": [
+    "ai/**",
+    "src/**/agent*.ts",
+    "src/**/tool*.ts",
+    "src/**/confirm*.ts",
+    "src/**/approval*.ts"
+  ],
+  "input_length_limits": [
+    "src/**",
+    "app/**",
+    "middleware.ts",
+    "middleware.js"
   ]
 }

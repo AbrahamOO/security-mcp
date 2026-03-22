@@ -1,0 +1,30 @@
+{
+  "surface": "web",
+  "items": [
+    { "id": "web_csp_nonce", "description": "Content-Security-Policy uses nonce-based control — no unsafe-inline or unsafe-eval", "critical": true },
+    { "id": "web_hsts", "description": "Strict-Transport-Security with includeSubDomains and preload, max-age >= 1 year", "critical": true },
+    { "id": "web_xframe", "description": "X-Frame-Options: DENY or SAMEORIGIN", "critical": true },
+    { "id": "web_xcto", "description": "X-Content-Type-Options: nosniff on all responses", "critical": true },
+    { "id": "web_referrer", "description": "Referrer-Policy: strict-origin-when-cross-origin", "critical": false },
+    { "id": "web_permissions", "description": "Permissions-Policy restricts camera, microphone, geolocation to self or none", "critical": false },
+    { "id": "web_no_inline_js", "description": "No inline JavaScript or inline event handlers (onclick, onerror, etc.)", "critical": true },
+    { "id": "web_sri", "description": "Subresource Integrity (SRI) on all third-party scripts and stylesheets", "critical": true },
+    { "id": "web_csrf", "description": "CSRF protection (SameSite cookies + CSRF tokens) on all state-changing endpoints", "critical": true },
+    { "id": "web_xss_no_dsi", "description": "dangerouslySetInnerHTML absent or sanitized with proven HTML sanitizer", "critical": true },
+    { "id": "web_secure_cookies", "description": "Session cookies have HttpOnly, Secure, SameSite=Strict flags", "critical": true },
+    { "id": "web_cors", "description": "CORS origin allowlist reviewed — no wildcard on authenticated endpoints", "critical": true },
+    { "id": "web_error_messages", "description": "Error messages reviewed — no stack traces, schema details, or enum leakage", "critical": false },
+    { "id": "web_open_redirect", "description": "No open redirect vulnerabilities — all redirects use allowlisted destinations", "critical": true },
+    { "id": "web_clickjacking", "description": "Clickjacking prevention verified in staging (X-Frame-Options + CSP frame-ancestors)", "critical": false },
+    { "id": "web_subresource_integrity", "description": "All CDN resources have SRI hashes verified and up-to-date", "critical": false },
+    { "id": "web_auth_headers", "description": "Authorization tokens not stored in localStorage — use HttpOnly cookies", "critical": true },
+    { "id": "web_rate_limiting", "description": "Rate limiting configured on login, registration, and password-reset endpoints", "critical": true },
+    { "id": "web_ssrf_guard", "description": "SSRF protection on server-side HTTP calls — private IP ranges blocked", "critical": true },
+    { "id": "web_dependency_scan", "description": "Frontend dependencies scanned for CVEs — no CRITICAL/HIGH unresolved", "critical": true },
+    { "id": "web_threat_model", "description": "Threat model completed and reviewed for this web surface change", "critical": true },
+    { "id": "web_sast_pass", "description": "SAST scan passed with no CRITICAL findings", "critical": true },
+    { "id": "web_secrets_scan", "description": "Secrets scan clean — no credentials or tokens in source code", "critical": true },
+    { "id": "web_logging", "description": "Required security events logged — no PII, tokens, or secrets in logs", "critical": false },
+    { "id": "web_staging_verified", "description": "Security headers verified in staging environment with automated check", "critical": false }
+  ]
+}

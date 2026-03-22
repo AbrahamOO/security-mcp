@@ -152,6 +152,398 @@
       "surfaces": ["all"],
       "frameworks": ["NIST 800-218", "SOC 2"],
       "required_steps": ["self_heal_loop"]
+    },
+    {
+      "id": "SBOM_SCANNER_READY",
+      "description": "An SBOM generator (Syft) is installed and runnable.",
+      "automation": "tooling",
+      "surfaces": ["all"],
+      "frameworks": ["SLSA", "NIST 800-218", "Executive Order 14028"],
+      "required_scanners": ["syft"]
+    },
+    {
+      "id": "NIST_AC_ACCESS_CONTROL",
+      "description": "Access control policies enforce least privilege and separation of duties (NIST 800-53 AC).",
+      "automation": "evidence",
+      "surfaces": ["all"],
+      "frameworks": ["NIST 800-53"],
+      "evidence": ["deny_by_default_authz", "service_to_service_auth"]
+    },
+    {
+      "id": "NIST_AU_AUDIT_LOGGING",
+      "description": "Audit events are logged, immutable, timestamped, and retained ≥1 year (NIST 800-53 AU).",
+      "automation": "evidence",
+      "surfaces": ["all"],
+      "frameworks": ["NIST 800-53", "SOC 2"],
+      "evidence": ["audit_logging_configured", "log_retention_policy"]
+    },
+    {
+      "id": "NIST_IA_IDENTIFICATION",
+      "description": "All users and services are uniquely identified and authenticated (NIST 800-53 IA).",
+      "automation": "evidence",
+      "surfaces": ["web", "api", "infra"],
+      "frameworks": ["NIST 800-53", "OWASP ASVS"],
+      "evidence": ["mfa_enforced", "service_account_per_workload"]
+    },
+    {
+      "id": "NIST_SC_TRANSMISSION",
+      "description": "All data in transit is encrypted using approved algorithms (NIST 800-53 SC).",
+      "automation": "evidence",
+      "surfaces": ["all"],
+      "frameworks": ["NIST 800-53", "PCI DSS 4.0"],
+      "evidence": ["tls_config_verified"]
+    },
+    {
+      "id": "NIST_SI_INPUT_VALIDATION",
+      "description": "All inputs are validated, sanitized, and encoded before processing (NIST 800-53 SI).",
+      "automation": "evidence",
+      "surfaces": ["web", "api"],
+      "frameworks": ["NIST 800-53", "OWASP Top 10"],
+      "evidence": ["input_validation_schema", "output_encoding_present"]
+    },
+    {
+      "id": "NIST_CM_CONFIGURATION",
+      "description": "Baseline configurations are established and enforced for all systems (NIST 800-53 CM).",
+      "automation": "tooling",
+      "surfaces": ["infra"],
+      "frameworks": ["NIST 800-53", "CIS Benchmarks"],
+      "required_scanners": ["checkov"]
+    },
+    {
+      "id": "NIST_IR_INCIDENT_RESPONSE",
+      "description": "Incident response playbooks exist, are tested, and have defined MTTD/MTTR SLAs (NIST 800-53 IR).",
+      "automation": "evidence",
+      "surfaces": ["all"],
+      "frameworks": ["NIST 800-53", "SOC 2"],
+      "evidence": ["ir_playbook_present", "ir_playbook_tested"]
+    },
+    {
+      "id": "NIST_RA_RISK_ASSESSMENT",
+      "description": "Security risk assessments are performed before major releases (NIST 800-53 RA).",
+      "automation": "workflow",
+      "surfaces": ["all"],
+      "frameworks": ["NIST 800-53", "ISO 27001:2022"],
+      "required_steps": ["threat_model"]
+    },
+    {
+      "id": "NIST_SA_SYSTEM_SERVICES",
+      "description": "Third-party components are assessed for security risk before adoption (NIST 800-53 SA).",
+      "automation": "tooling",
+      "surfaces": ["all"],
+      "frameworks": ["NIST 800-53", "NIST 800-218"],
+      "required_scanners": ["osv-scanner"]
+    },
+    {
+      "id": "NIST_SR_SUPPLY_CHAIN",
+      "description": "Supply chain integrity is verified via SBOM, provenance attestation, and dependency scanning (NIST 800-53 SR).",
+      "automation": "tooling",
+      "surfaces": ["all"],
+      "frameworks": ["NIST 800-53", "SLSA", "Executive Order 14028"],
+      "required_scanners": ["syft", "osv-scanner"]
+    },
+    {
+      "id": "PCI_REQ1_NETWORK",
+      "description": "Network security controls restrict inbound/outbound traffic to only what is necessary (PCI DSS 4.0 Req 1).",
+      "automation": "tooling",
+      "surfaces": ["infra"],
+      "frameworks": ["PCI DSS 4.0"],
+      "required_scanners": ["checkov"]
+    },
+    {
+      "id": "PCI_REQ3_STORED_DATA",
+      "description": "Cardholder data at rest is encrypted and PAN is never stored in plaintext (PCI DSS 4.0 Req 3).",
+      "automation": "evidence",
+      "surfaces": ["api", "infra"],
+      "frameworks": ["PCI DSS 4.0"],
+      "evidence": ["pan_encryption_configured", "no_plaintext_pan"]
+    },
+    {
+      "id": "PCI_REQ4_TRANSIT",
+      "description": "Cardholder data in transit uses TLS 1.2+ with approved cipher suites (PCI DSS 4.0 Req 4).",
+      "automation": "evidence",
+      "surfaces": ["web", "api"],
+      "frameworks": ["PCI DSS 4.0"],
+      "evidence": ["tls_config_verified"]
+    },
+    {
+      "id": "PCI_REQ6_SECURE_SYSTEMS",
+      "description": "All software components are up-to-date and protected against known vulnerabilities (PCI DSS 4.0 Req 6).",
+      "automation": "tooling",
+      "surfaces": ["all"],
+      "frameworks": ["PCI DSS 4.0"],
+      "required_scanners": ["osv-scanner", "trivy"]
+    },
+    {
+      "id": "SOC2_CC6_LOGICAL_ACCESS",
+      "description": "Logical access to systems is restricted and uses MFA for privileged accounts (SOC 2 CC6).",
+      "automation": "evidence",
+      "surfaces": ["all"],
+      "frameworks": ["SOC 2 Type II"],
+      "evidence": ["mfa_enforced", "deny_by_default_authz"]
+    },
+    {
+      "id": "SOC2_CC7_SYSTEM_MONITORING",
+      "description": "System components are monitored for anomalous activity and security events (SOC 2 CC7).",
+      "automation": "evidence",
+      "surfaces": ["all"],
+      "frameworks": ["SOC 2 Type II"],
+      "evidence": ["audit_logging_configured", "alerting_configured"]
+    },
+    {
+      "id": "SOC2_CC8_CHANGE_MANAGEMENT",
+      "description": "Changes are authorized, tested, and reviewed before deployment (SOC 2 CC8).",
+      "automation": "workflow",
+      "surfaces": ["all"],
+      "frameworks": ["SOC 2 Type II"],
+      "required_steps": ["run_pr_gate"]
+    },
+    {
+      "id": "SOC2_CC9_RISK_MITIGATION",
+      "description": "Security risks are identified and formally risk-accepted or remediated (SOC 2 CC9).",
+      "automation": "workflow",
+      "surfaces": ["all"],
+      "frameworks": ["SOC 2 Type II"],
+      "required_steps": ["threat_model", "run_pr_gate"]
+    },
+    {
+      "id": "MITRE_INITIAL_ACCESS",
+      "description": "Controls in place to prevent initial access vectors: phishing, supply chain, public-facing exploits (TA0001).",
+      "automation": "evidence",
+      "surfaces": ["all"],
+      "frameworks": ["MITRE ATT&CK Enterprise"],
+      "evidence": ["mfa_enforced", "email_filtering", "public_surface_hardened"]
+    },
+    {
+      "id": "MITRE_CREDENTIAL_ACCESS",
+      "description": "Controls prevent credential dumping, brute force, and credential theft (TA0006).",
+      "automation": "evidence",
+      "surfaces": ["all"],
+      "frameworks": ["MITRE ATT&CK Enterprise"],
+      "evidence": ["no_hardcoded_secrets", "secret_manager_refs", "rate_limiting_present"]
+    },
+    {
+      "id": "MITRE_EXFILTRATION",
+      "description": "Controls prevent unauthorized data exfiltration over network, cloud storage, or encoding (TA0010).",
+      "automation": "evidence",
+      "surfaces": ["all"],
+      "frameworks": ["MITRE ATT&CK Enterprise"],
+      "evidence": ["egress_controls", "dlp_configured"]
+    },
+    {
+      "id": "MITRE_DEFENSE_EVASION",
+      "description": "Logging is tamper-evident; code signing prevents unauthorized binary substitution (TA0005).",
+      "automation": "evidence",
+      "surfaces": ["all"],
+      "frameworks": ["MITRE ATT&CK Enterprise"],
+      "evidence": ["audit_logging_configured", "artifact_signing"]
+    },
+    {
+      "id": "MITRE_PERSISTENCE",
+      "description": "Controls detect and prevent backdoors, scheduled tasks, and unauthorized service installation (TA0003).",
+      "automation": "tooling",
+      "surfaces": ["infra"],
+      "frameworks": ["MITRE ATT&CK Enterprise"],
+      "required_scanners": ["checkov", "trivy"]
+    },
+    {
+      "id": "MITRE_PRIVILEGE_ESCALATION",
+      "description": "Containers and services cannot escalate to root; least-privilege IAM enforced (TA0004).",
+      "automation": "tooling",
+      "surfaces": ["infra"],
+      "frameworks": ["MITRE ATT&CK Enterprise", "CIS Kubernetes Benchmark"],
+      "required_scanners": ["checkov"]
+    },
+    {
+      "id": "MITRE_LATERAL_MOVEMENT",
+      "description": "Network segmentation and mTLS prevent lateral movement between services (TA0008).",
+      "automation": "evidence",
+      "surfaces": ["infra"],
+      "frameworks": ["MITRE ATT&CK Enterprise", "NIST 800-207"],
+      "evidence": ["network_segmentation", "zero_trust_network"]
+    },
+    {
+      "id": "MITRE_IMPACT",
+      "description": "Data backups are encrypted and tested; ransomware-resistant backup policies in place (TA0040).",
+      "automation": "evidence",
+      "surfaces": ["infra"],
+      "frameworks": ["MITRE ATT&CK Enterprise"],
+      "evidence": ["backup_encryption", "backup_tested"]
+    },
+    {
+      "id": "MITRE_COMMAND_CONTROL",
+      "description": "Egress filtering blocks C2 channels; DNS monitoring detects beaconing (TA0011).",
+      "automation": "evidence",
+      "surfaces": ["infra"],
+      "frameworks": ["MITRE ATT&CK Enterprise"],
+      "evidence": ["egress_controls", "dns_monitoring"]
+    },
+    {
+      "id": "AI_LLM01_PROMPT_INJECTION",
+      "description": "Application defends against direct and indirect prompt injection attacks (OWASP LLM01).",
+      "automation": "tooling",
+      "surfaces": ["ai"],
+      "frameworks": ["OWASP LLM Top 10 2025", "MITRE ATLAS"],
+      "required_scanners": ["semgrep"]
+    },
+    {
+      "id": "AI_LLM02_OUTPUT_HANDLING",
+      "description": "LLM outputs are validated against a schema before use in downstream systems (OWASP LLM02).",
+      "automation": "evidence",
+      "surfaces": ["ai"],
+      "frameworks": ["OWASP LLM Top 10 2025"],
+      "evidence": ["json_schema_validation", "output_encoding_present"]
+    },
+    {
+      "id": "AI_LLM04_MODEL_DOS",
+      "description": "Rate limiting and input length limits prevent model resource exhaustion (OWASP LLM04).",
+      "automation": "evidence",
+      "surfaces": ["ai", "api"],
+      "frameworks": ["OWASP LLM Top 10 2025"],
+      "evidence": ["rate_limiting_present", "input_length_limits"]
+    },
+    {
+      "id": "AI_LLM07_PLUGIN_DESIGN",
+      "description": "LLM plugins and tools operate on an explicit allowlist with minimal permissions (OWASP LLM07).",
+      "automation": "evidence",
+      "surfaces": ["ai"],
+      "frameworks": ["OWASP LLM Top 10 2025"],
+      "evidence": ["tool_allowlist_router"]
+    },
+    {
+      "id": "AI_LLM08_EXCESSIVE_AGENCY",
+      "description": "LLM agents cannot take irreversible actions without human confirmation (OWASP LLM08).",
+      "automation": "evidence",
+      "surfaces": ["ai"],
+      "frameworks": ["OWASP LLM Top 10 2025", "NIST AI RMF"],
+      "evidence": ["human_in_loop_for_actions", "tool_allowlist_router"]
+    },
+    {
+      "id": "SLSA_L3_PROVENANCE",
+      "description": "Build artifacts have signed SLSA Level 3 provenance from a hermetic, ephemeral CI build.",
+      "automation": "evidence",
+      "surfaces": ["all"],
+      "frameworks": ["SLSA", "NIST 800-218"],
+      "evidence": ["artifact_signing", "hermetic_build_configured"]
+    },
+    {
+      "id": "SBOM_GENERATED",
+      "description": "A CycloneDX or SPDX SBOM is generated on every release and stored as a signed artifact.",
+      "automation": "tooling",
+      "surfaces": ["all"],
+      "frameworks": ["Executive Order 14028", "NIST 800-218", "SLSA"],
+      "required_scanners": ["syft"]
+    },
+    {
+      "id": "ZERO_TRUST_MICROSEG",
+      "description": "Network microsegmentation enforces deny-by-default between all services.",
+      "automation": "evidence",
+      "surfaces": ["infra"],
+      "frameworks": ["NIST 800-207", "CISA Zero Trust Maturity Model"],
+      "evidence": ["network_segmentation", "zero_trust_network"]
+    },
+    {
+      "id": "ZERO_TRUST_CONTINUOUS_VERIFY",
+      "description": "Every request is continuously verified — no persistent trust based on network location.",
+      "automation": "evidence",
+      "surfaces": ["all"],
+      "frameworks": ["NIST 800-207"],
+      "evidence": ["deny_by_default_authz", "service_to_service_auth"]
+    },
+    {
+      "id": "IR_PLAYBOOKS_CURRENT",
+      "description": "Incident response playbooks exist for all surfaces, are tested within 90 days, and have contact lists.",
+      "automation": "tooling",
+      "surfaces": ["all"],
+      "frameworks": ["NIST 800-53", "SOC 2 Type II"],
+      "required_scanners": []
+    },
+    {
+      "id": "CIS_CONTAINER_HARDENING",
+      "description": "Container images comply with CIS Docker Benchmark Level 2.",
+      "automation": "tooling",
+      "surfaces": ["infra"],
+      "frameworks": ["CIS Benchmarks", "NIST 800-190"],
+      "required_scanners": ["trivy", "checkov"]
+    },
+    {
+      "id": "CIS_K8S_HARDENING",
+      "description": "Kubernetes cluster configuration complies with CIS Kubernetes Benchmark Level 2.",
+      "automation": "tooling",
+      "surfaces": ["infra"],
+      "frameworks": ["CIS Benchmarks", "NIST 800-190"],
+      "required_scanners": ["checkov"]
+    },
+    {
+      "id": "CIS_CLOUD_HARDENING",
+      "description": "Cloud account configuration complies with CIS Benchmark Level 2 for the active cloud provider.",
+      "automation": "tooling",
+      "surfaces": ["infra"],
+      "frameworks": ["CIS Benchmarks", "NIST 800-53"],
+      "required_scanners": ["checkov"]
+    },
+    {
+      "id": "GRAPHQL_INTROSPECTION_DISABLED",
+      "description": "GraphQL introspection is disabled in non-development environments.",
+      "automation": "tooling",
+      "surfaces": ["api"],
+      "frameworks": ["OWASP API Security Top 10", "CWE-200"],
+      "required_scanners": ["semgrep"]
+    },
+    {
+      "id": "GRAPHQL_QUERY_COMPLEXITY",
+      "description": "GraphQL query depth and complexity limits are enforced.",
+      "automation": "tooling",
+      "surfaces": ["api"],
+      "frameworks": ["OWASP API Security Top 10"],
+      "required_scanners": ["semgrep"]
+    },
+    {
+      "id": "K8S_POD_SECURITY",
+      "description": "Kubernetes pods enforce security contexts with least-privilege settings.",
+      "automation": "tooling",
+      "surfaces": ["infra"],
+      "frameworks": ["CIS Kubernetes Benchmark", "NIST 800-190"],
+      "required_scanners": ["checkov"]
+    },
+    {
+      "id": "K8S_NETWORK_POLICY",
+      "description": "Kubernetes NetworkPolicy resources restrict pod-to-pod traffic.",
+      "automation": "tooling",
+      "surfaces": ["infra"],
+      "frameworks": ["CIS Kubernetes Benchmark", "NIST 800-190"],
+      "required_scanners": ["checkov"]
+    },
+    {
+      "id": "DB_ENCRYPTION_TRANSIT",
+      "description": "All database connections require TLS/SSL encryption in transit.",
+      "automation": "tooling",
+      "surfaces": ["api", "infra"],
+      "frameworks": ["PCI DSS 4.0", "NIST 800-53"],
+      "required_scanners": ["semgrep"]
+    },
+    {
+      "id": "DB_LEAST_PRIVILEGE",
+      "description": "Database credentials use least-privilege accounts, not root/admin.",
+      "automation": "tooling",
+      "surfaces": ["infra"],
+      "frameworks": ["NIST 800-53", "CIS"],
+      "required_scanners": ["semgrep"]
+    },
+    {
+      "id": "CRYPTO_APPROVED_ALGORITHMS",
+      "description": "Only NIST-approved cryptographic algorithms are used (AES-256, SHA-256+, RSA-2048+).",
+      "automation": "tooling",
+      "surfaces": ["all"],
+      "frameworks": ["NIST SP 800-131A", "FIPS 140-3"],
+      "required_scanners": ["semgrep"]
+    },
+    {
+      "id": "DLP_NO_PII_IN_LOGS",
+      "description": "PII, PAN, SSN, and credentials are never written to application logs.",
+      "automation": "tooling",
+      "surfaces": ["all"],
+      "frameworks": ["GDPR", "HIPAA", "PCI DSS 4.0"],
+      "required_scanners": ["semgrep"]
     }
   ]
 }

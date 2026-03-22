@@ -62,12 +62,14 @@ COMMANDS
   config           Print MCP config JSON for manual editor setup
 
 OPTIONS (install)
-  --claude-code    Write config for Claude Code only
-  --cursor         Write config for Cursor only
-  --vscode         Write config for VS Code only
-  --global         Write to global editor config (default)
+  --claude-code        Write config for Claude Code only
+  --cursor             Write config for Cursor only
+  --vscode             Write config for VS Code only
+  --global             Write to global editor config (default)
   --use-global-binary  Write configs that execute "security-mcp serve" instead of npx
-  --dry-run        Print what would change without writing
+  --dry-run            Print what would change without writing
+  --yes                Skip interactive setup questions (install with defaults)
+  --non-interactive    Same as --yes (for CI environments)
 
 OPTIONS (general)
   --version        Print version
@@ -142,27 +144,32 @@ async function main(): Promise<void> {
     }
 
     case "install": {
+      const noEditorFlag =
+        !args.includes("--claude-code") && !args.includes("--cursor") && !args.includes("--vscode");
       const options = {
         claudeCode: args.includes("--claude-code"),
         cursor: args.includes("--cursor"),
         vscode: args.includes("--vscode"),
         dryRun: args.includes("--dry-run"),
         useGlobalBinary,
-        // If no editor flag specified, install to all detected
-        all: !args.includes("--claude-code") && !args.includes("--cursor") && !args.includes("--vscode")
+        all: noEditorFlag,
+        interactive: !args.includes("--yes") && !args.includes("--non-interactive")
       };
       await runInstall(options);
       break;
     }
 
     case "install-global": {
+      const noEditorFlag =
+        !args.includes("--claude-code") && !args.includes("--cursor") && !args.includes("--vscode");
       const options = {
         claudeCode: args.includes("--claude-code"),
         cursor: args.includes("--cursor"),
         vscode: args.includes("--vscode"),
         dryRun: args.includes("--dry-run"),
         useGlobalBinary: true,
-        all: !args.includes("--claude-code") && !args.includes("--cursor") && !args.includes("--vscode")
+        all: noEditorFlag,
+        interactive: !args.includes("--yes") && !args.includes("--non-interactive")
       };
       await runInstall(options);
       break;

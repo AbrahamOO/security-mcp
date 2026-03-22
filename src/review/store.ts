@@ -2,6 +2,42 @@ import { createHash, createHmac, randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+// ---------------------------------------------------------------------------
+// Checklist types
+// ---------------------------------------------------------------------------
+
+export type ChecklistItemStatus = "pending" | "completed" | "na" | "failed";
+
+export type ChecklistItem = {
+  id: string;
+  surface: string;
+  description: string;
+  critical: boolean;
+  status: ChecklistItemStatus;
+  completedBy?: string;
+  completedAt?: string;
+  evidence?: string;
+  runId: string;
+};
+
+export type ChecklistState = {
+  runId: string;
+  surface: string;
+  items: ChecklistItem[];
+  signedOffBy?: string;
+  signedOffAt?: string;
+  allCriticalComplete: boolean;
+};
+
+interface ChecklistTemplate {
+  surface: string;
+  items: Array<{
+    id: string;
+    description: string;
+    critical: boolean;
+  }>;
+}
+
 export type ReviewStepStatus = "pending" | "completed" | "approved";
 
 export type ReviewStepRecord = {
@@ -24,6 +60,11 @@ export type ReviewRun = {
 
 const REVIEW_DIR = path.join(".mcp", "reviews");
 const REPORT_DIR = path.join(".mcp", "reports");
+const CHECKLIST_DEFAULTS_DIR = path.join(
+  path.dirname(path.dirname(path.dirname(new URL(import.meta.url).pathname))),
+  "defaults",
+  "checklists"
+);
 
 async function ensureDir(dirPath: string): Promise<void> {
   await mkdir(dirPath, { recursive: true });
@@ -40,6 +81,168 @@ function reportPath(runId: string): string {
 async function writeJson(filePath: string, value: unknown): Promise<void> {
   await ensureDir(path.dirname(filePath));
   await writeFile(filePath, JSON.stringify(value, null, 2) + "\n", "utf-8");
+}
+
+function checklistPath(runId: string): string {
+  return path.join(process.cwd(), REVIEW_DIR, `${runId}-checklist.json`);
+}
+
+async function readChecklistRaw(runId: string): Promise<ChecklistState | null> {
+  try {
+    const raw = await readFile(checklistPath(runId), "utf-8");
+    return JSON.parse(raw) as ChecklistState;
+  } catch {
+    return null;
+  }
+}
+
+function computeAllCriticalComplete(items: ChecklistItem[]): boolean {
+  return items
+    .filter((i) => i.critical)
+    .every((i) => i.status === "completed" || i.status === "na");
+}
+
+/**
+ * Initialize a checklist for a run from the surface template.
+ */
+export async function initChecklist(runId: string, surface: string): Promise<ChecklistState> {
+  // Load template from defaults/checklists/{surface}.json
+  let template: ChecklistTemplate;
+  try {
+    const raw = await readFile(path.join(CHECKLIST_DEFAULTS_DIR, `${surface}.json`), "utf-8");
+    template = JSON.parse(raw) as ChecklistTemplate;
+  } catch {
+    // Fallback to empty template
+    template = { surface, items: [] };
+  }
+
+  const items: ChecklistItem[] = template.items.map((item) => ({
+    id: item.id,
+    surface,
+    description: item.description,
+    critical: item.critical,
+    status: "pending",
+    runId
+  }));
+
+  const state: ChecklistState = {
+    runId,
+    surface,
+    items,
+    allCriticalComplete: false
+  };
+
+  await writeJson(checklistPath(runId), state);
+  return state;
+}
+
+/**
+ * Mark a checklist item as completed.
+ */
+export async function completeChecklistItem(
+  runId: string,
+  itemId: string,
+  completedBy: string,
+  evidence?: string
+): Promise<ChecklistState> {
+  const state = await readChecklistRaw(runId);
+  if (!state) throw new Error(`No checklist found for runId: ${runId}`);
+
+  const item = state.items.find((i) => i.id === itemId);
+  if (!item) throw new Error(`Checklist item not found: ${itemId}`);
+
+  item.status = "completed";
+  item.completedBy = completedBy;
+  item.completedAt = new Date().toISOString();
+  if (evidence) item.evidence = evidence;
+
+  state.allCriticalComplete = computeAllCriticalComplete(state.items);
+  await writeJson(checklistPath(runId), state);
+  return state;
+}
+
+/**
+ * Mark a checklist item as not applicable.
+ */
+export async function markChecklistItemNA(
+  runId: string,
+  itemId: string,
+  completedBy: string,
+  reason: string
+): Promise<ChecklistState> {
+  const state = await readChecklistRaw(runId);
+  if (!state) throw new Error(`No checklist found for runId: ${runId}`);
+
+  const item = state.items.find((i) => i.id === itemId);
+  if (!item) throw new Error(`Checklist item not found: ${itemId}`);
+
+  item.status = "na";
+  item.completedBy = completedBy;
+  item.completedAt = new Date().toISOString();
+  item.evidence = reason;
+
+  state.allCriticalComplete = computeAllCriticalComplete(state.items);
+  await writeJson(checklistPath(runId), state);
+  return state;
+}
+
+/**
+ * Mark a checklist item as failed.
+ */
+export async function failChecklistItem(
+  runId: string,
+  itemId: string,
+  completedBy: string,
+  reason: string
+): Promise<ChecklistState> {
+  const state = await readChecklistRaw(runId);
+  if (!state) throw new Error(`No checklist found for runId: ${runId}`);
+
+  const item = state.items.find((i) => i.id === itemId);
+  if (!item) throw new Error(`Checklist item not found: ${itemId}`);
+
+  item.status = "failed";
+  item.completedBy = completedBy;
+  item.completedAt = new Date().toISOString();
+  item.evidence = reason;
+
+  state.allCriticalComplete = computeAllCriticalComplete(state.items);
+  await writeJson(checklistPath(runId), state);
+  return state;
+}
+
+/**
+ * Sign off on a checklist. Requires all non-NA critical items to be completed.
+ */
+export async function signOffChecklist(
+  runId: string,
+  signedOffBy: string
+): Promise<ChecklistState> {
+  const state = await readChecklistRaw(runId);
+  if (!state) throw new Error(`No checklist found for runId: ${runId}`);
+
+  const blockers = state.items.filter(
+    (i) => i.critical && (i.status === "pending" || i.status === "failed")
+  );
+
+  if (blockers.length > 0) {
+    const list = blockers.map((b) => `${b.id}: ${b.description} (${b.status})`).join("; ");
+    throw new Error(`Cannot sign off: ${blockers.length} critical item(s) are not completed: ${list}`);
+  }
+
+  state.signedOffBy = signedOffBy;
+  state.signedOffAt = new Date().toISOString();
+  state.allCriticalComplete = true;
+
+  await writeJson(checklistPath(runId), state);
+  return state;
+}
+
+/**
+ * Read checklist state for a run.
+ */
+export async function readChecklist(runId: string): Promise<ChecklistState | null> {
+  return readChecklistRaw(runId);
 }
 
 export async function createReviewRun(opts: {

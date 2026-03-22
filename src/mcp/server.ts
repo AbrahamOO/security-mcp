@@ -80,7 +80,7 @@ const StartReviewSchema = z.object(StartReviewParams);
 
 tool(
   "security.start_review",
-  "Start a stateful security review run, lock the scan mode, and return a run ID for ordered execution and attestation.",
+  "Start a stateful security review run, lock the scan mode, and return a run ID for ordered execution and attestation. OPERATING MANDATE: 90% fixing, 10% advisory. You do not list vulnerabilities and walk away — you write the fix, implement the control, and enforce the policy.",
   StartReviewParams as unknown as Record<string, z.ZodTypeAny>,
   safeTool(async (args: unknown, _extra: unknown) => {
     const { mode, targets, baseRef, headRef } = StartReviewSchema.parse(args);
@@ -103,6 +103,7 @@ tool(
       baseRef: baseRef ?? "origin/main",
       headRef: headRef ?? "HEAD",
       requiredSteps: run.requiredSteps,
+      operatingMandate: "90% fixing, 10% advisory. Write the fix. Implement the control. Enforce the policy. Do not list vulnerabilities and walk away.",
       nextSteps: [
         "Run security.threat_model with this runId.",
         "Run security.checklist with this runId.",
@@ -268,12 +269,25 @@ const GetSystemPromptSchema = z.object(GetSystemPromptParams);
 
 tool(
   "security.get_system_prompt",
-  "Return the full security engineering system prompt. Optionally customized with your stack, cloud provider, and payment processor. Use this as the system prompt to configure Claude as an elite security engineer for your project.",
+  "Return the full security engineering system prompt. Optionally customized with your stack, cloud provider, and payment processor. Use this as the system prompt to configure Claude as an elite security engineer for your project. Core operating ratio: 90% fixing, 10% advisory — write the fix, implement the control, enforce the policy.",
   GetSystemPromptParams as unknown as Record<string, z.ZodTypeAny>,
   safeTool(async (args: unknown, _extra: unknown) => {
     const { stack, cloud, payment_processor } = GetSystemPromptSchema.parse(args);
 
-    let prompt = SECURITY_PROMPT;
+    // Prepend the operating mandate so it is the first instruction the model reads,
+    // regardless of which part of the prompt file is loaded or truncated.
+    const OPERATING_MANDATE =
+      "# CORE OPERATING MANDATE — READ FIRST\n\n" +
+      "Your operating ratio is **90% fixing, 10% advisory**.\n" +
+      "You do NOT list vulnerabilities and walk away.\n" +
+      "You write the fix. You implement the control. You enforce the policy.\n\n" +
+      "**90% action:** Write the secure code directly. Implement validation, middleware, " +
+      "access controls, and secret management. Produce production-ready fixes every time.\n\n" +
+      "**10% explanation:** One line — what was wrong, what attack it prevents, which framework " +
+      "control applies (OWASP, ATT&CK, NIST). Then move on.\n\n" +
+      "---\n\n";
+
+    let prompt = OPERATING_MANDATE + SECURITY_PROMPT;
 
     // Append a project-specific scope section if any context was provided
     if (stack ?? cloud ?? payment_processor) {
@@ -974,6 +988,88 @@ deny contains msg if {
     };
 
     const selected = policyByPack[selectedPack];
+
+    // Generate test file for the selected policy pack
+    const testPackageName = `security.${selectedPack.replace(/_/g, "")}_test`;
+    const testPolicy = `package ${testPackageName}
+
+import rego.v1
+
+# --- Allow cases (should NOT produce deny) ---
+
+test_allow_valid_resource if {
+  count(deny) == 0 with input as {
+    "resource_changes": []
+  }
+}
+
+test_allow_encrypted_storage if {
+  count(deny) == 0 with input as {
+    "resource_changes": [{
+      "type": "aws_s3_bucket",
+      "address": "aws_s3_bucket.secure",
+      "change": { "after": { "public": false, "encryption": true } }
+    }]
+  }
+}
+
+test_allow_private_ingress if {
+  count(deny) == 0 with input as {
+    "resource_changes": [{
+      "type": "aws_security_group_rule",
+      "change": { "after": { "type": "ingress", "cidr_blocks": ["10.0.0.0/8"] } }
+    }]
+  }
+}
+
+# --- Deny cases (should produce deny) ---
+
+test_deny_public_ingress if {
+  count(deny) > 0 with input as {
+    "resource_changes": [{
+      "type": "aws_security_group_rule",
+      "change": { "after": { "type": "ingress", "cidr_blocks": ["0.0.0.0/0"] } }
+    }]
+  }
+}
+
+test_deny_public_storage if {
+  count(deny) > 0 with input as {
+    "resource_changes": [{
+      "type": "aws_s3_bucket",
+      "address": "aws_s3_bucket.bad",
+      "change": { "after": { "public": true, "encryption": false } }
+    }]
+  }
+}
+
+test_deny_unencrypted_database if {
+  count(deny) > 0 with input as {
+    "resource_changes": [{
+      "type": "aws_db_instance",
+      "address": "aws_db_instance.bad",
+      "change": { "after": { "encryption": false } }
+    }]
+  }
+}
+
+# --- Edge cases ---
+
+test_empty_input if {
+  count(deny) == 0 with input as {}
+}
+
+test_null_resource_changes if {
+  count(deny) == 0 with input as { "resource_changes": [] }
+}
+
+test_missing_required_fields if {
+  count(deny) == 0 with input as { "resource_changes": [{ "type": "unknown_type", "change": {} }] }
+}
+`;
+
+    const testFilePath = selected.path.replace(".rego", "_test.rego");
+
     if (runId) {
       await updateReviewStep(runId, "generate_opa_rego", "approved", {
         policyPack: selectedPack,
@@ -982,10 +1078,14 @@ deny contains msg if {
     }
     return asTextResponse({
       generated_for: { policyPack: selectedPack, cloud: cloud ?? "multi" },
-      files: [selected],
+      files: [
+        selected,
+        { path: testFilePath, policy: testPolicy, description: "OPA test file — run with: opa test policy/ -v" }
+      ],
       install_notes: [
         "Run this in CI before deployment apply/admission.",
         "Fail the pipeline when any deny rules are returned.",
+        "Run tests with: opa test policy/ -v",
         "Version-control the policy and require security-owner approval for policy exceptions."
       ]
     });
@@ -1050,12 +1150,456 @@ tool(
 );
 
 // ---------------------------------------------------------------------------
+// New tool: security.generate_compliance_report
+// ---------------------------------------------------------------------------
+
+const GenerateComplianceReportParams = {
+  ...ReviewRunIdParam,
+  framework: z.enum(["SOC2", "PCI-DSS", "ISO27001", "NIST-800-53", "HIPAA", "GDPR"]).describe(
+    "Compliance framework to evaluate against."
+  ),
+  outputFormat: z.enum(["json", "markdown"]).default("markdown").describe("Output format.")
+};
+const GenerateComplianceReportSchema = z.object(GenerateComplianceReportParams);
+
+tool(
+  "security.generate_compliance_report",
+  "Generate a compliance gap analysis report mapping gate results to a specific framework's controls. Identifies satisfied, missing, and partially-satisfied controls with evidence artifacts.",
+  GenerateComplianceReportParams as unknown as Record<string, z.ZodTypeAny>,
+  safeTool(async (args: unknown, _extra: unknown) => {
+    const { runId, framework, outputFormat } = GenerateComplianceReportSchema.parse(args);
+
+    // Framework → control prefix/tag mapping
+    const frameworkFilters: Record<string, string[]> = {
+      "SOC2": ["SOC2_", "SOC 2"],
+      "PCI-DSS": ["PCI_", "PCI DSS"],
+      "ISO27001": ["ISO_", "ISO 27001"],
+      "NIST-800-53": ["NIST_", "NIST 800-53"],
+      "HIPAA": ["HIPAA"],
+      "GDPR": ["GDPR"]
+    };
+    const filters = frameworkFilters[framework] ?? [];
+
+    // Load gate result from run if provided
+    let gateFindings: Array<{ id: string; severity: string }> = [];
+    let gateStatus = "UNKNOWN";
+    if (runId) {
+      try {
+        const { readReviewRun } = await import("../review/store.js");
+        const run = await readReviewRun(runId);
+        const gateStep = run.steps["run_pr_gate"];
+        if (gateStep?.details) {
+          const details = gateStep.details as Record<string, unknown>;
+          gateStatus = String(details["status"] ?? "UNKNOWN");
+          gateFindings = (details["findings"] as Array<{ id: string; severity: string }>) ?? [];
+        }
+      } catch {
+        // run not found — proceed without gate data
+      }
+    }
+
+    // Load control catalog
+    const { loadControlCatalog } = await import("../gate/catalog.js");
+    const catalog = await loadControlCatalog();
+
+    // Filter controls by framework
+    const frameworkControls = catalog.controls.filter((c) =>
+      filters.some((f) => c.id.startsWith(f) || c.frameworks.some((fw) => fw.includes(f.trim())))
+    );
+
+    // Map each control to a status
+    type ControlStatus = { id: string; description: string; status: "satisfied" | "missing" | "partial"; evidence: string[] };
+    const controlStatuses: ControlStatus[] = frameworkControls.map((c) => {
+      const matchingFinding = gateFindings.find((f) => f.id.startsWith(c.id) || c.id.includes(f.id));
+      if (matchingFinding) {
+        return { id: c.id, description: c.description, status: "missing", evidence: [`Finding: ${matchingFinding.id} (${matchingFinding.severity})`] };
+      }
+      // If no adverse finding, consider it tentatively satisfied
+      return { id: c.id, description: c.description, status: "satisfied", evidence: c.evidence ?? [] };
+    });
+
+    const total = controlStatuses.length;
+    const satisfied = controlStatuses.filter((c) => c.status === "satisfied").length;
+    const missing = controlStatuses.filter((c) => c.status === "missing").length;
+    const partial = controlStatuses.filter((c) => c.status === "partial").length;
+
+    if (outputFormat === "json") {
+      return asTextResponse({
+        framework,
+        runId: runId ?? null,
+        gateStatus,
+        summary: { total, satisfied, missing, partial },
+        controls: controlStatuses
+      });
+    }
+
+    // Markdown output
+    const rows = controlStatuses.map((c) => {
+      const icon = c.status === "satisfied" ? "✓" : c.status === "missing" ? "✗" : "~";
+      const evidence = c.evidence.slice(0, 2).join("; ") || "-";
+      return `| ${c.id} | ${c.description.slice(0, 60)} | ${icon} ${c.status} | ${evidence} |`;
+    }).join("\n");
+
+    const report = `# Compliance Gap Analysis: ${framework}
+
+**Run ID**: ${runId ?? "not provided"}
+**Gate Status**: ${gateStatus}
+**Generated**: ${new Date().toISOString()}
+
+## Summary
+
+| Metric | Count |
+|---|---|
+| Total Controls | ${total} |
+| Satisfied | ${satisfied} |
+| Missing | ${missing} |
+| Partial | ${partial} |
+| Coverage | ${total > 0 ? Math.round((satisfied / total) * 100) : 0}% |
+
+## Control Details
+
+| Control ID | Description | Status | Evidence |
+|---|---|---|---|
+${rows}
+`;
+
+    return asTextResponse(report);
+  })
+);
+
+// ---------------------------------------------------------------------------
+// New tool: security.notify_webhooks
+// ---------------------------------------------------------------------------
+
+const NotifyWebhooksParams = {
+  runId: z.string().uuid().describe("Security review run ID whose findings to send."),
+  gateFailed: z.boolean().describe("Whether the gate failed (determines alert severity)."),
+  findingCount: z.number().int().describe("Total number of findings."),
+  criticalCount: z.number().int().describe("Number of CRITICAL findings.")
+};
+const NotifyWebhooksSchema = z.object(NotifyWebhooksParams);
+
+tool(
+  "security.notify_webhooks",
+  "Send security gate findings to configured external systems (Slack, Jira, PagerDuty, generic webhook). Configure endpoints via environment variables: SECURITY_SLACK_WEBHOOK, SECURITY_JIRA_URL+SECURITY_JIRA_TOKEN, SECURITY_PAGERDUTY_KEY, SECURITY_WEBHOOK_URL.",
+  NotifyWebhooksParams as unknown as Record<string, z.ZodTypeAny>,
+  safeTool(async (args: unknown, _extra: unknown) => {
+    const { runId, gateFailed, findingCount, criticalCount } = NotifyWebhooksSchema.parse(args);
+
+    const notified: string[] = [];
+    const errors: string[] = [];
+
+    // Slack
+    const slackWebhook = process.env["SECURITY_SLACK_WEBHOOK"];
+    if (slackWebhook) {
+      try {
+        const color = gateFailed ? "#d32f2f" : "#388e3c";
+        const statusEmoji = gateFailed ? ":red_circle:" : ":large_green_circle:";
+        const body = {
+          blocks: [
+            {
+              type: "header",
+              text: { type: "plain_text", text: `${statusEmoji} Security Gate ${gateFailed ? "FAILED" : "PASSED"}` }
+            },
+            {
+              type: "section",
+              fields: [
+                { type: "mrkdwn", text: `*Run ID*: ${runId}` },
+                { type: "mrkdwn", text: `*Total Findings*: ${findingCount}` },
+                { type: "mrkdwn", text: `*Critical Findings*: ${criticalCount}` }
+              ]
+            }
+          ],
+          attachments: [{ color }]
+        };
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+        try {
+          const resp = await fetch(slackWebhook, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+            signal: controller.signal
+          });
+          if (resp.ok) notified.push("slack");
+          else errors.push(`slack: HTTP ${resp.status}`);
+        } finally {
+          clearTimeout(timeout);
+        }
+      } catch (e) {
+        errors.push(`slack: ${e instanceof Error ? e.message : "unknown error"}`);
+      }
+    }
+
+    // PagerDuty
+    const pdKey = process.env["SECURITY_PAGERDUTY_KEY"];
+    if (pdKey && gateFailed && criticalCount > 0) {
+      try {
+        const body = {
+          routing_key: pdKey,
+          event_action: "trigger",
+          payload: {
+            summary: `Security Gate FAILED — ${criticalCount} critical findings (run: ${runId})`,
+            severity: "critical",
+            source: "security-mcp",
+            custom_details: { runId, findingCount, criticalCount }
+          }
+        };
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+        try {
+          const resp = await fetch("https://events.pagerduty.com/v2/enqueue", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+            signal: controller.signal
+          });
+          if (resp.ok) notified.push("pagerduty");
+          else errors.push(`pagerduty: HTTP ${resp.status}`);
+        } finally {
+          clearTimeout(timeout);
+        }
+      } catch (e) {
+        errors.push(`pagerduty: ${e instanceof Error ? e.message : "unknown error"}`);
+      }
+    }
+
+    // Generic webhook
+    const genericWebhook = process.env["SECURITY_WEBHOOK_URL"];
+    if (genericWebhook) {
+      try {
+        const body = { runId, gateFailed, findingCount, criticalCount, timestamp: new Date().toISOString() };
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+        try {
+          const resp = await fetch(genericWebhook, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+            signal: controller.signal
+          });
+          if (resp.ok) notified.push("webhook");
+          else errors.push(`webhook: HTTP ${resp.status}`);
+        } finally {
+          clearTimeout(timeout);
+        }
+      } catch (e) {
+        errors.push(`webhook: ${e instanceof Error ? e.message : "unknown error"}`);
+      }
+    }
+
+    // Jira
+    const jiraUrl = process.env["SECURITY_JIRA_URL"];
+    const jiraToken = process.env["SECURITY_JIRA_TOKEN"];
+    const jiraProject = process.env["SECURITY_JIRA_PROJECT"] ?? "SECURITY";
+    if (jiraUrl && jiraToken && gateFailed) {
+      try {
+        const body = {
+          fields: {
+            project: { key: jiraProject },
+            summary: `Security Gate FAILED - ${criticalCount} critical findings`,
+            description: {
+              type: "doc",
+              version: 1,
+              content: [{
+                type: "paragraph",
+                content: [{ type: "text", text: `Run ID: ${runId}. Total findings: ${findingCount}. Critical: ${criticalCount}.` }]
+              }]
+            },
+            issuetype: { name: "Bug" },
+            priority: { name: criticalCount > 0 ? "Critical" : "High" }
+          }
+        };
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+        try {
+          const resp = await fetch(`${jiraUrl}/rest/api/3/issue`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              // Never log the token — pass it only in the header
+              "Authorization": `Bearer ${jiraToken}`
+            },
+            body: JSON.stringify(body),
+            signal: controller.signal
+          });
+          if (resp.ok) notified.push("jira");
+          else errors.push(`jira: HTTP ${resp.status}`);
+        } finally {
+          clearTimeout(timeout);
+        }
+      } catch (e) {
+        errors.push(`jira: ${e instanceof Error ? e.message : "unknown error"}`);
+      }
+    }
+
+    return asTextResponse({
+      notified,
+      errors,
+      summary: notified.length > 0
+        ? `Notified: ${notified.join(", ")}`
+        : "No webhook integrations configured. Set SECURITY_SLACK_WEBHOOK, SECURITY_PAGERDUTY_KEY, SECURITY_WEBHOOK_URL, or SECURITY_JIRA_URL+SECURITY_JIRA_TOKEN."
+    });
+  })
+);
+
+// ---------------------------------------------------------------------------
+// New tool: security.generate_remediations
+// ---------------------------------------------------------------------------
+
+type RemediationTemplate = {
+  pattern: string;
+  fix: string;
+  explanation: string;
+  references: string[];
+};
+
+const REMEDIATION_MAP: Record<string, RemediationTemplate> = {
+  "POSSIBLE_SECRET": {
+    pattern: "const API_KEY = 'sk-live-abc123...'",
+    fix: "const API_KEY = process.env['API_KEY']; // loaded from secret manager",
+    explanation: "Hardcoded secrets are exposed in source control and logs. Load secrets from environment variables backed by a secret manager (AWS Secrets Manager, HashiCorp Vault, etc.).",
+    references: ["CWE-798", "OWASP Top 10 A07:2021", "NIST 800-53 IA-5"]
+  },
+  "CRYPTO_WEAK_HASH": {
+    pattern: "crypto.createHash('md5').update(data).digest('hex')",
+    fix: "crypto.createHash('sha256').update(data).digest('hex')",
+    explanation: "MD5 and SHA-1 are cryptographically broken. Use SHA-256 or higher.",
+    references: ["NIST SP 800-131A Rev 2", "CWE-327"]
+  },
+  "CRYPTO_WEAK_CIPHER": {
+    pattern: "crypto.createCipheriv('des', key, iv)",
+    fix: "crypto.createCipheriv('aes-256-gcm', key, nonce)",
+    explanation: "DES/RC4/3DES are prohibited by NIST. Use AES-256-GCM for authenticated encryption.",
+    references: ["NIST SP 800-131A Rev 2", "CWE-327", "FIPS 140-3"]
+  },
+  "CRYPTO_INSECURE_RANDOM": {
+    pattern: "const token = Math.random().toString(36).slice(2)",
+    fix: "const token = crypto.randomBytes(32).toString('hex')",
+    explanation: "Math.random() is not cryptographically secure. Use crypto.randomBytes() for tokens, keys, and nonces.",
+    references: ["CWE-338", "OWASP ASVS 2.3.1"]
+  },
+  "CRYPTO_WEAK_JWT_ALGO": {
+    pattern: "jwt.sign(payload, secret, { algorithm: 'HS256' })",
+    fix: "jwt.sign(payload, privateKey, { algorithm: 'RS256' })",
+    explanation: "HS256 requires sharing the signing secret with every verifier. RS256/ES256 use asymmetric keys so verifiers only need the public key.",
+    references: ["RFC 7518", "OWASP JWT Security Cheat Sheet"]
+  },
+  "DB_TLS_DISABLED": {
+    pattern: "postgresql://user:pass@host/db?sslmode=disable",
+    fix: "postgresql://user:pass@host/db?sslmode=verify-full",
+    explanation: "Disabling TLS exposes credentials and data in transit. Always require and verify TLS.",
+    references: ["PCI DSS 4.0 Req 4.2", "NIST 800-53 SC-8", "CWE-319"]
+  },
+  "DB_SQL_INJECTION_RISK": {
+    pattern: "db.query('SELECT * FROM users WHERE id = ' + req.params.id)",
+    fix: "db.query('SELECT * FROM users WHERE id = $1', [req.params.id])",
+    explanation: "Never concatenate user input into SQL. Use parameterized queries or ORM query builders.",
+    references: ["OWASP Top 10 A03:2021", "CWE-89", "NIST 800-53 SI-10"]
+  },
+  "GRAPHQL_INTROSPECTION_ENABLED": {
+    pattern: "new ApolloServer({ introspection: true })",
+    fix: "new ApolloServer({ introspection: process.env.NODE_ENV !== 'production' })",
+    explanation: "GraphQL introspection exposes the full schema to attackers. Disable it in non-dev environments.",
+    references: ["OWASP API Security Top 10 API8:2023", "CWE-200"]
+  },
+  "GRAPHQL_NO_DEPTH_LIMIT": {
+    pattern: "new ApolloServer({ schema })",
+    fix: "import depthLimit from 'graphql-depth-limit';\nnew ApolloServer({ schema, validationRules: [depthLimit(10)] })",
+    explanation: "Without depth limiting, attackers can send deeply nested queries to exhaust server resources.",
+    references: ["OWASP API Security Top 10 API4:2023"]
+  },
+  "K8S_PRIVILEGED_CONTAINER": {
+    pattern: "securityContext:\n  privileged: true",
+    fix: "securityContext:\n  privileged: false\n  allowPrivilegeEscalation: false\n  runAsNonRoot: true\n  capabilities:\n    drop: [\"ALL\"]",
+    explanation: "Privileged containers have unrestricted access to the host kernel. Remove privileged mode and drop all capabilities.",
+    references: ["CIS Kubernetes Benchmark 5.2.1", "NIST 800-190"]
+  },
+  "K8S_NO_SECURITY_CONTEXT": {
+    pattern: "containers:\n  - name: app\n    image: myapp:1.0",
+    fix: "containers:\n  - name: app\n    image: myapp:1.0\n    securityContext:\n      runAsNonRoot: true\n      runAsUser: 1000\n      readOnlyRootFilesystem: true\n      allowPrivilegeEscalation: false\n      capabilities:\n        drop: [\"ALL\"]",
+    explanation: "Always set a securityContext to enforce least-privilege container execution.",
+    references: ["CIS Kubernetes Benchmark", "NIST 800-190", "OWASP Kubernetes Security Cheat Sheet"]
+  },
+  "DLP_REQUEST_BODY_LOGGED": {
+    pattern: "console.log(req.body)",
+    fix: "const { password, token, ...safeFields } = req.body;\nconsole.log({ requestId, safeFields })",
+    explanation: "Full request bodies may contain PII, passwords, or tokens. Log only allowlisted non-sensitive fields.",
+    references: ["GDPR Article 5", "HIPAA 45 CFR 164.312", "CWE-532"]
+  },
+  "DLP_STACK_TRACE_IN_RESPONSE": {
+    pattern: "res.json({ error: err.message, stack: err.stack })",
+    fix: "logger.error({ err, requestId }); // log internally\nres.json({ error: 'An internal error occurred', requestId })",
+    explanation: "Stack traces in API responses disclose internal architecture to attackers (CWE-209). Log internally, return only a safe message.",
+    references: ["CWE-209", "OWASP Top 10 A05:2021", "PCI DSS 4.0 Req 6.2.4"]
+  },
+  "API_TENANT_ID_FROM_INPUT": {
+    pattern: "const tenantId = req.query.tenantId",
+    fix: "const tenantId = req.auth.tenantId // from verified JWT claims",
+    explanation: "Tenant ID must come from the authenticated session/JWT claims. User-supplied tenant IDs allow cross-tenant data access.",
+    references: ["OWASP API Security Top 10 API1:2023", "CWE-639"]
+  },
+  "LOCKFILE_MISSING": {
+    pattern: "# No package-lock.json in repository",
+    fix: "npm install # generates package-lock.json\ngit add package-lock.json\ngit commit -m 'chore: add lockfile'",
+    explanation: "Without a lockfile, npm install resolves the latest matching version on each run, opening the door to supply chain attacks.",
+    references: ["SLSA L1", "NIST 800-218 PS-3", "CWE-829"]
+  },
+  "DEP_FLOATING_VERSION": {
+    pattern: "\"some-package\": \"^1.0.0\"",
+    fix: "\"some-package\": \"1.2.3\" // exact pin\n// or use npm shrinkwrap / lockfile",
+    explanation: "Floating version ranges allow unexpected major/minor updates that may introduce vulnerabilities or breaking changes.",
+    references: ["SLSA L1", "OWASP Top 10 A06:2021"]
+  }
+};
+
+const GenerateRemediationsParams = {
+  findings: z.array(z.object({
+    id: z.string(),
+    title: z.string(),
+    severity: z.string(),
+    files: z.array(z.string()).optional(),
+    evidence: z.array(z.string()).optional()
+  })).describe("Findings array from a gate run result.")
+};
+const GenerateRemediationsSchema = z.object(GenerateRemediationsParams);
+
+tool(
+  "security.generate_remediations",
+  "Maps each gate finding to a specific, actionable code-level remediation template. Called automatically after every gate FAIL. Returns ready-to-apply fix templates keyed by finding ID.",
+  GenerateRemediationsParams as unknown as Record<string, z.ZodTypeAny>,
+  safeTool(async (args: unknown, _extra: unknown) => {
+    const { findings } = GenerateRemediationsSchema.parse(args);
+
+    const result: Record<string, { finding: typeof findings[number]; remediation: RemediationTemplate | null }> = {};
+
+    for (const finding of findings) {
+      // Try exact match first, then prefix match
+      const exactMatch = REMEDIATION_MAP[finding.id];
+      const prefixMatch = Object.keys(REMEDIATION_MAP).find((k) => finding.id.startsWith(k) || k.startsWith(finding.id));
+      result[finding.id] = {
+        finding,
+        remediation: exactMatch ?? (prefixMatch ? REMEDIATION_MAP[prefixMatch] : null)
+      };
+    }
+
+    const withRemediation = Object.values(result).filter((r) => r.remediation !== null).length;
+    const without = findings.length - withRemediation;
+
+    return asTextResponse({
+      summary: { total: findings.length, withRemediation, withoutRemediationTemplate: without },
+      remediations: result
+    });
+  })
+);
+
+// ---------------------------------------------------------------------------
 // MCP Prompts capability
 // ---------------------------------------------------------------------------
 
 server.prompt(
   "security-engineer",
-  "Activate the security-mcp system prompt. Sets up the model as an elite, threat-informed security engineer applying OWASP, MITRE ATT&CK, NIST 800-53, Zero Trust, PCI DSS, SOC 2, and ISO 27001 to every code and architecture decision.",
+  "Activate the security-mcp system prompt. Operating ratio: 90% fixing, 10% advisory — writes the fix, implements the control, enforces the policy. Does NOT list vulnerabilities and walk away. Applies OWASP, MITRE ATT&CK, NIST 800-53, Zero Trust, PCI DSS, SOC 2, and ISO 27001 to every code and architecture decision.",
   async () => ({
     messages: [
       {

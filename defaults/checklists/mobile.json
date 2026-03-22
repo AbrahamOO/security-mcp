@@ -1,0 +1,25 @@
+{
+  "surface": "mobile",
+  "items": [
+    { "id": "mobile_ios_ats", "description": "iOS: NSAllowsArbitraryLoads is false — ATS strictly enforced", "critical": true },
+    { "id": "mobile_android_debuggable", "description": "Android: android:debuggable=false in release build manifest", "critical": true },
+    { "id": "mobile_android_cleartext", "description": "Android: usesCleartextTraffic=false — TLS enforced for all network traffic", "critical": true },
+    { "id": "mobile_cert_pinning", "description": "Certificate pinning implemented for high-value API calls", "critical": true },
+    { "id": "mobile_secure_storage", "description": "Sensitive data not stored in SharedPreferences, external storage, or plist in plaintext", "critical": true },
+    { "id": "mobile_keychain_keystore", "description": "Secrets stored in iOS Keychain / Android Keystore — not in code or config files", "critical": true },
+    { "id": "mobile_biometric_auth", "description": "Biometric authentication properly tied to Keychain/Keystore — not bypassable", "critical": false },
+    { "id": "mobile_screenshot_prevention", "description": "Screenshot prevention enabled for sensitive screens (payment, auth)", "critical": false },
+    { "id": "mobile_clipboard_protection", "description": "Sensitive fields (passwords, card numbers) block clipboard access", "critical": false },
+    { "id": "mobile_network_security_config", "description": "Android Network Security Config restricts cleartext and pins certificates", "critical": true },
+    { "id": "mobile_obfuscation", "description": "Release build uses code obfuscation (ProGuard/R8 for Android, Swift symbol stripping for iOS)", "critical": false },
+    { "id": "mobile_root_jailbreak_detection", "description": "Root/jailbreak detection implemented for high-risk operations", "critical": false },
+    { "id": "mobile_deep_links", "description": "Deep links validated — no open redirect or intent injection via deep link handling", "critical": true },
+    { "id": "mobile_api_keys_absent", "description": "No API keys, secrets, or credentials embedded in app binary or resources", "critical": true },
+    { "id": "mobile_masvs_l2", "description": "OWASP MASVS L2 checklist completed for release build", "critical": true },
+    { "id": "mobile_dependency_scan", "description": "Mobile dependencies scanned for known CVEs", "critical": true },
+    { "id": "mobile_threat_model", "description": "Threat model completed and reviewed for this mobile surface change", "critical": true },
+    { "id": "mobile_data_residency", "description": "Data residency requirements met — no user data stored on device beyond session", "critical": false },
+    { "id": "mobile_backup_prevention", "description": "allowBackup=false in Android manifest — sensitive data not included in backups", "critical": true },
+    { "id": "mobile_logging", "description": "No sensitive data logged in production builds — crash reporting sanitized", "critical": true }
+  ]
+}

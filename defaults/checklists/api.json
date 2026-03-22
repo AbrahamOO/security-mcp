@@ -1,0 +1,27 @@
+{
+  "surface": "api",
+  "items": [
+    { "id": "api_authn_required", "description": "All new endpoints require authentication (JWT RS256/ES256 validated, not HS256)", "critical": true },
+    { "id": "api_authz_server_side", "description": "Authorization checked server-side for every resource operation — IDOR prevention confirmed", "critical": true },
+    { "id": "api_input_validation", "description": "Server-side schema validation on all new inputs (Zod/Valibot/Yup/Joi)", "critical": true },
+    { "id": "api_rate_limiting", "description": "Rate limiting configured on all new endpoints — per-user and per-IP", "critical": true },
+    { "id": "api_cors_allowlist", "description": "CORS origin allowlist reviewed — no wildcard on authenticated endpoints", "critical": true },
+    { "id": "api_request_size", "description": "Request size limits enforced — no unbounded body parsing", "critical": false },
+    { "id": "api_ssrf_protection", "description": "SSRF protection on any server-side HTTP client — block private IPs and metadata endpoints", "critical": true },
+    { "id": "api_webhook_sig", "description": "Webhook signatures verified with HMAC-SHA256 and replay protection", "critical": true },
+    { "id": "api_openapi_updated", "description": "OpenAPI spec updated for all new endpoints", "critical": false },
+    { "id": "api_csrf", "description": "CSRF protections present on all state-mutating browser-accessible endpoints", "critical": true },
+    { "id": "api_error_messages", "description": "Error responses reviewed — no stack traces, internal paths, or schema details", "critical": false },
+    { "id": "api_logging", "description": "Security events logged for all auth decisions — no PII or secrets in logs", "critical": false },
+    { "id": "api_jwt_expiry", "description": "JWT expiry enforced — access tokens max 15 minutes, refresh tokens rotated", "critical": true },
+    { "id": "api_sql_injection", "description": "No raw SQL string concatenation — parameterized queries or ORM used throughout", "critical": true },
+    { "id": "api_mass_assignment", "description": "Mass assignment prevention — explicit field allowlists, not object spread from request body", "critical": true },
+    { "id": "api_sensitive_data", "description": "Sensitive data (PII, credentials) not included in API responses unless required", "critical": true },
+    { "id": "api_versioning", "description": "API versioning strategy in place — old versions have defined deprecation timeline", "critical": false },
+    { "id": "api_dependency_scan", "description": "Backend dependencies scanned — no CRITICAL CVEs unresolved", "critical": true },
+    { "id": "api_secrets_scan", "description": "Secrets scan clean — no hardcoded credentials or API keys", "critical": true },
+    { "id": "api_sast_pass", "description": "SAST scan passed with no CRITICAL findings", "critical": true },
+    { "id": "api_threat_model", "description": "Threat model completed and reviewed for this API surface change", "critical": true },
+    { "id": "api_health_endpoint", "description": "Health/readiness endpoints do not expose sensitive version or config info", "critical": false }
+  ]
+}

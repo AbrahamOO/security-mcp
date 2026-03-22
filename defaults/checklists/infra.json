@@ -1,0 +1,27 @@
+{
+  "surface": "infra",
+  "items": [
+    { "id": "infra_no_public_ingress", "description": "No 0.0.0.0/0 ingress rules in any firewall or security group", "critical": true },
+    { "id": "infra_private_endpoints", "description": "All managed services accessed via VPC endpoints or private connectivity", "critical": true },
+    { "id": "infra_no_public_storage", "description": "No world-readable storage buckets or containers", "critical": true },
+    { "id": "infra_secrets_manager", "description": "All secrets stored in secret manager — not in env files, CI logs, or container images", "critical": true },
+    { "id": "infra_iam_least_privilege", "description": "IAM roles follow least privilege — no wildcard permissions or admin roles", "critical": true },
+    { "id": "infra_network_segmentation", "description": "Network segmentation reviewed — web, app, and data tiers isolated", "critical": true },
+    { "id": "infra_waf_rules", "description": "WAF rules updated if new public endpoints added", "critical": false },
+    { "id": "infra_audit_logging", "description": "Cloud audit logging confirmed for all new resources", "critical": true },
+    { "id": "infra_iac_scan", "description": "IaC scan passed (Checkov/tfsec/Terrascan) with no HIGH/CRITICAL findings", "critical": true },
+    { "id": "infra_container_scan", "description": "Container scan passed — no CRITICAL CVEs with available fix", "critical": true },
+    { "id": "infra_tf_state_encrypted", "description": "Terraform state stored with encryption and locking — restricted access", "critical": true },
+    { "id": "infra_tf_versions_pinned", "description": "Provider and module versions pinned to exact versions — no floating ranges", "critical": false },
+    { "id": "infra_drift_detection", "description": "Drift detection enabled — unauthorized changes trigger alerts", "critical": false },
+    { "id": "infra_backup_verified", "description": "Backups configured and restore tested for all data stores", "critical": true },
+    { "id": "infra_tls_config", "description": "TLS 1.3 configured — TLS 1.0/1.1 disabled on all endpoints", "critical": true },
+    { "id": "infra_encryption_at_rest", "description": "Encryption at rest with CMEK/KMS for all data stores", "critical": true },
+    { "id": "infra_mfa_enforced", "description": "MFA enforced for all console and cloud provider access", "critical": true },
+    { "id": "infra_sbom_generated", "description": "SBOM generated for all container images included in this change", "critical": false },
+    { "id": "infra_provenance", "description": "SLSA provenance attestation generated for release artifacts", "critical": false },
+    { "id": "infra_threat_model", "description": "Threat model completed and reviewed for this infrastructure change", "critical": true },
+    { "id": "infra_zero_trust", "description": "Zero Trust controls applied — explicit authentication for all service-to-service calls", "critical": true },
+    { "id": "infra_ddos_protection", "description": "DDoS protection enabled for public-facing load balancers", "critical": false }
+  ]
+}

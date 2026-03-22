@@ -1,0 +1,25 @@
+{
+  "surface": "payments",
+  "items": [
+    { "id": "pci_no_pan_in_logs", "description": "No card numbers, CVV, or PAN in any log, database, cache, or error message", "critical": true },
+    { "id": "pci_webhook_verified", "description": "Payment processor webhook signatures verified with HMAC-SHA256 and replay protection", "critical": true },
+    { "id": "pci_scope_documented", "description": "PCI scope clearly defined and documented — CDE boundaries explicit", "critical": true },
+    { "id": "pci_network_segmented", "description": "Payment-adjacent systems network-segmented from non-payment systems", "critical": true },
+    { "id": "pci_audit_trail", "description": "Complete audit trail maintained for all payment operations — tamper-evident logs", "critical": true },
+    { "id": "pci_no_raw_card_storage", "description": "Raw card data never stored — tokenization used throughout", "critical": true },
+    { "id": "pci_tls_required", "description": "TLS 1.2+ required on all payment data flows — no fallback to older protocols", "critical": true },
+    { "id": "pci_strong_crypto", "description": "Strong cryptography used — no weak ciphers, MD5, SHA1 for security purposes", "critical": true },
+    { "id": "pci_access_control", "description": "Access to payment data restricted to minimum necessary roles — least privilege", "critical": true },
+    { "id": "pci_vulnerability_mgmt", "description": "Payment system dependencies scanned — no CRITICAL vulnerabilities unresolved", "critical": true },
+    { "id": "pci_waf_in_place", "description": "WAF in place and tuned for payment endpoints — OWASP rule sets active", "critical": true },
+    { "id": "pci_ids_ips", "description": "IDS/IPS monitoring payment data flows with alerting configured", "critical": false },
+    { "id": "pci_file_integrity", "description": "File integrity monitoring on payment system files — alerts on unauthorized change", "critical": false },
+    { "id": "pci_vendor_managed", "description": "Payment processing handled by PCI-compliant vendor (Stripe/Braintree/Adyen) — not custom", "critical": true },
+    { "id": "pci_pen_test", "description": "Penetration test conducted within the last 12 months for payment scope", "critical": false },
+    { "id": "pci_anti_fraud", "description": "Anti-fraud controls in place — velocity checks, geographic anomaly detection", "critical": true },
+    { "id": "pci_chargeback_monitoring", "description": "Chargeback monitoring and alerting configured with defined response process", "critical": false },
+    { "id": "pci_data_retention", "description": "Payment data retention policy enforced — data purged per PCI DSS schedule", "critical": true },
+    { "id": "pci_ir_playbook", "description": "Payment fraud and PCI breach IR playbooks exist and are current", "critical": true },
+    { "id": "pci_threat_model", "description": "Threat model completed and reviewed for this payment surface change", "critical": true }
+  ]
+}

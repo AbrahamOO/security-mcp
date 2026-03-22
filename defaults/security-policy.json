@@ -1,12 +1,50 @@
 {
   "name": "security-policy",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Default security gate policy for security-mcp. Copy to .mcp/policies/security-policy.json and customize for your project.",
   "required_checks": {
     "secrets_scan": { "severity_block": ["HIGH", "CRITICAL"] },
     "dependency_scan": { "severity_block": ["CRITICAL"] },
     "sast": { "severity_block": ["CRITICAL"] },
     "iac_scan": { "severity_block": ["HIGH", "CRITICAL"] }
+  },
+  "environments": {
+    "dev": {
+      "severity_block": ["CRITICAL"],
+      "required_scanners": ["gitleaks"],
+      "required_checks": ["secrets_scan"],
+      "vulnerability_slas": {
+        "CRITICAL": "7d",
+        "HIGH": "30d",
+        "MEDIUM": "90d",
+        "LOW": "never"
+      }
+    },
+    "staging": {
+      "severity_block": ["HIGH", "CRITICAL"],
+      "required_scanners": ["gitleaks", "semgrep", "osv-scanner"],
+      "required_checks": ["secrets_scan", "dependency_scan", "sast"],
+      "vulnerability_slas": {
+        "CRITICAL": "24h",
+        "HIGH": "7d",
+        "MEDIUM": "30d",
+        "LOW": "90d",
+        "CISA_KEV": "24h"
+      }
+    },
+    "prod": {
+      "severity_block": ["MEDIUM", "HIGH", "CRITICAL"],
+      "required_scanners": ["gitleaks", "semgrep", "osv-scanner", "trivy", "checkov"],
+      "required_checks": ["secrets_scan", "dependency_scan", "sast", "iac_scan"],
+      "vulnerability_slas": {
+        "CRITICAL": "24h",
+        "HIGH": "7d",
+        "MEDIUM": "30d",
+        "LOW": "90d",
+        "CISA_KEV": "24h",
+        "HIGH_EPSS": "48h"
+      }
+    }
   },
   "requirements": [
     {
@@ -84,7 +122,8 @@
     "HIGH": "7d",
     "MEDIUM": "30d",
     "LOW": "90d",
-    "CISA_KEV": "24h"
+    "CISA_KEV": "24h",
+    "HIGH_EPSS": "48h"
   },
   "exceptions": {
     "require_ticket": true,

@@ -8,6 +8,12 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync } from
 import { dirname, join, resolve } from "node:path";
 import { homedir, platform } from "node:os";
 import { fileURLToPath } from "node:url";
+import {
+  runOnboarding,
+  installSecurityTools,
+  commandExists,
+  SECURITY_TOOLS
+} from "./onboarding.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = resolve(__dirname, "../..");
@@ -19,6 +25,7 @@ interface InstallOptions {
   all: boolean;
   dryRun: boolean;
   useGlobalBinary: boolean;
+  interactive: boolean;
 }
 
 interface EditorTarget {
@@ -191,6 +198,18 @@ function installSkill(dryRun: boolean): void {
 
 export async function runInstall(opts: InstallOptions): Promise<void> {
   const dryRun = opts.dryRun;
+
+  // ── Interactive onboarding (skipped when --yes or non-TTY) ──────────────
+  if (opts.interactive && !dryRun) {
+    const onboarding = await runOnboarding();
+
+    if (onboarding?.installTools) {
+      const toInstall = SECURITY_TOOLS.filter((t) => !commandExists(t.id));
+      process.stdout.write("\nInstalling security scanning tools...\n");
+      await installSecurityTools(toInstall);
+      process.stdout.write("\n");
+    }
+  }
 
   process.stdout.write(`\nsecurity-mcp installer${dryRun ? " (dry-run)" : ""}\n`);
   process.stdout.write("=".repeat(40) + "\n\n");

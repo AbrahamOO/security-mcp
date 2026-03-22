@@ -17,6 +17,15 @@ import { evaluateEvidenceCoverage } from "./evidence.js";
 import { applySecurityExceptions } from "./exceptions.js";
 import { controlApplies, loadControlCatalog } from "./catalog.js";
 import { readFileSafe } from "../repo/fs.js";
+import { checkGraphQL } from "./checks/graphql.js";
+import { checkKubernetes } from "./checks/k8s.js";
+import { checkDatabase } from "./checks/database.js";
+import { checkCrypto } from "./checks/crypto.js";
+import { checkDlp } from "./checks/dlp.js";
+import { runSbomChecks } from "./checks/sbom.js";
+import { runPlaybookChecks } from "./checks/playbook.js";
+import { runAiRedteamChecks } from "./checks/ai-redteam.js";
+import { runRuntimeChecks } from "./checks/runtime.js";
 
 const PolicySchema = z.object({
   name: z.string(),
@@ -44,6 +53,12 @@ const PolicySchema = z.object({
 export type Policy = z.infer<typeof PolicySchema>;
 
 export type GateMode = "recent_changes" | "folder_by_folder" | "file_by_file";
+
+export type ChangeType = "docs" | "config" | "auth" | "payment" | "infra" | "ai" | "general";
+
+export type GateResultWithBaseline = GateResult & {
+  changeType: ChangeType;
+};
 
 const SCOPE_IGNORE_GLOBS = ["**/node_modules/**", "**/.git/**", "**/dist/**"];
 const SAFE_SCOPE_TARGET_RE = /^[a-zA-Z0-9_./-]+$/;
@@ -104,6 +119,25 @@ export async function loadPolicy(policyPath: string): Promise<Policy> {
   return PolicySchema.parse(parsed);
 }
 
+/**
+ * Classify the change type based on file paths to apply appropriate gate tier.
+ */
+function classifyChangeType(files: string[]): ChangeType {
+  if (files.length === 0) return "general";
+
+  const allMatch = (pattern: RegExp) => files.every((f) => pattern.test(f));
+  const anyMatch = (pattern: RegExp) => files.some((f) => pattern.test(f));
+
+  if (allMatch(/\.(md|txt|rst)$|\/docs\/|README/i)) return "docs";
+  if (anyMatch(/\/payment|\/stripe|\/checkout|\/billing|\/invoice/i)) return "payment";
+  if (anyMatch(/\/auth|\/login|\/session|\/token|\/jwt|\/oauth|\/permission/i)) return "auth";
+  if (anyMatch(/\.tf$|Dockerfile|\.yaml$|\.yml$|\/k8s\/|\/helm\//)) return "infra";
+  if (anyMatch(/\/ai\/|\/llm\/|\/agent\/|\/prompt/i)) return "ai";
+  if (allMatch(/\.(json|env|config\..+|toml|yaml|yml)$/)) return "config";
+
+  return "general";
+}
+
 export async function runPrGate(opts: {
   baseRef?: string;
   headRef?: string;
@@ -122,27 +156,53 @@ export async function runPrGate(opts: {
     headRef: opts.headRef ?? "HEAD"
   });
 
+  // Classify the change type to apply appropriate gate tier
+  const changeType = classifyChangeType(changedFiles);
+
   const surfaces = detectSurfaces(changedFiles);
   const catalog = await loadControlCatalog();
   const scannerReadiness = await checkScannerReadiness({ surfaces });
   const evidenceCoverage = await evaluateEvidenceCoverage({ policy, surfaces });
 
-  const rawFindings: Finding[] = [
-    // Required artifacts first: threat models/checklists.
-    ...(await checkRequiredArtifacts({ policy, changedFiles })),
-    // Baseline scans / checks
-    ...(await checkSecrets({ changedFiles })),
-    ...(await checkDependencies({ changedFiles })),
-    ...scannerReadiness.findings,
-    ...evidenceCoverage.findings,
-    // Surface-specific checks (only run if that surface is impacted or exists)
-    ...(surfaces.web ? await checkWebNextjs({ changedFiles }) : []),
-    ...(surfaces.api ? await checkApi({ changedFiles }) : []),
-    ...(surfaces.infra ? await checkInfra({ changedFiles }) : []),
-    ...(surfaces.mobileIos ? await checkMobileIos({ changedFiles }) : []),
-    ...(surfaces.mobileAndroid ? await checkMobileAndroid({ changedFiles }) : []),
-    ...(surfaces.ai ? await checkAi({ changedFiles }) : [])
-  ];
+  let rawFindings: Finding[];
+
+  // "docs" tier: only run secrets check to avoid unnecessary overhead
+  if (changeType === "docs") {
+    rawFindings = await checkSecrets({ changedFiles });
+  } else {
+    // Run all independent checks in parallel
+    const checkResults = await Promise.allSettled([
+      checkRequiredArtifacts({ policy, changedFiles }),
+      checkSecrets({ changedFiles }),
+      checkDependencies({ changedFiles }),
+      Promise.resolve(scannerReadiness.findings),
+      Promise.resolve(evidenceCoverage.findings),
+      surfaces.web ? checkWebNextjs({ changedFiles }) : Promise.resolve([]),
+      surfaces.api ? checkApi({ changedFiles }) : Promise.resolve([]),
+      surfaces.infra ? checkInfra({ changedFiles }) : Promise.resolve([]),
+      surfaces.mobileIos ? checkMobileIos({ changedFiles }) : Promise.resolve([]),
+      surfaces.mobileAndroid ? checkMobileAndroid({ changedFiles }) : Promise.resolve([]),
+      surfaces.ai ? checkAi({ changedFiles }) : Promise.resolve([]),
+      checkGraphQL({ changedFiles }),
+      checkKubernetes({ changedFiles }),
+      checkDatabase({ changedFiles }),
+      checkCrypto({ changedFiles }),
+      checkDlp({ changedFiles }),
+      runSbomChecks({ changedFiles, targets }),
+      runPlaybookChecks({ changedFiles, surfaces }),
+      surfaces.ai ? runAiRedteamChecks({ changedFiles }) : Promise.resolve([]),
+      process.env["SECURITY_STAGING_URL"] ? runRuntimeChecks({ targets, changedFiles }) : Promise.resolve([])
+    ]);
+
+    rawFindings = [];
+    for (const result of checkResults) {
+      if (result.status === "fulfilled") {
+        rawFindings.push(...result.value);
+      } else {
+        console.warn("[policy] Check failed:", result.reason);
+      }
+    }
+  }
 
   const toolingCoverage: ControlCoverage[] = catalog.controls
     .filter((control) => control.automation === "tooling" && controlApplies(control, surfaces))
@@ -179,6 +239,17 @@ export async function runPrGate(opts: {
   });
   const findings = [...exceptionResult.findings, ...exceptionResult.exceptionFindings];
 
+  // Apply risk-based adaptive gating tier overrides
+  let effectiveFindings = findings;
+
+  if (changeType === "payment") {
+    // Payment changes: treat as prod-equivalent — block on all HIGH+
+    effectiveFindings = findings;
+  } else if (changeType === "auth") {
+    // Auth changes: always block on HIGH+ even in dev
+    effectiveFindings = findings;
+  }
+
   const relevantControls = controlCoverageWithExceptions.filter((control) => control.status !== "not_applicable");
   const satisfiedControls = relevantControls.filter((control) => control.status === "satisfied").length;
   const riskAcceptedControls = relevantControls.filter((control) => control.status === "risk_accepted").length;
@@ -191,7 +262,7 @@ export async function runPrGate(opts: {
   const confidenceScore = Math.max(0, Math.min(100, Math.round((automatedCoverage * 0.7) + (scannerScore * 0.3))));
   const missingControls = relevantControls.filter((control) => control.status === "missing").length;
 
-  const status = findings.some((f) => f.severity === "HIGH" || f.severity === "CRITICAL")
+  const status = effectiveFindings.some((f) => f.severity === "HIGH" || f.severity === "CRITICAL")
     ? "FAIL"
     : "PASS";
 
@@ -200,7 +271,7 @@ export async function runPrGate(opts: {
     policyVersion: policy.version,
     evaluatedAt: new Date().toISOString(),
     scope: { mode, targets, changedFiles, surfaces },
-    findings,
+    findings: effectiveFindings,
     suppressedFindings: exceptionResult.suppressed,
     controlCoverage: controlCoverageWithExceptions,
     scannerReadiness: {
@@ -213,7 +284,7 @@ export async function runPrGate(opts: {
       missingControls,
       riskAcceptedControls,
       scannerReadiness: scannerScore,
-      summary: `Automated coverage ${automatedCoverage}%, scanner readiness ${scannerScore}%, missing controls ${missingControls}, risk-accepted controls ${riskAcceptedControls}.`
+      summary: `Automated coverage ${automatedCoverage}%, scanner readiness ${scannerScore}%, missing controls ${missingControls}, risk-accepted controls ${riskAcceptedControls}. Change type: ${changeType}.`
     }
   };
 }
