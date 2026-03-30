@@ -7,6 +7,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { homedir, platform } from "node:os";
+import * as https from "node:https";
 import { fileURLToPath } from "node:url";
 import {
   runOnboarding,
@@ -196,6 +197,76 @@ function installSkill(dryRun: boolean): void {
   process.stdout.write(`  ${dryRun ? "[dry-run] would copy" : "installed"} skill: ${skillDest}\n`);
 }
 
+/**
+ * Download a skill SKILL.md from a remote URL and save it to ~/.claude/skills/{skillName}/SKILL.md.
+ * Used for lazy on-demand skill installation — all sub-agents are downloaded this way at first use.
+ * Mirrors the same pattern used for security tool binary downloads in onboarding.ts.
+ */
+// CWE-22: only alphanumeric, hyphens, and dots allowed in skill names
+const SAFE_SKILL_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/;
+
+export async function downloadSkill(skillName: string, url: string, dryRun = false): Promise<void> {
+  if (!SAFE_SKILL_NAME_RE.test(skillName)) {
+    process.stdout.write(`  [error] invalid skill name "${skillName}" — skipping download\n`);
+    return;
+  }
+  const skillDest = resolveHome(`~/.claude/skills/${skillName}/SKILL.md`);
+
+  if (dryRun) {
+    process.stdout.write(`  [dry-run] would download skill "${skillName}" from ${url} → ${skillDest}\n`);
+    return;
+  }
+
+  const MAX_SKILL_BYTES = 512 * 1024; // 512 KB — skills are markdown files
+  const content = await new Promise<string | null>((resolve) => {
+    const req = https.get(url, { headers: { "User-Agent": "security-mcp" } }, (res) => {
+      if ((res.statusCode ?? 500) >= 400) { res.resume(); resolve(null); return; }
+      let body = "";
+      res.setEncoding("utf8");
+      res.on("data", (chunk: string) => {
+        body += chunk;
+        if (Buffer.byteLength(body, "utf8") > MAX_SKILL_BYTES) {
+          req.destroy();
+          resolve(null);
+        }
+      });
+      res.on("end", () => resolve(body));
+    });
+    req.on("error", () => resolve(null));
+    req.setTimeout(10000, () => { req.destroy(); resolve(null); });
+  });
+
+  if (!content) {
+    process.stdout.write(`  [error] failed to download skill "${skillName}" from ${url}\n`);
+    return;
+  }
+
+  mkdirSync(dirname(skillDest), { recursive: true });
+  writeFileSync(skillDest, content, "utf-8");
+  process.stdout.write(`  installed skill: ${skillDest}\n`);
+}
+
+/**
+ * Eagerly install the orchestrator skill (bundled in the package) plus record
+ * its version so orchestration.ensure_skill can detect future updates.
+ */
+function installOrchestratorSkill(dryRun: boolean): void {
+  const skillName = "ciso-orchestrator";
+  const skillSrc = join(PKG_ROOT, "skills", skillName, "SKILL.md");
+  const skillDest = resolveHome(`~/.claude/skills/${skillName}/SKILL.md`);
+
+  if (!existsSync(skillSrc)) {
+    process.stdout.write(`  [skip] skills/${skillName}/SKILL.md not found in package\n`);
+    return;
+  }
+
+  if (!dryRun) {
+    mkdirSync(dirname(skillDest), { recursive: true });
+    copyFileSync(skillSrc, skillDest);
+  }
+  process.stdout.write(`  ${dryRun ? "[dry-run] would copy" : "installed"} skill: ${skillDest}\n`);
+}
+
 export async function runInstall(opts: InstallOptions): Promise<void> {
   const dryRun = opts.dryRun;
 
@@ -240,11 +311,12 @@ export async function runInstall(opts: InstallOptions): Promise<void> {
     }
   }
 
-  // Install Claude Code skill if Claude Code is in scope
+  // Install Claude Code skills if Claude Code is in scope
   const hasClaudeCode = targets.some((t) => t.name.startsWith("Claude Code"));
   if (hasClaudeCode || opts.all) {
-    process.stdout.write("\nInstalling Claude Code skill...\n");
+    process.stdout.write("\nInstalling Claude Code skills...\n");
     installSkill(dryRun);
+    installOrchestratorSkill(dryRun);
   }
 
   process.stdout.write("\nInstalling security policy...\n");

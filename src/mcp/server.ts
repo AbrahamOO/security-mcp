@@ -8,22 +8,35 @@ import { runPrGate } from "../gate/policy.js";
 import { readFileSafe } from "../repo/fs.js";
 import { searchRepo } from "../repo/search.js";
 import { createReviewAttestation, createReviewRun, readReviewRun, updateReviewStep } from "../review/store.js";
+import {
+  createAgentRun, CreateAgentRunSchema,
+  updateAgentStatus, UpdateAgentStatusSchema,
+  mergeAgentFindings, MergeAgentFindingsSchema,
+  ensureSkill, EnsureSkillSchema,
+  readAgentMemory, ReadAgentMemorySchema,
+  writeAgentMemory, WriteAgentMemorySchema,
+  checkUpdates, CheckUpdatesSchema,
+  applyUpdates, ApplyUpdatesSchema,
+  verifySkillCoverage, VerifySkillCoverageSchema
+} from "./orchestration.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = resolve(__dirname, "../..");
 const PROMPTS_DIR = join(PKG_ROOT, "prompts");
 
-// Load the generalized security prompt at startup.
-// Falls back to a short notice if the file has not been built yet.
-function loadPromptFile(name: string): string {
-  const path = join(PROMPTS_DIR, name);
-  if (existsSync(path)) {
-    return readFileSync(path, "utf-8");
-  }
-  return `[security-mcp] Prompt file not found: ${name}. Run "npm run build" from the package root.`;
-}
+// Lazily load the security prompt on first use rather than at server startup.
+// This avoids injecting ~19K tokens into every session that doesn't call a
+// security tool (e.g. non-security MCP usage in the same editor).
+let _securityPromptCache: string | null = null;
 
-const SECURITY_PROMPT = loadPromptFile("SECURITY_PROMPT.md");
+function getSecurityPrompt(): string {
+  if (_securityPromptCache !== null) return _securityPromptCache;
+  const path = join(PROMPTS_DIR, "SECURITY_PROMPT.md");
+  _securityPromptCache = existsSync(path)
+    ? readFileSync(path, "utf-8")
+    : `[security-mcp] Prompt file not found. Run "npm run build" from the package root.`;
+  return _securityPromptCache;
+}
 
 const server = new McpServer({
   name: "security-mcp",
@@ -114,11 +127,17 @@ tool(
   })
 );
 
+// CWE-200: restrict to SECURITY_-prefixed names so callers cannot probe arbitrary env vars
+const ATTEST_ENV_VAR_RE = /^SECURITY_[A-Z][A-Z0-9_]{0,63}$/;
+
 const AttestReviewParams = {
   runId: z.string().uuid().describe("Security review run ID."),
-  signatureEnvVar: z.string().optional().describe(
-    "Optional environment variable containing an HMAC key for attestation signing."
-  )
+  signatureEnvVar: z.string()
+    .regex(ATTEST_ENV_VAR_RE, "signatureEnvVar must be a SECURITY_-prefixed env var name (e.g. SECURITY_ATTEST_KEY)")
+    .optional()
+    .describe(
+      "Optional SECURITY_-prefixed environment variable containing an HMAC key for attestation signing."
+    )
 };
 const AttestReviewSchema = z.object(AttestReviewParams);
 
@@ -287,7 +306,7 @@ tool(
       "control applies (OWASP, ATT&CK, NIST). Then move on.\n\n" +
       "---\n\n";
 
-    let prompt = OPERATING_MANDATE + SECURITY_PROMPT;
+    let prompt = OPERATING_MANDATE + getSecurityPrompt();
 
     // Append a project-specific scope section if any context was provided
     if (stack ?? cloud ?? payment_processor) {
@@ -1606,7 +1625,7 @@ server.prompt(
         role: "user" as const,
         content: {
           type: "text" as const,
-          text: SECURITY_PROMPT
+          text: getSecurityPrompt()
         }
       }
     ]
@@ -1632,6 +1651,109 @@ server.prompt(
         }
       }
     ]
+  })
+);
+
+// ---------------------------------------------------------------------------
+// Orchestration tools — multi-agent coordination
+// ---------------------------------------------------------------------------
+
+tool(
+  "orchestration.create_agent_run",
+  "Initialise a multi-agent orchestration run. Creates the agent-run directory and manifest. Call after security.start_review.",
+  CreateAgentRunSchema.shape as unknown as Record<string, z.ZodTypeAny>,
+  safeTool(async (args: unknown, _extra: unknown) => {
+    const parsed = CreateAgentRunSchema.parse(args);
+    const result = await createAgentRun(parsed);
+    return asTextResponse(result);
+  })
+);
+
+tool(
+  "orchestration.update_agent_status",
+  "Update an agent's lifecycle status (running/completed/completed_partial/failed). Called by each agent at start and end.",
+  UpdateAgentStatusSchema.shape as unknown as Record<string, z.ZodTypeAny>,
+  safeTool(async (args: unknown, _extra: unknown) => {
+    const parsed = UpdateAgentStatusSchema.parse(args);
+    const result = await updateAgentStatus(parsed);
+    return asTextResponse(result);
+  })
+);
+
+tool(
+  "orchestration.merge_agent_findings",
+  "Merge and deduplicate findings from all agents. Sorts by severity (CRITICAL first). Hooks into the attestation flow via updateReviewStep. Call in Phase 3 after all agents complete.",
+  MergeAgentFindingsSchema.shape as unknown as Record<string, z.ZodTypeAny>,
+  safeTool(async (args: unknown, _extra: unknown) => {
+    const parsed = MergeAgentFindingsSchema.parse(args);
+    const result = await mergeAgentFindings(parsed);
+    return asTextResponse(result);
+  })
+);
+
+tool(
+  "orchestration.ensure_skill",
+  "Download a skill from the skills registry if it is not already installed or if it is outdated. Uses the skills-manifest.json registry. Requires internet access.",
+  EnsureSkillSchema.shape as unknown as Record<string, z.ZodTypeAny>,
+  safeTool(async (args: unknown, _extra: unknown) => {
+    const parsed = EnsureSkillSchema.parse(args);
+    const result = await ensureSkill(parsed);
+    return asTextResponse(result);
+  })
+);
+
+tool(
+  "orchestration.read_agent_memory",
+  "Read the persistent memory files for a named agent: patterns, false-positives, remediations, intel, and errors.",
+  ReadAgentMemorySchema.shape as unknown as Record<string, z.ZodTypeAny>,
+  safeTool(async (args: unknown, _extra: unknown) => {
+    const parsed = ReadAgentMemorySchema.parse(args);
+    const result = await readAgentMemory(parsed);
+    return asTextResponse(result);
+  })
+);
+
+tool(
+  "orchestration.write_agent_memory",
+  "Append new entries to an agent's persistent memory (patterns, false-positives, remediations, intel). Memory persists across runs and is used to calibrate findings.",
+  WriteAgentMemorySchema.shape as unknown as Record<string, z.ZodTypeAny>,
+  safeTool(async (args: unknown, _extra: unknown) => {
+    const parsed = WriteAgentMemorySchema.parse(args);
+    const result = await writeAgentMemory(parsed);
+    return asTextResponse(result);
+  })
+);
+
+tool(
+  "orchestration.check_updates",
+  "Check the npm registry and skills manifest for available updates to security-mcp and installed skills.",
+  CheckUpdatesSchema.shape as unknown as Record<string, z.ZodTypeAny>,
+  safeTool(async (args: unknown, _extra: unknown) => {
+    const parsed = CheckUpdatesSchema.parse(args);
+    const result = await checkUpdates(parsed);
+    return asTextResponse(result);
+  })
+);
+
+tool(
+  "orchestration.apply_updates",
+  "Return update commands (choice: manual) or instructions for the agent to run them (choice: auto).",
+  ApplyUpdatesSchema.shape as unknown as Record<string, z.ZodTypeAny>,
+  safeTool(async (args: unknown, _extra: unknown) => {
+    const parsed = ApplyUpdatesSchema.parse(args);
+    const result = await applyUpdates(parsed);
+    return asTextResponse(result);
+  })
+);
+
+tool(
+  "orchestration.verify_skill_coverage",
+  "Verify that all 24 SKILL.md sections have been covered by at least one agent in this run. Returns uncovered sections and a coverage percentage.",
+  VerifySkillCoverageSchema.shape as unknown as Record<string, z.ZodTypeAny>,
+  safeTool(async (args: unknown, _extra: unknown) => {
+    const parsed = VerifySkillCoverageSchema.parse(args);
+    const result = await verifySkillCoverage(parsed);
+    return asTextResponse(result);
   })
 );
 

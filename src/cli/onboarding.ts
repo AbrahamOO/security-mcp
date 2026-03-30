@@ -13,7 +13,7 @@
 
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
-import { execSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { platform, arch, homedir } from "node:os";
 import { mkdirSync, createWriteStream, chmodSync, existsSync } from "node:fs";
 import { join } from "node:path";
@@ -273,12 +273,12 @@ function getCpuArch(): "x64" | "arm64" {
 
 export function commandExists(cmd: string): boolean {
   try {
+    // Use spawnSync (not execSync) to avoid shell injection — cmd is never interpolated into a shell string
     if (process.platform === "win32") {
-      execSync(`where "${cmd}"`, { stdio: "pipe" });
+      return spawnSync("where", [cmd], { stdio: "pipe" }).status === 0;
     } else {
-      execSync(`command -v ${cmd}`, { stdio: "pipe" });
+      return spawnSync("which", [cmd], { stdio: "pipe" }).status === 0;
     }
-    return true;
   } catch {
     return false;
   }

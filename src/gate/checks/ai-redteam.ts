@@ -316,6 +316,79 @@ async function runDynamicProbes(
   return results;
 }
 
+// CWE-918: resolve and validate an endpoint URL is not pointing to a private/metadata host.
+const PROBE_PRIVATE_RE = [/^127\./, /^10\./, /^172\.(1[6-9]|2\d|3[01])\./, /^192\.168\./, /^169\.254\./, /^::1$/, /^fc/, /^fd/];
+function isProbePrivateIp(ip: string): boolean {
+  return PROBE_PRIVATE_RE.some((r) => r.test(ip));
+}
+
+async function resolveSafeEndpoint(rawUrl: string): Promise<string | null> {
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null;
+    const { lookup } = await import("node:dns/promises");
+    const { isIP } = await import("node:net");
+    const host = parsed.hostname;
+    if (isIP(host)) return isProbePrivateIp(host) ? null : rawUrl;
+    if (host === "localhost" || host.endsWith(".internal")) return null;
+    const resolved = await lookup(host, { all: true });
+    if (resolved.some(({ address }) => isProbePrivateIp(address))) return null;
+    return rawUrl;
+  } catch {
+    return null;
+  }
+}
+
+function probeFailureToFinding(probe: ProbeResult): Finding | null {
+  switch (probe.probe) {
+    case "jailbreak": return {
+      id: "AI_JAILBREAK_SUCCESS",
+      title: "Jailbreak probe succeeded — system prompt may have leaked",
+      severity: "CRITICAL",
+      evidence: ["Probe: jailbreak", probe.detail ?? ""],
+      requiredActions: [
+        "Implement system prompt protection: use instruction hierarchy, not string concatenation.",
+        "Add jailbreak detection and monitoring.",
+        "Do not rely on the system prompt for access control."
+      ]
+    };
+    case "injection": return {
+      id: "AI_INJECTION_SUCCESS",
+      title: "Prompt injection probe succeeded via simulated RAG context",
+      severity: "CRITICAL",
+      evidence: ["Probe: injection"],
+      requiredActions: [
+        "Apply content isolation between user instructions and retrieved context.",
+        "Treat all RAG-retrieved content as untrusted.",
+        "Validate model outputs before acting on them."
+      ]
+    };
+    case "pii_exfil": return {
+      id: "AI_PII_LEAK",
+      title: "PII exfiltration probe succeeded — model repeated sensitive data",
+      severity: "CRITICAL",
+      evidence: ["Probe: pii_exfil"],
+      requiredActions: [
+        "Implement output PII scanning before returning model responses.",
+        "Block responses containing SSN, card numbers, or credential patterns.",
+        "Add output filtering as a defense-in-depth layer."
+      ]
+    };
+    case "token_flood": return {
+      id: "AI_RATE_LIMIT_MISSING",
+      title: "Token flooding probe was not rate-limited — DoS risk",
+      severity: "HIGH",
+      evidence: ["Probe: token_flood"],
+      requiredActions: [
+        "Implement request size limits and token quotas on AI endpoints.",
+        "Return 413 or 429 for oversized requests.",
+        "Add per-user token budgets."
+      ]
+    };
+    default: return null;
+  }
+}
+
 /**
  * Run AI/LLM red-team checks: static analysis + optional dynamic probes.
  */
@@ -325,78 +398,23 @@ export async function runAiRedteamChecks(opts: {
 }): Promise<Finding[]> {
   const findings: Finding[] = [];
 
-  // Static analysis (always runs)
-  const staticFindings = await runStaticAnalysis(opts.changedFiles);
-  findings.push(...staticFindings);
+  findings.push(...await runStaticAnalysis(opts.changedFiles));
 
-  // Dynamic probes (only if endpoint is configured)
-  const endpointUrl = opts.endpointUrl ?? process.env["SECURITY_AI_ENDPOINT"];
+  const rawEndpointUrl = opts.endpointUrl ?? process.env["SECURITY_AI_ENDPOINT"];
+  if (!rawEndpointUrl) return findings;
+
+  const endpointUrl = await resolveSafeEndpoint(rawEndpointUrl);
   if (!endpointUrl) return findings;
 
   const allProbes = ["jailbreak", "injection", "pii_exfil", "token_flood"];
-  const probeResults = await Promise.allSettled(
-    [runDynamicProbes(endpointUrl, allProbes)]
-  );
+  const probeResults = await Promise.allSettled([runDynamicProbes(endpointUrl, allProbes)]);
 
   for (const result of probeResults) {
     if (result.status === "rejected") continue;
     for (const probe of result.value) {
       if (probe.passed) continue;
-
-      switch (probe.probe) {
-        case "jailbreak":
-          findings.push({
-            id: "AI_JAILBREAK_SUCCESS",
-            title: "Jailbreak probe succeeded — system prompt may have leaked",
-            severity: "CRITICAL",
-            evidence: ["Probe: jailbreak", probe.detail ?? ""],
-            requiredActions: [
-              "Implement system prompt protection: use instruction hierarchy, not string concatenation.",
-              "Add jailbreak detection and monitoring.",
-              "Do not rely on the system prompt for access control."
-            ]
-          });
-          break;
-        case "injection":
-          findings.push({
-            id: "AI_INJECTION_SUCCESS",
-            title: "Prompt injection probe succeeded via simulated RAG context",
-            severity: "CRITICAL",
-            evidence: ["Probe: injection"],
-            requiredActions: [
-              "Apply content isolation between user instructions and retrieved context.",
-              "Treat all RAG-retrieved content as untrusted.",
-              "Validate model outputs before acting on them."
-            ]
-          });
-          break;
-        case "pii_exfil":
-          findings.push({
-            id: "AI_PII_LEAK",
-            title: "PII exfiltration probe succeeded — model repeated sensitive data",
-            severity: "CRITICAL",
-            evidence: ["Probe: pii_exfil"],
-            requiredActions: [
-              "Implement output PII scanning before returning model responses.",
-              "Block responses containing SSN, card numbers, or credential patterns.",
-              "Add output filtering as a defense-in-depth layer."
-            ]
-          });
-          break;
-        case "token_flood":
-          findings.push({
-            id: "AI_RATE_LIMIT_MISSING",
-            title: "Token flooding probe was not rate-limited — DoS risk",
-            severity: "HIGH",
-            evidence: ["Probe: token_flood"],
-            requiredActions: [
-              "Implement request size limits and token quotas on AI endpoints.",
-              "Return 413 or 429 for oversized requests.",
-              "Add per-user token budgets."
-            ]
-          });
-          break;
-      }
+      const finding = probeFailureToFinding(probe);
+      if (finding) findings.push(finding);
     }
   }
 

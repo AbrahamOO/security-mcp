@@ -35,7 +35,12 @@ export type SuppressedFinding = {
 async function readExceptionsJson(): Promise<string> {
   const overridePath = process.env["SECURITY_GATE_EXCEPTIONS"];
   if (overridePath) {
-    return await readFile(join(process.cwd(), overridePath), "utf-8");
+    // CWE-22: ensure path stays within the project directory
+    const resolved = resolve(process.cwd(), overridePath);
+    if (!resolved.startsWith(process.cwd() + "/") && resolved !== process.cwd()) {
+      throw new Error(`SECURITY_GATE_EXCEPTIONS path '${overridePath}' escapes the project directory`);
+    }
+    return await readFile(resolved, "utf-8");
   }
 
   try {

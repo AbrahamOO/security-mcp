@@ -2,9 +2,59 @@
  * Runtime evidence verification.
  * Checks HTTP security headers and TLS configuration against a live target.
  */
+import * as dns from "node:dns/promises";
+import * as net from "node:net";
 import * as https from "node:https";
 import * as tls from "node:tls";
 import { Finding } from "../result.js";
+
+// CWE-918: SSRF guard — block private/link-local/metadata IP ranges
+const PRIVATE_CIDR_PATTERNS = [
+  /^127\./,           // loopback
+  /^10\./,            // RFC-1918
+  /^172\.(1[6-9]|2\d|3[01])\./,  // RFC-1918
+  /^192\.168\./,      // RFC-1918
+  /^169\.254\./,      // link-local / cloud metadata (169.254.169.254)
+  /^::1$/,            // IPv6 loopback
+  /^fc/,              // IPv6 ULA
+  /^fd/,              // IPv6 ULA
+  /^0\./,             // 0.0.0.0/8
+  /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./, // RFC-6598 shared address space
+];
+
+function isPrivateIp(ip: string): boolean {
+  return PRIVATE_CIDR_PATTERNS.some((re) => re.test(ip));
+}
+
+async function isSafeUrl(rawUrl: string): Promise<boolean> {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false;
+  const host = parsed.hostname;
+  // Block bare IP references
+  if (net.isIP(host)) {
+    return !isPrivateIp(host);
+  }
+  // Block known metadata hostnames
+  if (host === "localhost" || host === "metadata.google.internal" ||
+      host === "169.254.169.254" || host.endsWith(".internal")) {
+    return false;
+  }
+  // Resolve DNS and check all resolved IPs
+  try {
+    const resolved = await dns.lookup(host, { all: true });
+    for (const { address } of resolved) {
+      if (isPrivateIp(address)) return false;
+    }
+  } catch {
+    return false; // can't resolve → skip
+  }
+  return true;
+}
 
 const REQUIRED_HEADERS: Array<{
   name: string;
@@ -157,8 +207,10 @@ export async function runRuntimeChecks(opts: {
 
   // Determine target URL
   const stagingUrl = process.env["SECURITY_STAGING_URL"];
-  const targets = stagingUrl ? [stagingUrl, ...opts.targets] : opts.targets;
-  const uniqueTargets = [...new Set(targets)].filter((t) => t.startsWith("http"));
+  const rawTargets = stagingUrl ? [stagingUrl, ...opts.targets] : opts.targets;
+  // CWE-918: resolve hostnames and reject private/metadata IPs before making requests
+  const safeChecks = await Promise.all(rawTargets.map(async (t) => ({ t, safe: await isSafeUrl(t) })));
+  const uniqueTargets = [...new Set(safeChecks.filter((x) => x.safe).map((x) => x.t))];
 
   if (uniqueTargets.length === 0) return findings;
 

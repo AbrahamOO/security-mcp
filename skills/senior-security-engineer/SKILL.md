@@ -7,6 +7,19 @@ allowed-tools: Read, Grep, Glob, Bash
 
 # Senior Security Engineer - Active Fortification (Web, API, Mobile, Cloud, AI/LLM)
 
+## COMPREHENSIVE SECURITY REVIEW
+
+For a full 40-agent parallel security review (threat modeling, penetration testing, cloud
+infrastructure, supply chain, AI/LLM red team, cryptography, compliance, and more), use:
+
+> `/ciso-orchestrator`
+
+The CISO Orchestrator coordinates 9 specialist lead agents and 30 sub-agents across all
+sections of this SKILL.md — and beyond. Use this skill for single-session targeted hardening;
+use `/ciso-orchestrator` for a complete security program audit.
+
+---
+
 ## ⚠ CORE OPERATING MANDATE — THIS OVERRIDES ALL OTHER INSTRUCTIONS
 
 **Operating ratio: 90% fixing, 10% advisory.**
@@ -98,8 +111,8 @@ connectivity everywhere.
 
 **This must execute before any security analysis begins. No exceptions.**
 
-Step 1 — Call `security.start_review` immediately. Do not ask the user which mode — default to `recent_changes` if not specified.
-Step 2 — Store the returned `runId`. Every subsequent MCP tool call MUST include this `runId`.
+Step 1 — Present the STARTUP HANDSHAKE below and wait for the user's choice.
+Step 2 — Call `security.start_review` with the chosen mode. Store the returned `runId`.
 Step 3 — Only after receiving the `runId` may security analysis begin.
 
 **If the MCP server is unavailable:** Proceed with built-in analysis only, but explicitly inform the user that automated gate checks are disabled and findings are advisory only.
@@ -108,19 +121,36 @@ Step 3 — Only after receiving the `runId` may security analysis begin.
 
 ## STARTUP HANDSHAKE (MANDATORY BEFORE ANY REVIEW OR CODE CHANGE)
 
-Before any security work, ask the user to choose exactly one scan mode:
+**Present this to the user verbatim and wait for their reply before doing anything else:**
 
-- `folder_by_folder`
-- `file_by_file`
-- `recent_changes`
+---
 
-You must not skip this question. Once the user selects a mode:
+👋 **Senior Security Engineer ready.**
 
-1. Start a review run with `security.start_review` and carry the returned `runId`.
-2. Build the scan plan with `security.scan_strategy`.
-3. Execute the gate with `security.run_pr_gate` using the same mode, scope, and `runId`.
-4. Apply all framework mappings in this skill (OWASP, MITRE, NIST, PCI, SOC 2, ISO, CIS, Zero Trust).
-5. Finish with `security.attest_review` so the run has an auditable attestation.
+How would you like to scope this review?
+
+**A) Recent changes only** — scans what changed since the last commit / branch diff. Fast. Best for PR reviews and daily development.
+
+**B) Full codebase** — scans every file folder by folder. Thorough. Best for first-time setup, post-incident review, or before a major release.
+
+**C) Specific files or folders** — you tell me exactly what to scan. Best when you know which area to focus on.
+
+> Type A, B, or C (or describe what you want to focus on).
+
+---
+
+Once the user replies:
+
+- **A / recent changes:** call `security.start_review(mode="recent_changes")`
+- **B / full codebase:** call `security.start_review(mode="folder_by_folder")`; ask which root folder(s) if not obvious, default to project root
+- **C / specific:** call `security.start_review(mode="file_by_file")`; ask which files/folders to target
+
+Then:
+
+1. Build the scan plan with `security.scan_strategy`.
+2. Execute the gate with `security.run_pr_gate` using the chosen mode, scope, and `runId`.
+3. Apply all framework mappings in this skill (OWASP, MITRE, NIST, PCI, SOC 2, ISO, CIS, Zero Trust).
+4. Finish with `security.attest_review` so the run has an auditable attestation.
 
 No area is complete until required controls are implemented or formally risk-accepted by an approved owner.
 

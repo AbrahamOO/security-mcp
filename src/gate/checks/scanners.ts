@@ -41,7 +41,12 @@ type ScannerConfig = z.infer<typeof ScannerConfigSchema>;
 async function loadScannerConfig(): Promise<ScannerConfig> {
   const overridePath = process.env["SECURITY_GATE_SCANNERS"];
   if (overridePath) {
-    const raw = await readFile(join(process.cwd(), overridePath), "utf-8");
+    // CWE-22: resolve to absolute path and ensure it stays within cwd
+    const resolved = resolve(process.cwd(), overridePath);
+    if (!resolved.startsWith(process.cwd() + "/") && resolved !== process.cwd()) {
+      throw new Error(`SECURITY_GATE_SCANNERS path '${overridePath}' escapes the project directory`);
+    }
+    const raw = await readFile(resolved, "utf-8");
     return ScannerConfigSchema.parse(JSON.parse(raw));
   }
 

@@ -1,0 +1,98 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/AbrahamOO/security-mcp/blob/main/defaults/agent-run-schema.json",
+  "title": "AgentRunManifest",
+  "description": "Schema for .mcp/agent-runs/{agentRunId}/manifest.json — the coordination state for a multi-agent security run.",
+  "type": "object",
+  "required": ["agentRunId", "runId", "createdAt", "updatedAt", "phase", "internetPermitted", "stackContext", "scope", "agents"],
+  "additionalProperties": false,
+  "properties": {
+    "agentRunId": {
+      "type": "string",
+      "minLength": 32,
+      "maxLength": 32,
+      "description": "32-character hex identifier for this agent run."
+    },
+    "runId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUID of the parent review run from security.start_review."
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "phase": {
+      "type": "integer",
+      "enum": [0, 1, 2, 3],
+      "description": "Current execution phase: 0=init, 1=parallel discovery, 2=adversarial+compliance, 3=synthesis."
+    },
+    "internetPermitted": {
+      "type": "boolean",
+      "description": "Whether the user permitted internet access for this run."
+    },
+    "stackContext": {
+      "type": "object",
+      "required": ["languages", "frameworks", "databases", "cloudProvider", "paymentProcessor", "hasAI", "hasMobile", "hasPII", "hasPayments", "packageManagers", "ciPlatform"],
+      "additionalProperties": false,
+      "properties": {
+        "languages":       { "type": "array", "items": { "type": "string" } },
+        "frameworks":      { "type": "array", "items": { "type": "string" } },
+        "databases":       { "type": "array", "items": { "type": "string" } },
+        "cloudProvider":   { "type": "array", "items": { "type": "string" } },
+        "paymentProcessor":{ "type": "array", "items": { "type": "string" } },
+        "hasAI":           { "type": "boolean" },
+        "hasMobile":       { "type": "boolean" },
+        "hasPII":          { "type": "boolean" },
+        "hasPayments":     { "type": "boolean" },
+        "packageManagers": { "type": "array", "items": { "type": "string" } },
+        "ciPlatform":      { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "required": ["mode", "targets", "baseRef", "headRef"],
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["recent_changes", "folder_by_folder", "file_by_file"]
+        },
+        "targets": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "baseRef": { "type": "string" },
+        "headRef": { "type": "string" }
+      }
+    },
+    "agents": {
+      "type": "object",
+      "description": "Map of agent name to its lifecycle record.",
+      "additionalProperties": {
+        "$ref": "#/$defs/AgentRecord"
+      }
+    }
+  },
+  "$defs": {
+    "AgentRecord": {
+      "type": "object",
+      "required": ["status", "startedAt", "completedAt", "findingsPath", "summary"],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["pending", "running", "completed", "completed_partial", "failed"]
+        },
+        "startedAt":    { "type": ["string", "null"], "format": "date-time" },
+        "completedAt":  { "type": ["string", "null"], "format": "date-time" },
+        "findingsPath": { "type": ["string", "null"] },
+        "summary":      { "type": ["string", "null"] }
+      }
+    }
+  }
+}

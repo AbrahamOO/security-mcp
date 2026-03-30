@@ -1,0 +1,331 @@
+{
+  "version": "1.2.0",
+  "updatedAt": "2026-03-29",
+  "baseUrl": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills",
+  "skills": {
+    "ciso-orchestrator": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/ciso-orchestrator/SKILL.md",
+      "description": "Master coordinator. Spins up all 39 specialist agents across Phase 1 and Phase 2. User-invocable via /ciso-orchestrator.",
+      "userInvocable": true,
+      "phase": 0,
+      "subAgents": [
+        "threat-modeler", "appsec-code-auditor", "cloud-infra-specialist",
+        "supply-chain-devsecops", "ai-llm-redteam", "mobile-security-specialist",
+        "crypto-pki-specialist", "pentest-team", "compliance-grc"
+      ]
+    },
+    "threat-modeler": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/threat-modeler/SKILL.md",
+      "description": "Agent 1 lead. STRIDE/PASTA/ATT&CK/LINDDUN threat modeling across all surfaces.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": ["stride-pasta-analyst", "attack-navigator", "business-logic-attacker", "privacy-flow-analyst"]
+    },
+    "stride-pasta-analyst": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/stride-pasta-analyst/SKILL.md",
+      "description": "Sub-agent 1a. Full STRIDE matrix + PASTA stages 1-7 + LINDDUN + DREAD + TRIKE.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "attack-navigator": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/attack-navigator/SKILL.md",
+      "description": "Sub-agent 1b. MITRE ATT&CK Navigator layer builder with D3FEND countermeasure mapping.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "business-logic-attacker": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/business-logic-attacker/SKILL.md",
+      "description": "Sub-agent 1c. Attack trees for multi-step flows: TOCTOU, confused deputy, integer overflow, coupon abuse.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "privacy-flow-analyst": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/privacy-flow-analyst/SKILL.md",
+      "description": "Sub-agent 1d. LINDDUN privacy threat model, GDPR DPIA triggers, cross-border data transfer analysis.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "appsec-code-auditor": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/appsec-code-auditor/SKILL.md",
+      "description": "Agent 2 lead. Application security auditor covering SKILL.md §12, §13, §17.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": ["injection-specialist", "auth-session-hacker", "logic-race-fuzzer", "serialization-memory-attacker"]
+    },
+    "injection-specialist": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/injection-specialist/SKILL.md",
+      "description": "Sub-agent 2a. SQL/NoSQL/LDAP/OS command/SSTI/CRLF/log injection across all input surfaces.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "auth-session-hacker": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/auth-session-hacker/SKILL.md",
+      "description": "Sub-agent 2b. JWT algorithm confusion, OAuth PKCE, SAML wrapping, session fixation, account lockout.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "logic-race-fuzzer": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/logic-race-fuzzer/SKILL.md",
+      "description": "Sub-agent 2c. Race conditions, integer overflow, mass assignment, non-atomic rate limiting.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "serialization-memory-attacker": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/serialization-memory-attacker/SKILL.md",
+      "description": "Sub-agent 2d. Prototype pollution, insecure deserialization, ReDoS, zip slip, path traversal.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "cloud-infra-specialist": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/cloud-infra-specialist/SKILL.md",
+      "description": "Agent 3 lead. Cloud/infra hardening covering SKILL.md §3, §4, §7.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": ["aws-penetration-tester", "gcp-penetration-tester", "azure-penetration-tester", "k8s-container-escaper"]
+    },
+    "aws-penetration-tester": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/aws-penetration-tester/SKILL.md",
+      "description": "Sub-agent 3a. AWS IAM privilege escalation, IMDSv1, S3 ACL, GuardDuty, CloudTrail, SCPs.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "gcp-penetration-tester": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/gcp-penetration-tester/SKILL.md",
+      "description": "Sub-agent 3b. GCP default SA, VPC Service Controls, Workload Identity, Binary Authorization.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "azure-penetration-tester": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/azure-penetration-tester/SKILL.md",
+      "description": "Sub-agent 3c. Azure Managed Identity, Private Endpoints, Defender for Cloud, DDoS Standard.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "k8s-container-escaper": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/k8s-container-escaper/SKILL.md",
+      "description": "Sub-agent 3d. Kubernetes Pod Security Standards, RBAC, Network Policies, container escape paths.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "supply-chain-devsecops": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/supply-chain-devsecops/SKILL.md",
+      "description": "Agent 4 lead. Supply chain and DevSecOps covering SKILL.md §5, §6, §18, §21.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": ["dependency-confusion-attacker", "cicd-pipeline-hijacker", "artifact-integrity-analyst"]
+    },
+    "dependency-confusion-attacker": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/dependency-confusion-attacker/SKILL.md",
+      "description": "Sub-agent 4a. Dependency confusion, typosquatting, CISA KEV matching, abandoned packages.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "cicd-pipeline-hijacker": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/cicd-pipeline-hijacker/SKILL.md",
+      "description": "Sub-agent 4b. CI/CD pipeline injection, pull_request_target, pinned Actions, secrets in logs.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "artifact-integrity-analyst": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/artifact-integrity-analyst/SKILL.md",
+      "description": "Sub-agent 4c. SBOM completeness, SLSA L3, Cosign signatures, build provenance.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "ai-llm-redteam": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/ai-llm-redteam/SKILL.md",
+      "description": "Agent 5 lead. AI/LLM security covering SKILL.md §15 fully including all MITRE ATLAS threats.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": ["prompt-injection-specialist", "model-extraction-attacker", "rag-poisoning-specialist", "agentic-loop-exploiter"]
+    },
+    "prompt-injection-specialist": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/prompt-injection-specialist/SKILL.md",
+      "description": "Sub-agent 5a. Structural/semantic prompt injection, jailbreaks, token smuggling, indirect injection.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "model-extraction-attacker": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/model-extraction-attacker/SKILL.md",
+      "description": "Sub-agent 5b. Model extraction, membership inference, system prompt leakage, batch API abuse.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "rag-poisoning-specialist": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/rag-poisoning-specialist/SKILL.md",
+      "description": "Sub-agent 5c. RAG document poisoning, cross-tenant vector store access, embedding inversion.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "agentic-loop-exploiter": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/agentic-loop-exploiter/SKILL.md",
+      "description": "Sub-agent 5d. Tool allowlist bypass, agentic loop amplification, persistent context injection.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "mobile-security-specialist": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/mobile-security-specialist/SKILL.md",
+      "description": "Agent 6 lead. Mobile security covering OWASP MASVS Level 2 for iOS and Android.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": ["ios-security-auditor", "android-penetration-tester", "mobile-api-network-attacker"]
+    },
+    "ios-security-auditor": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/ios-security-auditor/SKILL.md",
+      "description": "Sub-agent 6a. iOS ATS, Keychain, Secure Enclave, Universal Links, screenshot protection.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "android-penetration-tester": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/android-penetration-tester/SKILL.md",
+      "description": "Sub-agent 6b. Android manifest hardening, NSC, exported components, tapjacking, fragment injection.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "mobile-api-network-attacker": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/mobile-api-network-attacker/SKILL.md",
+      "description": "Sub-agent 6c. Certificate pinning bypass, API key extraction from binary, token storage audit.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "crypto-pki-specialist": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/crypto-pki-specialist/SKILL.md",
+      "description": "Agent 9 lead. Cryptography and PKI covering SKILL.md §10 — TLS, algorithms, key management.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": ["tls-certificate-auditor", "algorithm-implementation-reviewer", "key-management-lifecycle-analyst"]
+    },
+    "tls-certificate-auditor": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/tls-certificate-auditor/SKILL.md",
+      "description": "Sub-agent 9a. TLS version enforcement, cipher suites, HSTS, OCSP stapling, CT logging, mTLS.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "algorithm-implementation-reviewer": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/algorithm-implementation-reviewer/SKILL.md",
+      "description": "Sub-agent 9b. Banned algorithms (MD5/SHA-1/DES/RC4), Argon2id, AES-256-GCM, Ed25519, crypto.randomBytes.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "key-management-lifecycle-analyst": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/key-management-lifecycle-analyst/SKILL.md",
+      "description": "Sub-agent 9c. Key rotation, HKDF hierarchy, HSM/secrets manager enforcement, post-quantum readiness.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "pentest-team": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/pentest-team/SKILL.md",
+      "description": "Agent 7 lead. Penetration testing team — reads threat model, assigns scope to sub-agents.",
+      "userInvocable": false,
+      "phase": 2,
+      "subAgents": ["pentest-web-api", "pentest-infra", "pentest-social"]
+    },
+    "pentest-web-api": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/pentest-web-api/SKILL.md",
+      "description": "Sub-agent 7a. Web/API penetration testing — OWASP Testing Guide, IDOR chains, auth bypass, business logic.",
+      "userInvocable": false,
+      "phase": 2,
+      "subAgents": []
+    },
+    "pentest-infra": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/pentest-infra/SKILL.md",
+      "description": "Sub-agent 7b. Infrastructure pen testing — IAM escalation graph, lateral movement, network segmentation.",
+      "userInvocable": false,
+      "phase": 2,
+      "subAgents": []
+    },
+    "pentest-social": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/pentest-social/SKILL.md",
+      "description": "Sub-agent 7c. Social engineering and insider threat simulation — phishing scenarios, blast radius.",
+      "userInvocable": false,
+      "phase": 2,
+      "subAgents": []
+    },
+    "compliance-grc": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/compliance-grc/SKILL.md",
+      "description": "Agent 8 lead. Compliance and GRC synthesizer covering SKILL.md §14, §16, §19-24.",
+      "userInvocable": false,
+      "phase": 2,
+      "subAgents": ["evidence-collector", "compliance-gap-analyst"]
+    },
+    "evidence-collector": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/evidence-collector/SKILL.md",
+      "description": "Sub-agent 8a. Audit trail completeness, SIEM coverage, SOC 2 evidence freshness.",
+      "userInvocable": false,
+      "phase": 2,
+      "subAgents": []
+    },
+    "compliance-gap-analyst": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/compliance-gap-analyst/SKILL.md",
+      "description": "Sub-agent 8b. PCI/SOC2/ISO/NIST mapping, SLA enforcement, residual risk register with CVSS v4 + EPSS.",
+      "userInvocable": false,
+      "phase": 2,
+      "subAgents": []
+    }
+  }
+}

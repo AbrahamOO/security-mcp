@@ -102,10 +102,16 @@ function computeAllCriticalComplete(items: ChecklistItem[]): boolean {
     .every((i) => i.status === "completed" || i.status === "na");
 }
 
+// CWE-22: surface names used as filenames — restrict to safe alphanumeric slug
+const SAFE_SURFACE_RE = /^[a-z][a-z0-9_-]{0,63}$/;
+
 /**
  * Initialize a checklist for a run from the surface template.
  */
 export async function initChecklist(runId: string, surface: string): Promise<ChecklistState> {
+  if (!SAFE_SURFACE_RE.test(surface)) {
+    throw new Error(`Invalid surface name "${surface}"`);
+  }
   // Load template from defaults/checklists/{surface}.json
   let template: ChecklistTemplate;
   try {
