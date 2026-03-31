@@ -23,7 +23,7 @@ import {
 } from "node:fs/promises";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { z } from "zod";
 import { updateReviewStep } from "../review/store.js";
 import type {
