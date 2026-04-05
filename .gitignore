@@ -8,8 +8,13 @@ dist/
 .agent-state.json
 HANDOFF.md
 
-# Local MCP session data (reviews, reports, sbom) — not for source control
+# Local MCP session data — never commit to source control
 .mcp/reviews/
 .mcp/reports/
 .mcp/sbom/
 .mcp/attestations/
+.mcp/catalog/
+.mcp/exceptions/
+.mcp/scanners/
+.mcp/mappings/
+.mcp/policies/
