@@ -19,8 +19,8 @@ Works with **Claude Code, GitHub Copilot, Cursor, Codex, Replit**, and any MCP-c
 
 - [What Problem Does This Solve?](#what-problem-does-this-solve)
 - [Who Is This For?](#who-is-this-for)
-- [Two Modes - Pick Your Depth](#two-modes--pick-your-depth)
-- [Quick Start - Install in 60 Seconds](#quick-start--install-in-60-seconds)
+- [Two Modes - Pick Your Depth](#two-modes---pick-your-depth)
+- [Quick Start - Install in 60 Seconds](#quick-start---install-in-60-seconds)
 - [Step-by-Step Installation Guide](#step-by-step-installation-guide)
   - [Claude Code](#step-by-step-claude-code)
   - [Cursor](#step-by-step-cursor)
@@ -77,19 +77,19 @@ A single elite security engineer agent that reviews your code, finds vulnerabili
 
 ### `/ciso-orchestrator` - A Full Security Program in One Command
 
-40 specialist agents running in parallel across 3 phases: threat modeling, deep code and infrastructure attack simulation, then compliance synthesis. Every domain gets its own specialist - a dedicated injection attacker, a JWT/OAuth hacker, a cloud privilege escalation analyst, a prompt injection specialist, a TLS auditor, a pentest team that reads the threat model as its attack brief, and a compliance analyst that maps every finding to PCI DSS 4.0, SOC 2, ISO 27001, NIST 800-53, HIPAA, and GDPR. Agents learn from each run and improve over time. Optionally fetches live CVE, CISA KEV, and ATT&CK data. Produces a merged findings report with full compliance mapping and a signed attestation.
+39 specialist agents across 3 phases. Phase 1: 7 lead agents run in parallel, each commanding its own team of sub-agents — threat modeling, deep code analysis, cloud infrastructure, supply chain, AI/LLM red team, mobile, and cryptography. Phase 2: adversarial penetration testing and compliance synthesis run in parallel after Phase 1 completes. Phase 3: findings are merged, deduplicated, and attested. Every domain has a dedicated specialist — an injection attacker, a JWT/OAuth hacker, a cloud privilege escalation analyst, a prompt injection specialist, a TLS auditor, a pentest team that reads the threat model as its attack brief, and a compliance analyst mapping every finding to PCI DSS 4.0, SOC 2, ISO 27001, NIST 800-53, HIPAA, and GDPR. Agents learn from each run and improve over time. 86 specialist skills registered in the registry — loaded on demand based on detected stack. Optionally fetches live CVE, CISA KEV, and ATT&CK data. Produces a merged findings report with full compliance mapping and a signed attestation.
 
-**Use this before major releases, compliance audits, or security reviews. -> [See the full 40-agent architecture](#ciso-orchestrator-flow-40-agents)**
+**Use this before major releases, compliance audits, or security reviews. -> [See the full 39-agent architecture](#ciso-orchestrator-flow-39-agents)**
 
 ---
 
 | | `/senior-security-engineer` | `/ciso-orchestrator` |
 | --- | --- | --- |
-| **What it is** | Single expert agent | 40-agent parallel security program |
+| **What it is** | Single expert agent | 39-agent multi-phase security program |
 | **Best for** | Daily development, PR reviews, targeted hardening | Pre-launch audits, compliance prep, incident response |
 | **Speed** | Seconds to minutes | Minutes to hours |
 | **Scope** | You choose: recent changes, full codebase, or specific files | Always full - every surface, every framework |
-| **Agents** | 1 | 40 (9 leads + 30 specialists) |
+| **Agents** | 1 | 39 (9 leads + 30 sub-agents) |
 | **Output** | Inline code fixes + SHA-256 attestation | Full domain reports + merged findings + attestation |
 | **API cost** | Low | High |
 | **Internet** | Not required | Optional (enriches findings with live CVEs, CISA KEV, MITRE ATT&CK) |
@@ -112,7 +112,7 @@ Restart your editor. Then in Claude Code:
 
 That's it. The engineer will ask how you want to scope the review, then find and fix security issues in your code.
 
-For a full 40-agent deep audit:
+For a full 39-agent deep audit:
 
 ```text
 /ciso-orchestrator
@@ -398,7 +398,7 @@ The orchestrator will ask:
 - **Yes** - agents enrich findings with live threat intelligence. More accurate, more current.
 - **No** - agents use cached intel. Still comprehensive, no external calls made.
 
-**Step 3 - Wait for Phase 1 (7 lead agents + 30 sub-agents, all parallel).**
+**Step 3 - Wait for Phase 1 (7 lead agents running in parallel, each commanding their domain-specific sub-agents — 25 sub-agents total across Phase 1).**
 
 Each agent writes findings to `.mcp/agent-runs/{agentRunId}/`.
 
@@ -621,7 +621,7 @@ app.use(helmet({
 │                   Your Editor (Claude Code)                   │
 │                                                               │
 │  /senior-security-engineer      /ciso-orchestrator           │
-│  (single expert agent)          (40-agent security program)  │
+│  (single expert agent)          (39-agent security program)  │
 │          │                                │                   │
 └──────────┼────────────────────────────────┼───────────────────┘
            │                                │
@@ -702,7 +702,7 @@ User: /senior-security-engineer
     └── SHA-256 integrity hash
 ```
 
-### `/ciso-orchestrator` Flow (40 Agents)
+### `/ciso-orchestrator` Flow (39 Agents)
 
 ```text
 User: /ciso-orchestrator
@@ -716,7 +716,7 @@ User: /ciso-orchestrator
   │   -> stackContext: { languages, frameworks, cloudProvider, hasAI, hasMobile, ... }
   ├── security.start_review()          -> runId
   ├── orchestration.create_agent_run() -> agentRunId + manifest.json
-  └── orchestration.ensure_skill(×39) -> download skills if not cached
+  └── orchestration.ensure_skill(×N)  -> download stack-relevant skills from 86-skill registry
         │
         ▼
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
