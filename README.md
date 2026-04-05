@@ -468,7 +468,7 @@ The gate runs **18 checks in parallel** against your diff:
 | Category | What It Catches |
 | --- | --- |
 | **Secrets** | Hardcoded API keys, tokens, passwords, private keys (via Gitleaks patterns) |
-| **Dependencies** | CRITICAL/HIGH CVEs in npm/pip/go/maven packages; CISA Known Exploited Vulnerabilities |
+| **Dependencies** | CRITICAL/HIGH CVEs in npm/pip/go/maven packages; CISA KEV cross-check and EPSS >50% auto-escalation via live threat-intel (24h cached) |
 | **Cryptography** | MD5, SHA-1, DES, RC4, ECB mode, `Math.random()` for tokens, short JWT secrets |
 | **Authentication** | Missing rate limiting, no account lockout, JWT `alg:none`, weak session config |
 | **Injection** | SQL, NoSQL, command injection, path traversal, SSRF, prototype pollution |
@@ -485,6 +485,7 @@ The gate runs **18 checks in parallel** against your diff:
 | **Runtime** | HTTP security headers and TLS config on live staging URL (if configured) |
 | **AI red-team** | Static + optional dynamic probes against AI endpoints |
 | **Exceptions** | Validates any active security exceptions are non-expired and properly approved |
+| **Baseline regression** | Detects when previously-satisfied controls go missing (BASELINE_REGRESSION HIGH finding injected on regression) |
 
 ### Customize the Gate Policy
 
@@ -994,6 +995,8 @@ Edit `.mcp/exceptions/security-exceptions.json`:
 | `SECURITY_GATE_POLICY` | `.mcp/policies/security-policy.json` | Path to policy file |
 | `SECURITY_GATE_SCANNERS` | built-in | Path to custom scanner config (must be within project directory) |
 | `SECURITY_GATE_EXCEPTIONS` | `.mcp/exceptions/security-exceptions.json` | Path to exceptions file (must be within project directory) |
+| `SECURITY_GATE_MODE` | `full` | Set to `file_by_file` for scoped per-file scanning |
+| `SECURITY_GATE_TARGETS` | (all changed files) | Comma-separated file paths to restrict the scan surface |
 
 ### Integrations (all optional)
 
