@@ -2,7 +2,7 @@
  * GraphQL security checks.
  * Detects GraphQL schemas and validates security controls.
  */
-import { Finding } from "../result.js";
+import { Finding, sanitizeErrorMessage } from "../result.js";
 import { searchRepo } from "../../repo/search.js";
 import fg from "fast-glob";
 import { readFileSafe } from "../../repo/fs.js";
@@ -127,7 +127,7 @@ export async function checkGraphQL(_opts: { changedFiles: string[] }): Promise<F
 			});
 		}
 	} catch (err) {
-		console.warn("[checkGraphQL] Internal error:", err instanceof Error ? err.message : String(err));
+		console.warn("[checkGraphQL] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));
 	}
 
 	return findings;

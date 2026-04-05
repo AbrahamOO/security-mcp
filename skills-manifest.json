@@ -1,6 +1,6 @@
 {
-  "version": "1.2.0",
-  "updatedAt": "2026-03-29",
+  "version": "1.3.0",
+  "updatedAt": "2026-04-05",
   "baseUrl": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills",
   "skills": {
     "ciso-orchestrator": {
@@ -12,7 +12,8 @@
       "subAgents": [
         "threat-modeler", "appsec-code-auditor", "cloud-infra-specialist",
         "supply-chain-devsecops", "ai-llm-redteam", "mobile-security-specialist",
-        "crypto-pki-specialist", "pentest-team", "compliance-grc"
+        "crypto-pki-specialist", "pentest-team", "compliance-grc",
+        "senior-security-engineer"
       ]
     },
     "threat-modeler": {
@@ -323,6 +324,374 @@
       "version": "1.0.0",
       "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/compliance-gap-analyst/SKILL.md",
       "description": "Sub-agent 8b. PCI/SOC2/ISO/NIST mapping, SLA enforcement, residual risk register with CVSS v4 + EPSS.",
+      "userInvocable": false,
+      "phase": 2,
+      "subAgents": []
+    },
+    "senior-security-engineer": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/senior-security-engineer/SKILL.md",
+      "description": "Active fortification engineer. 90% fixing, 10% advisory. Hardens code, APIs, mobile, cloud, and AI/LLMs. Delegates to ciso-orchestrator for full parallel review.",
+      "userInvocable": true,
+      "phase": 0,
+      "subAgents": ["ciso-orchestrator"]
+    },
+    "linddun-privacy-analyst": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/linddun-privacy-analyst/SKILL.md",
+      "description": "LINDDUN privacy threat modeling — data flows, PII exposure, GDPR/CCPA/HIPAA privacy threats.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "dread-scorer": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/dread-scorer/SKILL.md",
+      "description": "DREAD risk scoring (Damage, Reproducibility, Exploitability, Affected users, Discoverability) for all findings.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "trike-risk-modeler": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/trike-risk-modeler/SKILL.md",
+      "description": "Trike asset-centric threat modeling — actor/action/asset matrices with quantified risk scores.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "capec-code-mapper": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/capec-code-mapper/SKILL.md",
+      "description": "Maps codebase patterns to CAPEC attack patterns with MITRE ATT&CK cross-references.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "samm-assessor": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/samm-assessor/SKILL.md",
+      "description": "OWASP SAMM 2.0 maturity assessment across 15 security practices with phased improvement roadmap.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "csa-ccm-mapper": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/csa-ccm-mapper/SKILL.md",
+      "description": "Maps cloud security controls to CSA Cloud Controls Matrix v4 — 197 control gap analysis.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "csf2-governance-mapper": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/csf2-governance-mapper/SKILL.md",
+      "description": "Maps controls and findings to NIST CSF 2.0 functions/categories with governance gap analysis.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "compliance-lifecycle-tracker": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/compliance-lifecycle-tracker/SKILL.md",
+      "description": "Tracks compliance posture over time — evidence freshness, control decay, audit deadlines, drift detection.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "quantum-migration-planner": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/quantum-migration-planner/SKILL.md",
+      "description": "Plans migration from quantum-vulnerable crypto (RSA/ECDSA/DH) to post-quantum algorithms (NIST FIPS 203/204/205).",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "iam-privesc-graph-builder": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/iam-privesc-graph-builder/SKILL.md",
+      "description": "Builds IAM privilege escalation graph — lateral movement paths, least-privilege violations in AWS/GCP/Azure.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "git-history-secret-scanner": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/git-history-secret-scanner/SKILL.md",
+      "description": "Scans full git history for committed-then-deleted secrets using gitleaks and trufflehog.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "device-integrity-aggregator": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/device-integrity-aggregator/SKILL.md",
+      "description": "Audits device integrity controls — cert pinning, Play Integrity/DeviceCheck, RASP, jailbreak detection.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "kill-switch-engineer": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/kill-switch-engineer/SKILL.md",
+      "description": "Designs runtime kill switches, circuit breakers, and graceful-degradation controls for emergency containment.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "incident-responder": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/incident-responder/SKILL.md",
+      "description": "Structured incident response — detection, containment, eradication, recovery, post-incident review playbooks.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "rotation-validation-agent": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/rotation-validation-agent/SKILL.md",
+      "description": "Validates credential and secret rotation — API keys, DB passwords, TLS certs, JWT signing keys, OAuth secrets.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "registry-mirror-enforcer": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/registry-mirror-enforcer/SKILL.md",
+      "description": "Audits container registry usage — public pull policies, registry mirrors, pull-through caches, image provenance.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "slsa-level3-enforcer": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/slsa-level3-enforcer/SKILL.md",
+      "description": "Advances build pipelines to SLSA Level 3 — hardened build platforms, non-forgeable provenance, two-party review.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "slsa-provenance-enforcer": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/slsa-provenance-enforcer/SKILL.md",
+      "description": "Enforces SLSA provenance requirements — hermetic/reproducible builds, artifact signing, build provenance.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "threat-infrastructure-analyst": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/threat-infrastructure-analyst/SKILL.md",
+      "description": "Analyzes threat actor infrastructure — correlates incident indicators with threat intel, maps to MITRE ATT&CK.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "zero-trust-architect": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/zero-trust-architect/SKILL.md",
+      "description": "Designs and audits Zero Trust Architecture — identity verification, microsegmentation, continuous validation.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "egress-policy-enforcer": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/egress-policy-enforcer/SKILL.md",
+      "description": "Audits outbound egress controls — allowlists, DNS exfiltration, SSRF-to-exfiltration chains, cloud egress.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "binary-auth-validator": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/binary-auth-validator/SKILL.md",
+      "description": "Validates binary authorization policies — container image signing, admission controllers, OPA Gatekeeper, K8s BinAuthZ.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "ai-model-supply-chain-agent": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/ai-model-supply-chain-agent/SKILL.md",
+      "description": "Audits AI/ML model supply chain — weight provenance, ONNX/safetensors integrity, Hugging Face security, backdoor risk.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "cert-pin-rotation-specialist": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/cert-pin-rotation-specialist/SKILL.md",
+      "description": "Manages certificate pinning rotation lifecycle — pin backup, rotation schedule, emergency rotation, OTA pin updates.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "bot-detection-specialist": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/bot-detection-specialist/SKILL.md",
+      "description": "Audits and implements bot detection — behavioral biometrics, device fingerprinting, CAPTCHA, headless browser detection.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": []
+    },
+    "advanced-dos-tester": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/advanced-dos-tester/SKILL.md",
+      "description": "Tests advanced DoS attacks — HTTP/2 rapid reset, QUIC amplification, TCP SYN flood, cost-amplification attacks.",
+      "userInvocable": false,
+      "phase": 2,
+      "subAgents": []
+    },
+    "dos-resilience-tester": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/dos-resilience-tester/SKILL.md",
+      "description": "Tests DoS/DDoS resilience — HTTP flood, slow loris, resource exhaustion, algorithmic complexity attacks.",
+      "userInvocable": false,
+      "phase": 2,
+      "subAgents": []
+    },
+    "anti-replay-tester": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/anti-replay-tester/SKILL.md",
+      "description": "Tests for replay attack vulnerabilities — nonce reuse, JWT replay, OAuth token replay, webhook signature replay.",
+      "userInvocable": false,
+      "phase": 2,
+      "subAgents": []
+    },
+    "file-upload-attacker": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/file-upload-attacker/SKILL.md",
+      "description": "Attacks file upload endpoints — MIME sniffing bypass, path traversal via filename, ZIP slip, polyglot files, SVG XSS.",
+      "userInvocable": false,
+      "phase": 2,
+      "subAgents": []
+    },
+    "credential-stuffing-specialist": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/credential-stuffing-specialist/SKILL.md",
+      "description": "Tests authentication against credential stuffing, password spray, and breach replay attacks.",
+      "userInvocable": false,
+      "phase": 2,
+      "subAgents": []
+    },
+    "deep-link-fuzzer": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/deep-link-fuzzer/SKILL.md",
+      "description": "Fuzzes mobile deep links and Universal Links for URL scheme hijacking, intent injection, open redirect, auth bypass.",
+      "userInvocable": false,
+      "phase": 2,
+      "subAgents": []
+    },
+    "json-ambiguity-tester": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/json-ambiguity-tester/SKILL.md",
+      "description": "Tests JSON parsing for differential attacks — duplicate key confusion, number precision, Unicode bypass, prototype pollution.",
+      "userInvocable": false,
+      "phase": 2,
+      "subAgents": []
+    },
+    "multipart-abuse-tester": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/multipart-abuse-tester/SKILL.md",
+      "description": "Tests multipart/form-data parsing — boundary injection, header smuggling, field limit bypass, parser differentials.",
+      "userInvocable": false,
+      "phase": 2,
+      "subAgents": []
+    },
+    "oauth-pkce-specialist": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/oauth-pkce-specialist/SKILL.md",
+      "description": "Audits OAuth 2.0/OIDC for PKCE compliance, state misuse, implicit flow vulnerabilities, token leakage, scope misconfiguration.",
+      "userInvocable": false,
+      "phase": 2,
+      "subAgents": []
+    },
+    "parser-exhaustion-tester": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/parser-exhaustion-tester/SKILL.md",
+      "description": "Tests parsers for algorithmic complexity attacks — XML bombs, nested JSON, YAML bombs, ReDoS.",
+      "userInvocable": false,
+      "phase": 2,
+      "subAgents": []
+    },
+    "secrets-mask-bypass-tester": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/secrets-mask-bypass-tester/SKILL.md",
+      "description": "Tests log masking bypass — encoding variants, case variants, split-across-lines, JSON-embedded secrets escaping.",
+      "userInvocable": false,
+      "phase": 2,
+      "subAgents": []
+    },
+    "session-timeout-tester": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/session-timeout-tester/SKILL.md",
+      "description": "Audits session lifetime policies — absolute timeout, idle timeout, concurrent session limits, forced re-auth schedules.",
+      "userInvocable": false,
+      "phase": 2,
+      "subAgents": []
+    },
+    "ssrf-detection-validator": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/ssrf-detection-validator/SKILL.md",
+      "description": "Tests SSRF detection — cloud metadata endpoint access, DNS rebinding bypass, redirect following, blind SSRF.",
+      "userInvocable": false,
+      "phase": 2,
+      "subAgents": []
+    },
+    "step-up-auth-enforcer": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/step-up-auth-enforcer/SKILL.md",
+      "description": "Identifies high-risk operations requiring step-up auth and implements re-auth challenges, MFA prompts, privilege timeouts.",
+      "userInvocable": false,
+      "phase": 2,
+      "subAgents": []
+    },
+    "token-reuse-detector": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/token-reuse-detector/SKILL.md",
+      "description": "Detects refresh token reuse attacks, API key reuse across environments. Implements token family invalidation.",
+      "userInvocable": false,
+      "phase": 2,
+      "subAgents": []
+    },
+    "unicode-homograph-tester": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/unicode-homograph-tester/SKILL.md",
+      "description": "Tests input validation for Unicode homograph attacks, bidirectional text injection, normalization bypasses.",
+      "userInvocable": false,
+      "phase": 2,
+      "subAgents": []
+    },
+    "waf-rule-lifecycle-agent": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/waf-rule-lifecycle-agent/SKILL.md",
+      "description": "Full WAF rule lifecycle — audit rules, detect bypass opportunities, generate ModSecurity/Cloudflare/AWS WAF rules.",
+      "userInvocable": false,
+      "phase": 2,
+      "subAgents": []
+    },
+    "webhook-security-tester": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/webhook-security-tester/SKILL.md",
+      "description": "Tests webhook security — signature validation, SSRF via webhook URL, payload injection, replay attacks.",
+      "userInvocable": false,
+      "phase": 2,
+      "subAgents": []
+    },
+    "mobile-binary-hardener": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/mobile-binary-hardener/SKILL.md",
+      "description": "Audits mobile binary security — ProGuard/R8 obfuscation, anti-tamper, PIE/ASLR, stack canaries, binary stripping.",
+      "userInvocable": false,
+      "phase": 2,
+      "subAgents": []
+    },
+    "mobile-webview-auditor": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/mobile-webview-auditor/SKILL.md",
+      "description": "Audits WebView security — JS bridge exposure, file:// access, mixed content, navigation policy, intent injection.",
       "userInvocable": false,
       "phase": 2,
       "subAgents": []

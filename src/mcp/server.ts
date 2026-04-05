@@ -19,10 +19,39 @@ import {
   applyUpdates, ApplyUpdatesSchema,
   verifySkillCoverage, VerifySkillCoverageSchema
 } from "./orchestration.js";
+import {
+  recordOutcome, RecordOutcomeParams,
+  getRouting, GetRoutingParams,
+  getPatternReport
+} from "./learning.js";
+import {
+  getModelForTask, GetModelForTaskParams,
+  trackUsage, TrackUsageParams,
+  getBudgetStatus,
+  getProviderHealth,
+  recordProviderFailure, RecordProviderFailureParams, RecordProviderFailureSchema,
+  resetProviderCircuit, ResetProviderCircuitParams, ResetProviderCircuitSchema
+} from "./model-router.js";
+import {
+  initChain, InitChainParams,
+  attestAgent, AttestAgentParams,
+  verifyChain, VerifyChainParams,
+  getChain, GetChainParams
+} from "./audit-chain.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = resolve(__dirname, "../..");
 const PROMPTS_DIR = join(PKG_ROOT, "prompts");
+
+// Read version from package.json rather than hardcoding it (M1 fix — CWE-1007).
+const _pkgVersion: string = (() => {
+  try {
+    const raw = readFileSync(join(PKG_ROOT, "package.json"), "utf-8");
+    return (JSON.parse(raw) as { version?: string }).version ?? "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+})();
 
 // Lazily load the security prompt on first use rather than at server startup.
 // This avoids injecting ~19K tokens into every session that doesn't call a
@@ -40,7 +69,7 @@ function getSecurityPrompt(): string {
 
 const server = new McpServer({
   name: "security-mcp",
-  version: "1.0.0"
+  version: _pkgVersion
 });
 const tool = server.tool.bind(server) as (...args: unknown[]) => void;
 
@@ -1753,6 +1782,165 @@ tool(
   safeTool(async (args: unknown, _extra: unknown) => {
     const parsed = VerifySkillCoverageSchema.parse(args);
     const result = await verifySkillCoverage(parsed);
+    return asTextResponse(result);
+  })
+);
+
+// ---------------------------------------------------------------------------
+// Learning engine tools
+// ---------------------------------------------------------------------------
+
+tool(
+  "security.record_outcome",
+  "Record the outcome of an agent resolving (or failing to resolve) a security finding. Feeds the pattern memory engine so the routing system learns which agents perform best on which finding types.",
+  RecordOutcomeParams as unknown as Record<string, z.ZodTypeAny>,
+  safeTool(async (args: unknown, _extra: unknown) => {
+    const result = await recordOutcome(args as Parameters<typeof recordOutcome>[0]);
+    return asTextResponse(result);
+  })
+);
+
+tool(
+  "security.get_routing",
+  "Get the routing recommendation for a finding type. Returns which agent to route to, the success rate, and whether to escalate. Requires findingId in SCREAMING_SNAKE_CASE.",
+  GetRoutingParams as unknown as Record<string, z.ZodTypeAny>,
+  safeTool(async (args: unknown, _extra: unknown) => {
+    const { findingId } = args as { findingId: string };
+    const result = await getRouting(findingId);
+    return asTextResponse(result);
+  })
+);
+
+tool(
+  "security.pattern_report",
+  "Generate a full report of learned patterns and agent performance. Shows high-confidence routing decisions, low-confidence escalations, and top agents by finding type coverage.",
+  {},
+  safeTool(async (_args: unknown, _extra: unknown) => {
+    const result = await getPatternReport();
+    return asTextResponse(result);
+  })
+);
+
+// ---------------------------------------------------------------------------
+// Model router tools
+// ---------------------------------------------------------------------------
+
+tool(
+  "security.get_model_for_task",
+  "Get the cheapest healthy model meeting the capability requirement for a given task type. " +
+  "Multi-provider: routes across Claude, GPT, Gemini, Cohere, and local Llama. " +
+  "Read-only/pattern tasks → cheapest light-tier model. Reasoning/remediation → cheapest standard-tier model. " +
+  "Respects per-provider circuit breakers (auto-failover on failure). Returns provider, model ID, cost, and rationale.",
+  GetModelForTaskParams as unknown as Record<string, z.ZodTypeAny>,
+  safeTool(async (args: unknown, _extra: unknown) => {
+    const { taskType, agentName, agentRunId } = args as { taskType: Parameters<typeof getModelForTask>[0]; agentName?: string; agentRunId?: string };
+    const result = await getModelForTask(taskType, { agentName, agentRunId });
+    return asTextResponse(result);
+  })
+);
+
+tool(
+  "security.track_usage",
+  "Record actual token usage after a model call completes. Updates running budget total and per-provider spend breakdown. " +
+  "Also resets the circuit breaker failure count for a successful provider call.",
+  TrackUsageParams as unknown as Record<string, z.ZodTypeAny>,
+  safeTool(async (args: unknown, _extra: unknown) => {
+    await trackUsage(args as Parameters<typeof trackUsage>[0]);
+    return asTextResponse({ tracked: true });
+  })
+);
+
+tool(
+  "security.model_budget_status",
+  "Return current model budget status: total spend, remaining budget, utilization percentage, " +
+  "per-tier call counts, per-task-type breakdown, and per-provider cost breakdown.",
+  {},
+  safeTool(async (_args: unknown, _extra: unknown) => {
+    const result = await getBudgetStatus();
+    return asTextResponse(result);
+  })
+);
+
+tool(
+  "security.get_provider_health",
+  "Return circuit breaker health state for all LLM providers (Claude, GPT, Gemini, Cohere, local). " +
+  "Shows consecutive failures, circuit open/closed status, and cooldown expiry. " +
+  "Use to diagnose why a provider is being skipped in smart routing.",
+  {},
+  safeTool(async (_args: unknown, _extra: unknown) => {
+    const result = await getProviderHealth();
+    return asTextResponse(result);
+  })
+);
+
+tool(
+  "security.record_provider_failure",
+  "Record a provider failure (connection error, auth error, rate limit). " +
+  "Increments consecutive failure count. Opens circuit breaker after 3 consecutive failures for 60 seconds. " +
+  "Call this when a model API call fails so the router skips that provider on next routing decision.",
+  RecordProviderFailureParams as unknown as Record<string, z.ZodTypeAny>,
+  safeTool(async (args: unknown, _extra: unknown) => {
+    const { provider } = RecordProviderFailureSchema.parse(args);
+    await recordProviderFailure(provider);
+    return asTextResponse({ recorded: true, provider });
+  })
+);
+
+tool(
+  "security.reset_provider_circuit",
+  "Manually close (reset) the circuit breaker for a provider. " +
+  "Use after confirming a provider is back online or to override an automatic failover during incident recovery.",
+  ResetProviderCircuitParams as unknown as Record<string, z.ZodTypeAny>,
+  safeTool(async (args: unknown, _extra: unknown) => {
+    const { provider } = ResetProviderCircuitSchema.parse(args);
+    await resetProviderCircuit(provider);
+    return asTextResponse({ reset: true, provider });
+  })
+);
+
+// ---------------------------------------------------------------------------
+// Audit chain tools
+// ---------------------------------------------------------------------------
+
+tool(
+  "security.init_chain",
+  "Initialise the tamper-evident attestation chain for an agent run. Creates the genesis block. Must be called before attestAgent. Idempotent.",
+  InitChainParams as unknown as Record<string, z.ZodTypeAny>,
+  safeTool(async (args: unknown, _extra: unknown) => {
+    const { agentRunId } = args as { agentRunId: string };
+    const result = await initChain(agentRunId);
+    return asTextResponse(result);
+  })
+);
+
+tool(
+  "security.attest_agent",
+  "Append a tamper-evident attestation for an agent's findings to the run chain. Links to the previous attestation via SHA-256 hash chain. Call after every agent completes.",
+  AttestAgentParams as unknown as Record<string, z.ZodTypeAny>,
+  safeTool(async (args: unknown, _extra: unknown) => {
+    const result = await attestAgent(args as Parameters<typeof attestAgent>[0]);
+    return asTextResponse(result);
+  })
+);
+
+tool(
+  "security.verify_chain",
+  "Verify the integrity of the attestation chain for an agent run. Recomputes all SHA-256 hashes and checks parent linkage. Returns valid: true only if every link is intact.",
+  VerifyChainParams as unknown as Record<string, z.ZodTypeAny>,
+  safeTool(async (args: unknown, _extra: unknown) => {
+    const { agentRunId } = args as { agentRunId: string };
+    const result = await verifyChain(agentRunId);
+    return asTextResponse(result);
+  })
+);
+
+tool(
+  "security.get_chain",
+  "Read the full attestation chain for an agent run for inspection. Returns all links with their hashes, finding counts, and timestamps.",
+  GetChainParams as unknown as Record<string, z.ZodTypeAny>,
+  safeTool(async (args: unknown, _extra: unknown) => {
+    const { agentRunId } = args as { agentRunId: string };
+    const result = await getChain(agentRunId);
     return asTextResponse(result);
   })
 );

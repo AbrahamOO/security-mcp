@@ -14,10 +14,12 @@
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { spawnSync } from "node:child_process";
-import { platform, arch, homedir } from "node:os";
-import { mkdirSync, createWriteStream, chmodSync, existsSync } from "node:fs";
+import { platform, arch, homedir, tmpdir } from "node:os";
+import { mkdirSync, createWriteStream, chmodSync, existsSync, writeFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { pipeline } from "node:stream/promises";
+import { createHash } from "node:crypto";
+import { readFile as readFileAsync } from "node:fs/promises";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -289,6 +291,41 @@ function run(cmd: string, args: string[]): boolean {
   return result.status === 0;
 }
 
+// ─── Binary integrity helpers ─────────────────────────────────────────────────
+
+// CWE-494: verify downloaded binary against publisher SHA-256 checksum before install.
+
+async function fetchChecksumFile(assets: GitHubRelease["assets"]): Promise<string | null> {
+  const checksumAsset = assets.find((a) =>
+    /checksums?\.txt$/i.test(a.name) || /\.sha256(sums?)?$/i.test(a.name)
+  );
+  if (!checksumAsset) return null;
+  try {
+    const res = await fetch(checksumAsset.browser_download_url);
+    if (!res.ok) return null;
+    return await res.text();
+  } catch { return null; }
+}
+
+function parseExpectedHash(checksumContent: string, filename: string): string | null {
+  for (const line of checksumContent.split("\n")) {
+    const parts = line.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      const hash = parts[0];
+      const name = (parts.at(-1) ?? "").replace(/^\*/, "");
+      if (name === filename && /^[0-9a-f]{64}$/i.test(hash)) {
+        return hash.toLowerCase();
+      }
+    }
+  }
+  return null;
+}
+
+async function verifyIntegrity(filePath: string, expectedHash: string): Promise<boolean> {
+  const content = await readFileAsync(filePath);
+  return createHash("sha256").update(content).digest("hex") === expectedHash;
+}
+
 // ─── GitHub binary download ───────────────────────────────────────────────────
 
 async function fetchLatestRelease(repo: string): Promise<GitHubRelease | null> {
@@ -360,6 +397,25 @@ async function installFromGitHub(tool: SecurityTool, os: OsType): Promise<boolea
     return false;
   }
 
+  // CWE-494: verify SHA-256 integrity before executing anything
+  const checksumContent = await fetchChecksumFile(release.assets);
+  if (checksumContent) {
+    const expectedHash = parseExpectedHash(checksumContent, fileName);
+    if (expectedHash) {
+      const valid = await verifyIntegrity(tmpFile, expectedHash);
+      if (!valid) {
+        print(`     Integrity check FAILED for ${fileName} — aborting install.`);
+        try { unlinkSync(tmpFile); } catch { /* ignore cleanup failure */ }
+        return false;
+      }
+      print(`     Integrity verified (SHA-256 matched).`);
+    } else {
+      print(`     Warning: checksum file found but no entry for ${fileName} — proceeding without verification.`);
+    }
+  } else {
+    print(`     Warning: no checksum file in release assets — cannot verify binary integrity.`);
+  }
+
   const destDir = "/usr/local/bin";
   if (tool.tarball) {
     // Extract the binary from the archive
@@ -426,13 +482,25 @@ async function tryDnf(tool: SecurityTool): Promise<boolean> {
   if (tool.id !== "trivy") return false;
   const mgr = commandExists("dnf") ? "dnf" : commandExists("yum") ? "yum" : null;
   if (!mgr) return false;
-  // Add Aqua Security rpm repo
-  const repoContent =
-    "[trivy]\\nname=Trivy repository\\n" +
-    "baseurl=https://aquasecurity.github.io/trivy-repo/rpm/releases/$releasever/$basearch/\\n" +
-    "gpgcheck=0\\nenabled=1";
+
+  // CWE-78: avoid bash -c shell construction — write repo file to a temp path
+  // then move it into place with sudo (no shell, no injection surface).
+  const repoLines = [
+    "[trivy]",
+    "name=Trivy repository",
+    "baseurl=https://aquasecurity.github.io/trivy-repo/rpm/releases/$releasever/$basearch/",
+    "gpgcheck=0",
+    "enabled=1"
+  ];
+  const tmpRepoFile = join(tmpdir(), `trivy-${Date.now()}.repo`);
   print(`     Adding Aqua Security yum/dnf repository...`);
-  run("bash", ["-c", `echo -e "${repoContent}" | sudo tee /etc/yum.repos.d/trivy.repo`]);
+  try {
+    writeFileSync(tmpRepoFile, repoLines.join("\n") + "\n", "utf-8");
+  } catch {
+    return false;
+  }
+  run("sudo", ["mv", tmpRepoFile, "/etc/yum.repos.d/trivy.repo"]);
+
   print(`     sudo ${mgr} install -y trivy`);
   return run("sudo", [mgr, "install", "-y", "trivy"]);
 }
@@ -634,6 +702,7 @@ export async function runOnboarding(): Promise<OnboardingResult | null> {
     print("");
     print("   This applies the right compliance controls automatically,");
     print("   such as PCI DSS for payment cards or HIPAA for health data.");
+    print("   You can select multiple options (e.g. 1 2 or 1,2).");
     print("");
     for (const d of SENSITIVE_DATA_OPTIONS) {
       print(`   ${d.key}.  ${d.label}`);

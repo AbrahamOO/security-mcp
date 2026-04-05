@@ -9,7 +9,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { tmpdir } from "node:os";
 import { z } from "zod";
-import { Finding, FindingSeverity } from "../result.js";
+import { Finding, FindingSeverity, sanitizeErrorMessage } from "../result.js";
 import { SurfaceScope } from "../catalog.js";
 
 const execFileAsync = promisify(execFile);
@@ -587,7 +587,7 @@ export async function runScanners(opts: {
     if (res.status === "fulfilled") {
       allFindings.push(...res.value);
     } else {
-      console.warn(`[scanners] Scanner ${taskId} failed: ${String(res.reason)}`);
+      console.warn(`[scanners] Scanner ${taskId} failed: ${sanitizeErrorMessage(String(res.reason))}`);
       allFindings.push({
         id: "SCANNER_EXECUTION_ERROR",
         title: `Security scanner '${taskId}' failed unexpectedly`,

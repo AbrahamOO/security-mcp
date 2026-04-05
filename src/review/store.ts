@@ -286,7 +286,19 @@ export async function createReviewRun(opts: {
   return run;
 }
 
+// CWE-22: validate UUID format before using runId as a filename component.
+// Defense-in-depth — the MCP tool schemas also validate, but the function must
+// be safe regardless of call site.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function assertRunId(runId: string): void {
+  if (!runId || !UUID_RE.test(runId)) {
+    throw new Error(`Invalid runId "${runId}" — must be a UUID`);
+  }
+}
+
 export async function readReviewRun(runId: string): Promise<ReviewRun> {
+  assertRunId(runId);
   const raw = await readFile(reviewPath(runId), "utf-8");
   return JSON.parse(raw) as ReviewRun;
 }

@@ -2,7 +2,7 @@
  * Data Loss Prevention checks.
  * Detects PII leaking into logs, APIs, and error responses.
  */
-import { Finding } from "../result.js";
+import { Finding, sanitizeErrorMessage } from "../result.js";
 import { searchRepo } from "../../repo/search.js";
 
 export async function checkDlp(_opts: { changedFiles: string[] }): Promise<Finding[]> {
@@ -159,7 +159,7 @@ export async function checkDlp(_opts: { changedFiles: string[] }): Promise<Findi
 			}
 		}
 	} catch (err) {
-		console.warn("[checkDlp] Internal error:", err instanceof Error ? err.message : String(err));
+		console.warn("[checkDlp] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));
 	}
 
 	return findings;

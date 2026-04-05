@@ -21,7 +21,7 @@ import {
   writeFile,
   readdir
 } from "node:fs/promises";
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, renameSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { z } from "zod";
@@ -483,9 +483,24 @@ export async function ensureSkill(args: z.infer<typeof EnsureSkillSchema>): Prom
     throw new Error(`Failed to download SKILL.md for "${skillName}" from ${entry.url}`);
   }
 
-  // Write skill
+  // CWE-494: verify SHA-256 of downloaded skill content against manifest hash
+  const actualHash = createHash("sha256").update(content, "utf-8").digest("hex");
+  if ((entry as { sha256?: string }).sha256) {
+    const expectedHash = (entry as { sha256?: string }).sha256!;
+    if (actualHash !== expectedHash) {
+      throw new Error(
+        `Integrity check failed for skill "${skillName}": expected ${expectedHash}, got ${actualHash}`
+      );
+    }
+  } else {
+    console.warn(`[ensureSkill] No sha256 in manifest for "${skillName}" — skipping integrity check. Consider pinning the manifest to a commit SHA.`);
+  }
+
+  // Write skill atomically (write to temp, then rename) to prevent partial-write corruption
   mkdirSync(dirname(skillPath), { recursive: true });
-  writeFileSync(skillPath, content, "utf-8");
+  const tmpSkillPath = `${skillPath}.tmp.${process.pid}`;
+  writeFileSync(tmpSkillPath, content, "utf-8");
+  renameSync(tmpSkillPath, skillPath);
 
   // Update version cache
   versions[skillName] = { version: entry.version, installedAt: new Date().toISOString(), path: skillPath };
@@ -563,7 +578,14 @@ export async function writeAgentMemory(args: z.infer<typeof WriteAgentMemorySche
 
   if (data.intel !== undefined) {
     const p = join(dir, "intel.json");
-    writeFileSync(p, JSON.stringify({ ...data.intel as object, fetchedAt: new Date().toISOString() }, null, 2) + "\n", "utf-8");
+    // CWE-1321: filter prototype-pollution keys before spread to prevent __proto__ injection
+    const PROTO_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+    const intelObj = (typeof data.intel === "object" && data.intel !== null)
+      ? Object.fromEntries(
+          Object.entries(data.intel as Record<string, unknown>).filter(([k]) => !PROTO_KEYS.has(k))
+        )
+      : {};
+    writeFileSync(p, JSON.stringify({ ...intelObj, fetchedAt: new Date().toISOString() }, null, 2) + "\n", "utf-8");
     written.push(p);
   }
 

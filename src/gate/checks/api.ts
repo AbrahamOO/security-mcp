@@ -1,5 +1,7 @@
-import { Finding } from "../result.js";
+import { Finding, sanitizeErrorMessage } from "../result.js";
 import { searchRepo } from "../../repo/search.js";
+import fg from "fast-glob";
+import { readFileSafe } from "../../repo/fs.js";
 
 export async function checkApi(_: { changedFiles: string[] }): Promise<Finding[]> {
 	const findings: Finding[] = [];
@@ -144,6 +146,111 @@ export async function checkApi(_: { changedFiles: string[] }): Promise<Finding[]
 				"Validate paths against an allowlist of permitted paths; use a content-addressed storage key instead."
 			]
 		});
+	}
+
+	// 5. API schema drift (OpenAPI/Swagger spec vs code routes)
+	findings.push(...await checkApiSchemaDrift());
+
+	return findings;
+}
+
+function parseDeclaredPaths(specContent: string): Set<string> {
+	const paths = new Set<string>();
+	for (const match of specContent.matchAll(/^\s{0,4}(\/[a-zA-Z0-9/{}_-]+)\s*:/gm)) {
+		paths.add(match[1]);
+	}
+	return paths;
+}
+
+function findShadowRoutes(
+	codeRouteHits: { file: string; line: number; preview: string }[],
+	declaredPaths: Set<string>
+): string[] {
+	const shadows: string[] = [];
+	for (const hit of codeRouteHits) {
+		const routeMatch = /['"](\/?[a-zA-Z0-9/{}_-]+)['"]/.exec(hit.preview);
+		if (!routeMatch) continue;
+		const route = routeMatch[1].startsWith("/") ? routeMatch[1] : `/${routeMatch[1]}`;
+		const normalised = route.replaceAll(/:([a-zA-Z_]+)/g, "{$1}");
+		if (!declaredPaths.has(normalised) && !declaredPaths.has(route)) {
+			shadows.push(`${hit.file}:${hit.line} — ${route}`);
+		}
+	}
+	return shadows;
+}
+
+async function checkApiSchemaDrift(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+
+	try {
+		const specFiles = await fg(
+			[
+				"openapi.{yaml,yml,json}",
+				"swagger.{yaml,yml,json}",
+				"**/openapi.{yaml,yml,json}",
+				"**/swagger.{yaml,yml,json}",
+				"**/api-spec.{yaml,yml,json}",
+				"**/openapi/**/*.{yaml,yml,json}"
+			],
+			{ ignore: ["**/node_modules/**", "**/dist/**", "**/.git/**"], dot: true }
+		);
+
+		const codeRouteHits = await searchRepo({
+			query: String.raw`(?:router|app|fastify|server)\.(?:get|post|put|delete|patch)\s*\(\s*['"](/[^'"]+)['"]`,
+			isRegex: true,
+			maxMatches: 300
+		});
+
+		if (specFiles.length === 0) {
+			if (codeRouteHits.length > 0) {
+				findings.push({
+					id: "API_NO_OPENAPI_SPEC",
+					title: "API routes detected but no OpenAPI/Swagger specification found",
+					severity: "MEDIUM",
+					evidence: codeRouteHits.slice(0, 10).map((m) => `${m.file}:${m.line}:${m.preview}`),
+					requiredActions: [
+						"Create an OpenAPI 3.x specification (openapi.yaml) that documents all API routes.",
+						"An API contract enables automated schema validation, client SDK generation, and drift detection.",
+						"Use tools like `zod-to-openapi` or `tsoa` to generate the spec from existing TypeScript code."
+					]
+				});
+			}
+			return findings;
+		}
+
+		const specContent = await readFileSafe(specFiles[0]);
+		const declaredPaths = parseDeclaredPaths(specContent);
+		const shadowRoutes = findShadowRoutes(codeRouteHits, declaredPaths);
+
+		if (shadowRoutes.length > 0) {
+			findings.push({
+				id: "API_SHADOW_ENDPOINT",
+				title: `${shadowRoutes.length} API route(s) in code not declared in OpenAPI spec — shadow endpoints`,
+				severity: "HIGH",
+				evidence: [...new Set(shadowRoutes)].slice(0, 15),
+				requiredActions: [
+					"Add all undocumented routes to the OpenAPI specification.",
+					"Shadow endpoints bypass API gateway policies, rate limiting, and schema validation.",
+					"Automate spec generation (tsoa, zod-to-openapi) to prevent drift from recurring."
+				]
+			});
+		}
+
+		if (/type:\s+object/.test(specContent) && !/properties:/.test(specContent)) {
+			findings.push({
+				id: "API_PERMISSIVE_SCHEMA",
+				title: "OpenAPI spec contains `type: object` without `properties` — accepts any payload shape",
+				severity: "MEDIUM",
+				files: [specFiles[0]],
+				requiredActions: [
+					"Define explicit `properties` for all object schemas in the OpenAPI spec.",
+					"Permissive schemas allow attackers to inject unexpected fields (mass assignment, prototype pollution).",
+					"Set `additionalProperties: false` on request body schemas to enforce strict validation."
+				]
+			});
+		}
+	} catch (err) {
+		console.warn("[checkApiSchemaDrift] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));
 	}
 
 	return findings;

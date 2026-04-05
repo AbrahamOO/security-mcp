@@ -26,34 +26,37 @@ function isPrivateIp(ip: string): boolean {
   return PRIVATE_CIDR_PATTERNS.some((re) => re.test(ip));
 }
 
-async function isSafeUrl(rawUrl: string): Promise<boolean> {
+// CWE-367: return the resolved IP alongside safe/unsafe so callers can connect
+// directly to the IP (eliminating the TOCTOU race between DNS check and actual request).
+async function isSafeUrl(rawUrl: string): Promise<{ safe: boolean; resolvedIp?: string }> {
   let parsed: URL;
   try {
     parsed = new URL(rawUrl);
   } catch {
-    return false;
+    return { safe: false };
   }
-  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false;
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return { safe: false };
   const host = parsed.hostname;
-  // Block bare IP references
+  // Block bare IP references — "resolved" IP is the hostname itself
   if (net.isIP(host)) {
-    return !isPrivateIp(host);
+    return isPrivateIp(host) ? { safe: false } : { safe: true, resolvedIp: host };
   }
   // Block known metadata hostnames
   if (host === "localhost" || host === "metadata.google.internal" ||
       host === "169.254.169.254" || host.endsWith(".internal")) {
-    return false;
+    return { safe: false };
   }
-  // Resolve DNS and check all resolved IPs
+  // Resolve DNS once — all returned IPs must be public; return the first for direct connection
   try {
     const resolved = await dns.lookup(host, { all: true });
     for (const { address } of resolved) {
-      if (isPrivateIp(address)) return false;
+      if (isPrivateIp(address)) return { safe: false };
     }
+    const firstIp = resolved[0]?.address;
+    return firstIp ? { safe: true, resolvedIp: firstIp } : { safe: false };
   } catch {
-    return false; // can't resolve → skip
+    return { safe: false }; // can't resolve → skip
   }
-  return true;
 }
 
 const REQUIRED_HEADERS: Array<{
@@ -104,18 +107,21 @@ const WEAK_CIPHERS = [
 
 async function fetchHeaders(
   url: string,
-  timeoutMs: number
+  timeoutMs: number,
+  resolvedIp?: string  // CWE-367: pass pre-validated IP to eliminate DNS TOCTOU race
 ): Promise<Record<string, string> | null> {
   return new Promise((resolve) => {
     const timer = setTimeout(() => resolve(null), timeoutMs);
     try {
       const parsedUrl = new URL(url);
       const options: https.RequestOptions = {
-        hostname: parsedUrl.hostname,
+        // Connect to the already-validated IP directly; use the original hostname for SNI
+        hostname: resolvedIp ?? parsedUrl.hostname,
+        servername: resolvedIp ? parsedUrl.hostname : undefined,
         port: parsedUrl.port || 443,
         path: parsedUrl.pathname || "/",
         method: "HEAD",
-        rejectUnauthorized: false, // we verify cert separately
+        rejectUnauthorized: true, // CWE-295: always validate TLS certificates
         timeout: timeoutMs
       };
       const req = https.request(options, (res) => {
@@ -208,15 +214,24 @@ export async function runRuntimeChecks(opts: {
   // Determine target URL
   const stagingUrl = process.env["SECURITY_STAGING_URL"];
   const rawTargets = stagingUrl ? [stagingUrl, ...opts.targets] : opts.targets;
-  // CWE-918: resolve hostnames and reject private/metadata IPs before making requests
-  const safeChecks = await Promise.all(rawTargets.map(async (t) => ({ t, safe: await isSafeUrl(t) })));
-  const uniqueTargets = [...new Set(safeChecks.filter((x) => x.safe).map((x) => x.t))];
+  // CWE-918 / CWE-367: resolve hostnames once, reject private/metadata IPs, and
+  // carry the resolved IP forward so fetchHeaders connects to the validated IP
+  // directly — eliminating the TOCTOU race between DNS check and actual request.
+  const safeChecks = await Promise.all(
+    rawTargets.map(async (t) => ({ t, ...(await isSafeUrl(t)) }))
+  );
+  // Deduplicate by URL, keeping the first resolved IP for each unique URL
+  const seen = new Map<string, { t: string; resolvedIp?: string }>();
+  for (const c of safeChecks) {
+    if (c.safe && !seen.has(c.t)) seen.set(c.t, c);
+  }
+  const checkedTargets = [...seen.values()];
 
-  if (uniqueTargets.length === 0) return findings;
+  if (checkedTargets.length === 0) return findings;
 
   const timeoutMs = 15_000;
 
-  for (const targetUrl of uniqueTargets) {
+  for (const { t: targetUrl, resolvedIp } of checkedTargets) {
     let parsedUrl: URL;
     try {
       parsedUrl = new URL(targetUrl);
@@ -225,7 +240,7 @@ export async function runRuntimeChecks(opts: {
     }
 
     // --- HTTP Header checks ---
-    const headers = await fetchHeaders(targetUrl, timeoutMs);
+    const headers = await fetchHeaders(targetUrl, timeoutMs, resolvedIp);
 
     if (headers !== null) {
       for (const headerDef of REQUIRED_HEADERS) {

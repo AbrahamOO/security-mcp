@@ -52,7 +52,57 @@ export type AgentName =
   | "pentest-social"
   | "compliance-grc"
   | "evidence-collector"
-  | "compliance-gap-analyst";
+  | "compliance-gap-analyst"
+  // Phase 2 P0 — zero-coverage gap agents
+  | "incident-responder"
+  | "kill-switch-engineer"
+  | "credential-stuffing-specialist"
+  | "capec-code-mapper"
+  | "waf-rule-lifecycle-agent"
+  | "dos-resilience-tester"
+  | "ai-model-supply-chain-agent"
+  | "iam-privesc-graph-builder"
+  | "device-integrity-aggregator"
+  | "bot-detection-specialist"
+  // Phase 3a — Auth & Identity micro-specialists
+  | "trike-risk-modeler"
+  | "csf2-governance-mapper"
+  | "anti-replay-tester"
+  | "oauth-pkce-specialist"
+  | "step-up-auth-enforcer"
+  | "session-timeout-tester"
+  | "token-reuse-detector"
+  | "samm-assessor"
+  | "csa-ccm-mapper"
+  // Phase 3b — Input Validation + Mobile
+  | "unicode-homograph-tester"
+  | "file-upload-attacker"
+  | "multipart-abuse-tester"
+  | "parser-exhaustion-tester"
+  | "json-ambiguity-tester"
+  | "cert-pin-rotation-specialist"
+  | "mobile-binary-hardener"
+  | "mobile-webview-auditor"
+  | "deep-link-fuzzer"
+  // Phase 3c — Cloud + Supply Chain + Observability
+  | "egress-policy-enforcer"
+  | "advanced-dos-tester"
+  | "binary-auth-validator"
+  | "secrets-mask-bypass-tester"
+  | "git-history-secret-scanner"
+  | "slsa-provenance-enforcer"
+  | "registry-mirror-enforcer"
+  | "webhook-security-tester"
+  | "rotation-validation-agent"
+  | "compliance-lifecycle-tracker"
+  | "ssrf-detection-validator"
+  // Phase 4 — Beyond-policy P2 agents
+  | "linddun-privacy-analyst"
+  | "dread-scorer"
+  | "threat-infrastructure-analyst"
+  | "slsa-level3-enforcer"
+  | "quantum-migration-planner"
+  | "zero-trust-architect";
 
 export type AgentStatus = "pending" | "running" | "completed" | "completed_partial" | "failed";
 

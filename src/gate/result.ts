@@ -1,3 +1,14 @@
+import type { BaselineDiff } from "./baseline.js";
+export type { BaselineDiff };
+
+// CWE-209: strip absolute file system paths from error messages before logging
+// to prevent leaking internal directory structure to observers of stderr/stdout.
+export function sanitizeErrorMessage(msg: string): string {
+  return msg
+    .replace(/\/[^\s:'"]+/g, "[path]")         // Unix: /foo/bar/baz
+    .replace(/[A-Za-z]:\\[^\s:'"]+/g, "[path]"); // Windows: C:\Users\...
+}
+
 export type GateStatus = "PASS" | "FAIL";
 
 export type FindingSeverity = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
@@ -9,6 +20,8 @@ export type Finding = {
   evidence?: string[];
   files?: string[];
   requiredActions: string[];
+  sla?: "24h" | "7d" | "30d" | "90d";
+  slaAssignedAt?: string;
 };
 
 export type SuppressedFinding = {
@@ -60,4 +73,5 @@ export type GateResult = {
     configured: string[];
     missing: string[];
   };
+  baselineDiff?: BaselineDiff;
 };

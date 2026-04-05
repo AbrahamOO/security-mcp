@@ -2,8 +2,30 @@
  * Weak cryptography detection.
  * Mapped to NIST SP 800-131A Rev 2.
  */
-import { Finding } from "../result.js";
+import { Finding, sanitizeErrorMessage } from "../result.js";
 import { searchRepo } from "../../repo/search.js";
+
+function checkPbkdf2Iterations(hits: { file: string; line: number; preview: string }[]): import("../result.js").Finding | null {
+	for (const hit of hits) {
+		const iterMatch = /pbkdf2(?:Sync)?\s*\([^)]*?,\s*[^,]+,\s*(\d+)/.exec(hit.preview);
+		if (!iterMatch) continue;
+		const iters = Number.parseInt(iterMatch[1], 10);
+		if (iters < 600000) {
+			return {
+				id: "CRYPTO_LOW_PBKDF2_ITERATIONS",
+				title: `PBKDF2 iteration count too low (${iters} < 600,000)`,
+				severity: "HIGH",
+				evidence: [`${hit.file}:${hit.line}:${hit.preview}`],
+				files: [hit.file],
+				requiredActions: [
+					"Use ≥ 600,000 iterations for PBKDF2-SHA256 (OWASP 2023 recommendation).",
+					"Prefer bcrypt (cost ≥ 12) or Argon2id instead."
+				]
+			};
+		}
+	}
+	return null;
+}
 
 export async function checkCrypto(_opts: { changedFiles: string[] }): Promise<Finding[]> {
 	const findings: Finding[] = [];
@@ -97,27 +119,8 @@ export async function checkCrypto(_opts: { changedFiles: string[] }): Promise<Fi
 			isRegex: true,
 			maxMatches: 200
 		});
-		// Check for numeric iteration counts in the context
-		for (const hit of pbkdf2Hits) {
-			const iterMatch = /pbkdf2(?:Sync)?\s*\([^)]*?,\s*[^,]+,\s*(\d+)/.exec(hit.preview);
-			if (iterMatch) {
-				const iters = parseInt(iterMatch[1], 10);
-				if (iters < 600000) {
-					findings.push({
-						id: "CRYPTO_LOW_PBKDF2_ITERATIONS",
-						title: `PBKDF2 iteration count too low (${iters} < 600,000)`,
-						severity: "HIGH",
-						evidence: [`${hit.file}:${hit.line}:${hit.preview}`],
-						files: [hit.file],
-						requiredActions: [
-							"Use ≥ 600,000 iterations for PBKDF2-SHA256 (OWASP 2023 recommendation).",
-							"Prefer bcrypt (cost ≥ 12) or Argon2id instead."
-						]
-					});
-					break;
-				}
-			}
-		}
+		const pbkdf2Finding = checkPbkdf2Iterations(pbkdf2Hits);
+		if (pbkdf2Finding) findings.push(pbkdf2Finding);
 
 		// 6. Hardcoded IV/nonce
 		const hardcodedIvHits = await searchRepo({
@@ -158,8 +161,70 @@ export async function checkCrypto(_opts: { changedFiles: string[] }): Promise<Fi
 				]
 			});
 		}
+		// 8. Post-quantum readiness: RSA-1024
+		const rsa1024Hits = await searchRepo({
+			query: String.raw`modulusLength\s*:\s*1024|generateKeyPair\s*\(\s*['"]rsa['"][^)]*1024`,
+			isRegex: true,
+			maxMatches: 200
+		});
+		if (rsa1024Hits.length > 0) {
+			findings.push({
+				id: "CRYPTO_RSA_1024",
+				title: "RSA-1024 key detected — cryptographically broken",
+				severity: "CRITICAL",
+				evidence: rsa1024Hits.slice(0, 10).map((m) => `${m.file}:${m.line}:${m.preview}`),
+				files: [...new Set(rsa1024Hits.slice(0, 10).map((m) => m.file))],
+				requiredActions: [
+					"Upgrade to RSA-4096 minimum, or migrate to ML-DSA (FIPS 204) / SLH-DSA (FIPS 205) for new key material.",
+					"RSA-1024 is fully broken — NIST deprecated it in 2013 (SP 800-131A).",
+					"For TLS certificates, reissue with RSA-4096 or ECDSA P-384 immediately."
+				]
+			});
+		}
+
+		// 9. Post-quantum readiness: RSA-2048 warning
+		const rsa2048Hits = await searchRepo({
+			query: String.raw`modulusLength\s*:\s*2048|generateKeyPair\s*\(\s*['"]rsa['"][^)]*2048`,
+			isRegex: true,
+			maxMatches: 200
+		});
+		if (rsa2048Hits.length > 0) {
+			findings.push({
+				id: "CRYPTO_RSA_2048_PQC",
+				title: "RSA-2048 detected — quantum-vulnerable; plan migration to post-quantum algorithms",
+				severity: "MEDIUM",
+				evidence: rsa2048Hits.slice(0, 10).map((m) => `${m.file}:${m.line}:${m.preview}`),
+				files: [...new Set(rsa2048Hits.slice(0, 10).map((m) => m.file))],
+				requiredActions: [
+					"RSA-2048 is currently secure against classical computers but will be broken by sufficiently large quantum computers.",
+					"NIST finalized post-quantum standards in 2024: ML-KEM (FIPS 203), ML-DSA (FIPS 204), SLH-DSA (FIPS 205).",
+					"For long-lived keys or data requiring 10+ year secrecy: migrate to ML-DSA or use a hybrid classical+PQC scheme."
+				]
+			});
+		}
+
+		// 10. Post-quantum readiness: ECDSA P-256 (informational)
+		const p256Hits = await searchRepo({
+			query: String.raw`prime256v1|secp256r1|namedCurve\s*:\s*['"]P-256['"]|namedCurve\s*:\s*['"]p256['"]`,
+			isRegex: true,
+			maxMatches: 200
+		});
+		if (p256Hits.length > 0) {
+			findings.push({
+				id: "CRYPTO_ECDSA_P256_PQC",
+				title: "ECDSA P-256 detected — quantum-vulnerable in the long term",
+				severity: "LOW",
+				evidence: p256Hits.slice(0, 10).map((m) => `${m.file}:${m.line}:${m.preview}`),
+				files: [...new Set(p256Hits.slice(0, 10).map((m) => m.file))],
+				requiredActions: [
+					"P-256 (secp256r1) is secure today but vulnerable to Shor's algorithm on a sufficiently large quantum computer.",
+					"NIST post-quantum signature standards: ML-DSA (FIPS 204) and SLH-DSA (FIPS 205) are the recommended replacements.",
+					"For new systems handling sensitive long-lived data, evaluate hybrid ECDSA+ML-DSA or pure ML-DSA."
+				]
+			});
+		}
 	} catch (err) {
-		console.warn("[checkCrypto] Internal error:", err instanceof Error ? err.message : String(err));
+		console.warn("[checkCrypto] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));
 	}
 
 	return findings;

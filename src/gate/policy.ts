@@ -1,6 +1,6 @@
 import { z } from "zod";
 import fg from "fast-glob";
-import { GateResult, Finding, ControlCoverage } from "./result.js";
+import { GateResult, Finding, FindingSeverity, ControlCoverage } from "./result.js";
 import { getChangedFiles } from "./diff.js";
 import { detectSurfaces } from "./findings.js";
 import { checkRequiredArtifacts } from "./checks/required-artifacts.js";
@@ -26,6 +26,10 @@ import { runSbomChecks } from "./checks/sbom.js";
 import { runPlaybookChecks } from "./checks/playbook.js";
 import { runAiRedteamChecks } from "./checks/ai-redteam.js";
 import { runRuntimeChecks } from "./checks/runtime.js";
+import { runCiPipelineChecks } from "./checks/ci-pipeline.js";
+import { runNucleiChecks } from "./checks/nuclei.js";
+import { getCommitHash, loadBaseline, saveBaseline, compareBaseline } from "./baseline.js";
+import { randomUUID } from "node:crypto";
 
 const PolicySchema = z.object({
   name: z.string(),
@@ -138,6 +142,18 @@ function classifyChangeType(files: string[]): ChangeType {
   return "general";
 }
 
+const SLA_MAP: Record<FindingSeverity, Finding["sla"]> = {
+  CRITICAL: "24h",
+  HIGH: "7d",
+  MEDIUM: "30d",
+  LOW: "90d"
+};
+
+function assignRiskSlas(findings: Finding[]): Finding[] {
+  const now = new Date().toISOString();
+  return findings.map((f) => ({ ...f, sla: SLA_MAP[f.severity], slaAssignedAt: now }));
+}
+
 export async function runPrGate(opts: {
   baseRef?: string;
   headRef?: string;
@@ -145,7 +161,11 @@ export async function runPrGate(opts: {
   mode?: GateMode;
   targets?: string[];
 }): Promise<GateResult> {
-  const policy = await loadPolicy(opts.policyPath);
+  const [policy, commitHash, previousBaseline] = await Promise.all([
+    loadPolicy(opts.policyPath),
+    getCommitHash(),
+    loadBaseline()
+  ]);
   const mode = opts.mode ?? "recent_changes";
   const targets = normalizeTargets(opts.targets);
 
@@ -191,7 +211,9 @@ export async function runPrGate(opts: {
       runSbomChecks({ changedFiles, targets }),
       runPlaybookChecks({ changedFiles, surfaces }),
       surfaces.ai ? runAiRedteamChecks({ changedFiles }) : Promise.resolve([]),
-      process.env["SECURITY_STAGING_URL"] ? runRuntimeChecks({ targets, changedFiles }) : Promise.resolve([])
+      process.env["SECURITY_STAGING_URL"] ? runRuntimeChecks({ targets, changedFiles }) : Promise.resolve([]),
+      runCiPipelineChecks({ changedFiles }),
+      process.env["SECURITY_STAGING_URL"] ? runNucleiChecks({ changedFiles }) : Promise.resolve([])
     ]);
 
     rawFindings = [];
@@ -203,6 +225,8 @@ export async function runPrGate(opts: {
       }
     }
   }
+
+  rawFindings = assignRiskSlas(rawFindings);
 
   const toolingCoverage: ControlCoverage[] = catalog.controls
     .filter((control) => control.automation === "tooling" && controlApplies(control, surfaces))
@@ -262,11 +286,33 @@ export async function runPrGate(opts: {
   const confidenceScore = Math.max(0, Math.min(100, Math.round((automatedCoverage * 0.7) + (scannerScore * 0.3))));
   const missingControls = relevantControls.filter((control) => control.status === "missing").length;
 
+  // Baseline regression detection: compare current run against previous baseline
+  let baselineDiff: ReturnType<typeof compareBaseline> | undefined;
+  if (previousBaseline) {
+    baselineDiff = compareBaseline(
+      { findings: effectiveFindings, controlCoverage: controlCoverageWithExceptions, confidence: { automatedCoverage, score: 0, missingControls: 0, scannerReadiness: 0, summary: "" }, status: "PASS", policyVersion: "", evaluatedAt: "", scope: { changedFiles, surfaces } },
+      previousBaseline
+    );
+    if (baselineDiff.regressions.length > 0) {
+      const regressionFindings: Finding[] = baselineDiff.regressions.map((r) => ({
+        id: "BASELINE_REGRESSION",
+        title: `Security regression: control "${r.controlId}" was previously satisfied but is now missing`,
+        severity: "HIGH" as const,
+        evidence: [`Control ${r.controlId}: "satisfied" → "missing" since last gate run`],
+        requiredActions: [
+          `Restore control "${r.controlId}" to a satisfied state.`,
+          "Investigate what change caused this regression and revert or remediate."
+        ]
+      }));
+      effectiveFindings = [...regressionFindings, ...effectiveFindings];
+    }
+  }
+
   const status = effectiveFindings.some((f) => f.severity === "HIGH" || f.severity === "CRITICAL")
     ? "FAIL"
     : "PASS";
 
-  return {
+  const result: GateResult = {
     status,
     policyVersion: policy.version,
     evaluatedAt: new Date().toISOString(),
@@ -285,6 +331,12 @@ export async function runPrGate(opts: {
       riskAcceptedControls,
       scannerReadiness: scannerScore,
       summary: `Automated coverage ${automatedCoverage}%, scanner readiness ${scannerScore}%, missing controls ${missingControls}, risk-accepted controls ${riskAcceptedControls}. Change type: ${changeType}.`
-    }
+    },
+    baselineDiff
   };
+
+  // Persist as new baseline — fire-and-forget, never blocks the gate result
+  saveBaseline(randomUUID(), result, commitHash).catch(() => { /* best-effort */ });
+
+  return result;
 }

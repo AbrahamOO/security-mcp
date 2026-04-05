@@ -1,7 +1,7 @@
 /**
  * Database security checks.
  */
-import { Finding } from "../result.js";
+import { Finding, sanitizeErrorMessage } from "../result.js";
 import { searchRepo } from "../../repo/search.js";
 
 export async function checkDatabase(_opts: { changedFiles: string[] }): Promise<Finding[]> {
@@ -148,7 +148,7 @@ export async function checkDatabase(_opts: { changedFiles: string[] }): Promise<
 			});
 		}
 	} catch (err) {
-		console.warn("[checkDatabase] Internal error:", err instanceof Error ? err.message : String(err));
+		console.warn("[checkDatabase] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));
 	}
 
 	return findings;
