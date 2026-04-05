@@ -470,7 +470,7 @@ function selectModel(
  * Selects the cheapest healthy provider model meeting the capability requirement.
  * Falls back to next-cheapest provider on circuit breaker open.
  */
-export async function getModelForTask(taskType: TaskType, opts?: {
+export async function getModelForTask(taskType: TaskType, _opts?: {
   agentName?: string;
   agentRunId?: string;
 }): Promise<ModelAssignment> {
