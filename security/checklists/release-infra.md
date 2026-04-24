@@ -110,3 +110,20 @@ Use before every infrastructure or IaC production release. All items must be che
 - [ ] Maintenance window confirmed with on-call team
 - [ ] Post-deployment verification checklist completed
 - [ ] Monitoring dashboards updated to include new resources
+
+---
+
+## Cloud-Native Hardening
+
+- [ ] EC2/GCE instances: IMDSv2 enforced (HttpTokens=required) — IMDSv1 disabled
+- [ ] S3/GCS: Block Public Access enabled at the account level — no per-bucket overrides
+- [ ] S3 Object Lock (WORM) enabled on backup buckets — prevents ransomware deletion
+- [ ] GCP: Workload Identity Federation used for GKE service accounts — no key files
+- [ ] Azure: Managed Identity used for all compute — no client secrets in environment
+- [ ] Threat detection enabled: AWS GuardDuty / GCP SCC / Azure Defender for Cloud
+- [ ] Service Control Policies (SCP) or Organization Policy blocking: public S3, disabled CloudTrail, IAM * wildcards
+- [ ] Cross-account IAM trust relationships reviewed — no unexpected external principals
+- [ ] CloudTrail / Cloud Audit log file integrity validation enabled
+- [ ] Container runtime: seccomp profile applied (RuntimeDefault or stricter)
+- [ ] Container runtime: AppArmor or SELinux profile enforced — not unconfined
+- [ ] Kubernetes resource limits (CPU and memory) set on all workloads — no unbounded pods

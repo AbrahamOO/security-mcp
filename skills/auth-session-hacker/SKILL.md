@@ -85,3 +85,29 @@ Write working exploits before fixes.
 - Auth mechanism affected, attack vector, working exploit
 - Fixed code written inline
 - §12 controls covered per finding
+
+---
+
+## §JWT-CHAIN — 5 Specific JWT Attack Techniques
+
+1. **Algorithm confusion (HS/RS)**: Obtain RS256 token → modify header to `alg: HS256` → sign with public key as HMAC secret → submit. Verify server accepts it (CVE-2015-9235 pattern).
+2. **`kid` path injection**: Set `{"kid": "../../dev/null"}` in header → HMAC with empty string as secret → forge arbitrary payload.
+3. **`jku` injection**: Set `{"jku": "https://attacker.example.com/jwks.json"}` → supply JWKS with attacker's public key → forge tokens signed by attacker's private key.
+4. **`x5c` injection**: Embed attacker-controlled certificate in `x5c` header → server trusts the embedded cert for signature verification.
+5. **Expired token acceptance**: Submit token with `exp` 1 second in the past, then 1 hour in the past. Server must reject both.
+**Required fix**: `jwt.verify(token, key, { algorithms: ['RS256'] })` — always pin algorithm.
+
+## §OAUTH-ADVANCED — 5 Specific OAuth Attack Scenarios
+
+1. **PKCE downgrade**: Send `code_challenge_method=plain` — does server accept it? Crack verifier by brute-force (plain method = no hashing).
+2. **Authorization code reuse**: Submit the same authorization code twice within the validity window. Server must reject the second use.
+3. **Token audience bypass**: Take a token issued for Service A. Present it to Service B. Does Service B accept it (missing `aud` validation)?
+4. **Open `redirect_uri` via suffix**: Register `https://example.com` and submit `redirect_uri=https://example.com.evil.com/callback` — does server accept it?
+5. **OAuth SSRF via callback**: Submit `redirect_uri=http://169.254.169.254/latest/meta-data/` — does the server fetch it during the callback flow?
+
+## §SAML — 4 Specific SAML Attack Scenarios
+
+1. **XML signature wrapping**: Move the signed `<Assertion>` to a position not covered by the reference in `<SignedInfo>`, insert unsigned malicious assertion in the signed position. Does the SP accept the unsigned assertion?
+2. **Comment injection**: Username `user@example.com<!--->admin@example.com` — does the XML parser strip the comment and authenticate as admin?
+3. **Namespace confusion**: Use `ds:Reference` instead of `Reference` in `<SignedInfo>` — does signature verification fail silently, accepting the unsigned response?
+4. **Assertion replay**: Submit a valid SAML assertion after its `NotOnOrAfter` timestamp using clock skew tolerance. Does the SP accept it?

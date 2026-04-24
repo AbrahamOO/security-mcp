@@ -60,3 +60,32 @@ Cover §13 input validation and §17 file handling completely.
 - Working exploit payload
 - Fixed code written inline
 - §13/§17 section covered
+
+---
+
+## §POLYGLOT — Single Payload, Multiple Sinks
+
+For every input that reaches multiple contexts, use a polyglot payload to detect multiple vulnerabilities simultaneously:
+
+- `'"><script>{{7*7}}</script><!--` — detects SQL injection + XSS + SSTI in one request
+- `; ls /tmp #` — detects OS command injection + SQL injection (comment-based)
+- `../../../etc/passwd` — detects path traversal in any file context
+
+For each input: run ALL injection classes, not just the obvious one. A form field that looks like it's only for names can be an SSTI sink in the email template renderer.
+
+## §HTTP-SMUGGLING
+
+1. Detect the proxy chain: identify nginx/HAProxy/ELB/Cloudflare versions from response headers and error pages
+2. Test CL.TE: send request with `Content-Length: 6` and `Transfer-Encoding: chunked` with body `0\r\n\r\nX` — observe if backend processes the prefix
+3. Test TE.CL: chunked body that overflows into the next request parsed by the backend
+4. Test H2.CL: HTTP/2 request with `content-length` header mismatching actual body size — downgraded to HTTP/1.1
+5. **Impact**: request queue poisoning lets attacker prepend arbitrary headers/body to the next user's request — steal cookies, hijack session, poison cache
+
+## §PROTO-CHAIN — Prototype Pollution to Privilege Escalation
+
+1. Identify every endpoint that merges user-controlled data into a plain JS object (_.merge, Object.assign, spread)
+2. Send payload: `POST /settings` with body `{"__proto__": {"isAdmin": true}}`
+3. Identify downstream authorization check that reads `options.isAdmin` or `user.role`
+4. Confirm: does a subsequent `GET /admin` return 200 instead of 403?
+5. **Client-side variant**: URL hash → `JSON.parse` → unsafe assign → `if (config.admin)` → privilege escalation in SPA
+6. **Required fix**: use `Object.create(null)` + Zod schema parse before every merge

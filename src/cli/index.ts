@@ -10,9 +10,11 @@
  *   --help
  */
 
-import { createRequire } from "module";
-import { fileURLToPath } from "url";
-import { dirname, resolve } from "path";
+import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { homedir, platform } from "node:os";
 import { runInstall } from "./install.js";
 import { main as runServer } from "../mcp/server.js";
 import { notifyIfUpdateAvailable } from "./update.js";
@@ -60,6 +62,7 @@ COMMANDS
   install          Auto-detect installed editors and write MCP configs
   install-global   Install using the globally installed security-mcp binary
   config           Print MCP config JSON for manual editor setup
+  doctor           Verify the installation is working correctly
 
 OPTIONS (install)
   --claude-code        Write config for Claude Code only
@@ -92,6 +95,9 @@ EXAMPLES
   # Preview install without writing:
   npx -y security-mcp@latest install --dry-run
 
+  # Verify installation health:
+  npx -y security-mcp@latest doctor
+
   # Print JSON config snippet:
   npx -y security-mcp@latest config
   security-mcp config --use-global-binary
@@ -108,11 +114,84 @@ EDITOR CONFIG (add manually if install fails):
 
   Claude Code:  ~/.claude/settings.json
   Cursor:       ~/.cursor/mcp.json  or  .cursor/mcp.json
-  VS Code:      .vscode/mcp.json   (workspace)
+  VS Code:      User settings.json  (via Preferences > Open User Settings JSON)
+  Windsurf:     ~/.windsurf/mcp.json
 
 MORE INFO
   https://github.com/AbrahamOO/security-mcp
 `;
+
+function resolveHome(p: string): string {
+  return p.replace(/^~/, homedir());
+}
+
+function getVsCodeSettingsPath(): string {
+  const os = platform();
+  if (os === "win32") return `${process.env["APPDATA"] ?? ""}\\Code\\User\\settings.json`;
+  if (os === "darwin") return `${homedir()}/Library/Application Support/Code/User/settings.json`;
+  return `${homedir()}/.config/Code/User/settings.json`;
+}
+
+function runDoctor(): void {
+  const checks: Array<{ label: string; ok: boolean; hint?: string }> = [];
+
+  // Node.js version
+  const nodeVer = process.versions.node.split(".").map(Number);
+  const nodeOk = (nodeVer[0] ?? 0) >= 20;
+  checks.push({ label: `Node.js ${process.versions.node}`, ok: nodeOk, hint: nodeOk ? undefined : "Node.js 20+ required. Download from https://nodejs.org" });
+
+  // Claude Code config
+  const claudeConfig = resolveHome("~/.claude/settings.json");
+  const claudeOk = existsSync(claudeConfig);
+  checks.push({ label: `Claude Code config (${claudeConfig})`, ok: claudeOk, hint: claudeOk ? undefined : "Run: npx -y security-mcp@latest install --claude-code" });
+
+  // Claude Code skill
+  const skillPath = resolveHome("~/.claude/skills/senior-security-engineer/SKILL.md");
+  const skillOk = existsSync(skillPath);
+  checks.push({ label: `senior-security-engineer skill (${skillPath})`, ok: skillOk, hint: skillOk ? undefined : "Run: npx -y security-mcp@latest install --claude-code" });
+
+  // Cursor global config
+  const cursorConfig = resolveHome("~/.cursor/mcp.json");
+  if (existsSync(resolveHome("~/.cursor"))) {
+    const cursorOk = existsSync(cursorConfig);
+    checks.push({ label: `Cursor config (${cursorConfig})`, ok: cursorOk, hint: cursorOk ? undefined : "Run: npx -y security-mcp@latest install --cursor" });
+  }
+
+  // VS Code config
+  const vscodePath = getVsCodeSettingsPath();
+  if (existsSync(vscodePath)) {
+    checks.push({ label: `VS Code config (${vscodePath})`, ok: true });
+  }
+
+  // Windsurf config
+  const windsurfConfig = resolveHome("~/.windsurf/mcp.json");
+  if (existsSync(resolveHome("~/.windsurf"))) {
+    const windsurfOk = existsSync(windsurfConfig);
+    checks.push({ label: `Windsurf config (${windsurfConfig})`, ok: windsurfOk, hint: windsurfOk ? undefined : "Run: npx -y security-mcp@latest install" });
+  }
+
+  process.stdout.write(`\nsecurity-mcp doctor v${VERSION}\n`);
+  process.stdout.write("=".repeat(40) + "\n\n");
+
+  let allOk = true;
+  for (const check of checks) {
+    const status = check.ok ? "PASS" : "FAIL";
+    process.stdout.write(`  [${status}] ${check.label}\n`);
+    if (!check.ok) {
+      allOk = false;
+      if (check.hint) process.stdout.write(`         Fix: ${check.hint}\n`);
+    }
+  }
+
+  process.stdout.write("\n");
+  if (allOk) {
+    process.stdout.write("All checks passed. security-mcp is installed correctly.\n");
+    process.stdout.write("Restart your editor if you haven't already, then type /senior-security-engineer.\n\n");
+  } else {
+    process.stdout.write("Some checks failed. Run the suggested fix commands above, then re-run: npx -y security-mcp@latest doctor\n\n");
+    process.exit(1);
+  }
+}
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
@@ -180,7 +259,14 @@ async function main(): Promise<void> {
       process.stdout.write("\nAdd the above to your editor's MCP config file.\n");
       process.stdout.write("  Claude Code:  ~/.claude/settings.json\n");
       process.stdout.write("  Cursor:       ~/.cursor/mcp.json\n");
-      process.stdout.write("  VS Code:      .vscode/mcp.json\n");
+      process.stdout.write("  VS Code:      User settings.json (Preferences > Open User Settings JSON)\n");
+      process.stdout.write("  Windsurf:     ~/.windsurf/mcp.json\n");
+      break;
+    }
+
+    case "doctor":
+    case "verify": {
+      runDoctor();
       break;
     }
 

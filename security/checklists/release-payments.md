@@ -119,3 +119,18 @@ Use before every payment-related production release. All items must be checked o
 - [ ] PCI DSS breach notification timeline understood: 72 hours to card brands
 - [ ] Key contacts documented: payment processor security team, acquiring bank, legal
 - [ ] Tabletop exercise completed for payment breach scenario in last 12 months
+
+---
+
+## Advanced Payment Security
+
+- [ ] CSP is extra-strict on payment pages: no inline scripts, no external origins (Magecart / e-skimming prevention)
+- [ ] Subresource Integrity (SRI) hash on every script and stylesheet loaded on checkout pages
+- [ ] No third-party scripts loaded on checkout domain that are not absolutely required
+- [ ] DOM mutation monitoring active on payment form — alerts on field injection or form hijack
+- [ ] EMV 3DS version 2.2+ used for card-not-present transactions requiring strong authentication
+- [ ] 3DS challenge flow tested end-to-end — decline and friction paths verified correct
+- [ ] Soft-decline handling reviewed — retry logic does not silently downgrade authentication
+- [ ] SAQ (Self-Assessment Questionnaire) type documented and current for this release scope
+- [ ] QSA (Qualified Security Assessor) engagement status documented — next assessment date known
+- [ ] Tokenization confirmed throughout app tier — no raw PAN ever reaches application code

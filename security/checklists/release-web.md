@@ -117,3 +117,31 @@ Use before every web production release. All items must be checked or explicitly
 - [ ] Alerting configured for anomalous patterns (more than 10 auth failures per minute)
 - [ ] Web compromise IR playbook updated if new attack surface introduced
 - [ ] On-call rotation confirmed with contact details current
+
+---
+
+## Advanced Browser Security
+
+- [ ] Cross-Origin-Opener-Policy (COOP): same-origin set — prevents cross-origin window access
+- [ ] Cross-Origin-Embedder-Policy (COEP): require-corp set where SharedArrayBuffer is used
+- [ ] Cross-Origin-Resource-Policy (CORP): same-origin or same-site on all API responses
+- [ ] Trusted Types policy enforced via CSP (require-trusted-types-for 'script') — DOM XSS sinks covered
+- [ ] All `document.write()`, `innerHTML`, `insertAdjacentHTML`, `eval()` DOM sinks audited
+- [ ] `postMessage` handlers validate `event.origin` against an explicit allowlist
+- [ ] Subdomain takeover DNS audit completed — no dangling CNAME records pointing to unprovisioned services
+
+---
+
+## HTTP Request Smuggling Prevention
+
+- [ ] Proxy and origin server normalize conflicting Content-Length / Transfer-Encoding headers
+- [ ] H2C (HTTP/2 cleartext) upgrade disabled at the reverse proxy layer
+- [ ] Backend rejects requests with both CL and TE headers simultaneously
+- [ ] Load balancer / CDN keeps-alive behavior reviewed against origin HTTP version
+
+---
+
+## Regression and Coverage
+
+- [ ] Regression gate: all CRITICAL/HIGH findings from previous security reviews verified still fixed
+- [ ] Coverage-gap disclosure: documented what this scan CANNOT catch (runtime behavior, business logic, third-party libraries)

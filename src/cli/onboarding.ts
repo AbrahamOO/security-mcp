@@ -352,8 +352,14 @@ function pickAsset(
   )?.browser_download_url;
 }
 
+const ALLOWED_BINARY_HOSTS = new Set([
+  "github.com", "objects.githubusercontent.com", "github-releases.githubusercontent.com"
+]);
+
 async function downloadBinary(url: string, dest: string): Promise<boolean> {
   try {
+    const { hostname } = new URL(url);
+    if (!ALLOWED_BINARY_HOSTS.has(hostname)) return false;
     const res = await fetch(url);
     if (!res.ok || !res.body) return false;
     const ws = createWriteStream(dest);

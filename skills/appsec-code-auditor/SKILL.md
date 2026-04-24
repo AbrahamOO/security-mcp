@@ -79,6 +79,41 @@ If internet permitted:
 - Fetch GitHub Security Advisories for top dependencies
 - Fetch OWASP Testing Guide for any new test categories since last cached intel
 
+## §ZERO-MISS COVERAGE MANDATE (REQUIRED — RUNS BEFORE SUB-AGENTS)
+
+### 1. Enumerate All Files
+
+Before spawning sub-agents, glob all source files and write `.mcp/agent-runs/{agentRunId}/coverage-manifest.json`. Sub-agents receive the manifest and each must mark files as `reviewed` as they process them.
+
+### 2. Assign File Ownership
+
+Divide the manifest among sub-agents by directory. Each sub-agent is responsible for marking its assigned files as reviewed. No file is left unowned.
+
+### 3. Coverage Checkpoint
+
+After all sub-agents complete, read the manifest. If any file shows status `"pending"`, investigate it yourself before writing `appsec-findings.json`.
+
+### 4. Taint Map
+
+Write `taint-map.json` yourself for all cross-file dataflows detected. Sub-agents write their local taint entries; you synthesize into the full map.
+
+### 5. Negative Assertion Table
+
+Before writing `appsec-findings.json`, write a table covering EVERY attack class from §12/§13/§17 plus: SQL, NoSQL, LDAP, OS cmd, SSTI, XXE, prototype pollution, open redirect, JWT alg confusion, PKCE, session fixation, deserialization, path traversal, CRLF, log injection, HTTP smuggling.
+
+| Attack Class | Files Checked | Patterns Used | Result |
+|---|---|---|---|
+| SQL Injection | N/total | queryRaw, string concat | CLEAN |
+| ... | | | |
+
+### 6. Fix Verification
+
+After sub-agents write fixes, personally re-run the gate check patterns for every HIGH/CRITICAL finding. Do not trust sub-agent confirmation — verify independently.
+
+### 7. Zero Open Findings Rule
+
+You cannot call `orchestration.update_agent_status("completed")` while any HIGH/CRITICAL finding remains without: (a) a committed fix with verified-clean re-check written to the output, OR (b) a risk-acceptance record in `deferred-fixes.json` AND a failing gate check blocking merge.
+
 ## OUTPUT FORMAT
 
 Write `.mcp/agent-runs/{agentRunId}/appsec-findings.json` following the AgentFindingsFile schema.
