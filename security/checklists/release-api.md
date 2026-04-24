@@ -97,3 +97,42 @@ Use before every API production release. All items must be checked or explicitly
 - [ ] Alerting on anomalous patterns: high error rates, auth failures, unusual IP patterns
 - [ ] API compromise IR playbook current and on-call contacts verified
 - [ ] Distributed tracing enabled — request IDs propagated for incident investigation
+
+---
+
+## Advanced Injection Prevention
+
+- [ ] XML parsers configured to disable external entity processing (XXE — CWE-611)
+- [ ] Deserialization: no node-serialize, eval(), or new Function() on user input (CWE-502)
+- [ ] Server-side templates never compiled from user input (SSTI — CWE-94)
+- [ ] NoSQL queries: user input validated before passing to MongoDB/DynamoDB filters (CWE-943)
+- [ ] HTTP parameter pollution: duplicate query/body params handled deterministically
+- [ ] Object merges: prototype pollution mitigated — Zod schema before any merge (CWE-1321)
+- [ ] YAML parsing uses safe/FAILSAFE schema — not default js-yaml schema (CWE-502)
+- [ ] Log injection prevented — newline characters stripped from user values before logging (CWE-117)
+
+---
+
+## Advanced Auth Checks
+
+- [ ] JWT algorithm pinned to RS256 or ES256 in all jwt.verify() calls (CWE-327)
+- [ ] Session regenerated after login — session fixation prevented (CWE-384)
+- [ ] OAuth state parameter generated and verified for all flows (CWE-352)
+- [ ] PKCE (S256) required for all public clients and SPAs (RFC 7636)
+- [ ] OAuth redirect_uri validated with exact equality — not includes/startsWith (CWE-601)
+- [ ] HTTP verb tampering: PUT/DELETE on read-only resources returns 405, not 200
+- [ ] BOPLA: PATCH/PUT handler rejects field updates beyond the caller's role (e.g., role, ownerId)
+
+---
+
+## API Versioning and Lifecycle
+
+- [ ] Deprecated API versions have a sunset date defined and communicated
+- [ ] Old API versions removed on schedule — no zombie endpoints
+
+---
+
+## Regression and Coverage
+
+- [ ] Regression gate: CRITICAL/HIGH findings from prior reviews verified still fixed
+- [ ] Coverage-gap disclosure: documented what this scan cannot catch (runtime, business logic)

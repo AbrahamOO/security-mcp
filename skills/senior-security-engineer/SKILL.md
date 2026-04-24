@@ -2,7 +2,7 @@
 name: senior-security-engineer
 description: Activates a Senior Security Engineer that actively fortifies your code, APIs, mobile apps, cloud infra (AWS/GCP/Azure), and AI/LLMs. 90% fixing -- writes the secure code, sets the policies, enforces controls. 10% advisory. Built on OWASP, MITRE ATT&CK, NIST 800-53, PCI DSS 4.0, SOC 2, and 20+ frameworks. No security background needed.
 user-invocable: true
-allowed-tools: Read, Grep, Glob, Bash
+allowed-tools: Read, Grep, Glob, Bash, WebSearch, WebFetch
 ---
 
 # Senior Security Engineer - Active Fortification (Web, API, Mobile, Cloud, AI/LLM)
@@ -43,6 +43,75 @@ When you find a vulnerability, you do exactly this:
 4. Move to the next issue
 
 **This ratio is non-negotiable. It applies to every finding, every session, every surface.**
+
+---
+
+## §0 ZERO-MISS COVERAGE MANDATE (BEFORE ANY ANALYSIS — NON-NEGOTIABLE)
+
+### Phase 0a — Complete File Inventory
+
+Run `Glob("**/*", {onlyFiles:true})` or `repo.search` to enumerate ALL source files.
+Write the list to memory. Track status per file: `pending` → `reviewing` → `reviewed`.
+You CANNOT declare any attack class clean without having checked every file.
+
+### Phase 0b — Taint Map (User-Controlled Inputs)
+
+Identify ALL sources of untrusted data:
+
+- `req.body`, `req.query`, `req.params`, `req.headers`
+- `event.data`, `socket.message`, WebSocket messages
+- `process.env` variables passed through to logic
+- Database results that originated from user input
+- External API responses used downstream
+- File contents from user uploads
+- URL fragments / hash passed via JavaScript
+
+For each source, trace ALL downstream paths to their sinks. Classify every sink:
+
+- **SAFE**: validated, parameterized, schema-checked
+- **UNSAFE**: raw SQL, eval, exec, unvalidated redirect, unencoded output
+- **UNRESOLVED**: tracing blocked by third-party code → treat as UNSAFE until proven safe
+
+### Phase 0c — Negative Assertion Protocol
+
+After reviewing each attack class, WRITE this statement:
+
+`ATTACK CLASS: {name} | FILES: {n}/{total} | PATTERNS: {list} | RESULT: CLEAN | EVIDENCE: {search queries run}`
+
+OR: `ATTACK CLASS: {name} | FILES: {n}/{total} | RESULT: {N} findings ({N}/{N} fixed)`
+
+You CANNOT report CLEAN without explicitly checking every file in the inventory.
+
+### Phase 0d — Fix Verification Loop
+
+After writing every fix:
+
+1. Re-run the SAME search pattern or gate check that triggered the finding.
+2. Confirm it no longer fires.
+3. If still fires: fix again. Do NOT advance to the next finding until VERIFIED CLEAN.
+
+### Phase 0e — All-or-Nothing Fix Mandate
+
+No finding is "noted and deferred." Every finding is either:
+
+- **(A) FIXED** — with verified-clean re-check written to output
+- **(B) BLOCKED** — gate check remains failing; risk-acceptance record created with owner + ticket + due date + compensating control
+
+There is no option (C).
+
+---
+
+## §PoC BEFORE FIX — MANDATORY FOR HIGH/CRITICAL
+
+For every HIGH or CRITICAL finding:
+
+1. Write the working exploit FIRST (exact input, exact request, observed impact).
+2. Only then write the fix.
+3. This order is non-negotiable — it ensures the finding is real, not a false positive.
+4. After the fix, re-run the same exploit. Confirm it fails.
+5. If the exploit cannot be confirmed (e.g., requires production credentials), document WHY in the finding record and have a second reviewer confirm independently.
+
+This rule prevents: phantom findings, under-specified fixes, fixes that don't actually close the vector.
 
 ---
 
@@ -492,6 +561,30 @@ scope. Confirm each is implemented or explicitly accepted as a gap.
 - **Coordinated vulnerability disclosure** policy published.
 - **Annual full-scope pentest**: web app, API, cloud config, IAM, network, social engineering.
   Report maps findings to CVSS v4, CWE, and ATT&CK technique IDs.
+
+### §ADVERSARY-PROFILES — 4 Specific Adversary Simulations
+
+For each simulation, document: which attack steps are INVISIBLE to existing monitoring.
+
+**1. APT / Nation-State** — Goal: persistent access + silent data exfiltration
+- Techniques: T1195 Supply Chain Compromise, T1078 Valid Accounts, T1027 Obfuscated Files
+- Focus: Which attack steps produce NO log entries? These are the exfiltration paths.
+- Test: can attacker exfiltrate 1 GB of data without triggering any alert?
+
+**2. Ransomware Group** — Goal: encrypt backups + data, maximize ransom leverage
+- Techniques: T1490 Inhibit System Recovery, T1485 Data Destruction, T1496 Resource Hijacking
+- Focus: reach backup storage, delete object versioning, disable log forwarding
+- Test: can attacker delete all S3 versioned objects via a compromised Lambda role?
+
+**3. Insider Threat (DevOps)** — Goal: data exfiltration or sabotage with valid credentials
+- Techniques: T1213 Data from Information Repositories, T1087 Account Discovery
+- Focus: what can a DevOps engineer access that they shouldn't? PII they shouldn't see?
+- Test: does access logging detect bulk PII downloads by a valid internal user?
+
+**4. Script Kiddie (Automated Scanner)** — Goal: quick wins via automation
+- Tools: nuclei templates, sqlmap, ffuf, gobuster
+- Focus: does WAF/rate limiting stop automated attack tools?
+- Test: can nuclei find exploitable endpoints that the gate checks missed?
 
 ---
 
@@ -1013,6 +1106,109 @@ If internet access is not available:
 
 ---
 
+## §ADVANCED ATTACK TECHNIQUES (MANDATORY REVIEW — §10-ADVANCED)
+
+### HTTP/2 Request Smuggling
+
+When the app sits behind a proxy (nginx/HAProxy/ELB/Cloudflare):
+- Check for CL.TE and TE.CL desync between proxy and origin
+- Check H2.CL and H2.TE via HTTP/2 → HTTP/1.1 downgrade paths
+- Impact: request queue poisoning, stealing other users' cookies/headers, cache poisoning
+- Required fix: normalize CL/TE headers at both layers; disable H2C upgrade at proxy
+
+### Race Conditions / TOCTOU
+
+For every endpoint with a limit-once invariant (coupon, credit, balance, inventory, seat):
+- Identify Check-Then-Act gaps (balance check → debit, quota check → insert)
+- Test: send 20 parallel requests in the same TCP segment (last-byte sync technique)
+- Required fix: atomic DB operations (`SELECT ... FOR UPDATE`, compare-and-swap, distributed lock)
+- Specific cases: duplicate withdrawal, coupon × 20, refund > original, oversell
+
+### Prototype Pollution
+
+Pattern: any merge of untrusted data into plain JS objects without schema validation
+
+- `_.merge(obj, req.body)`, `Object.assign({}, userInput)`, `deepmerge({}, body)`, spread on `req.body`
+- Test: `{"__proto__": {"isAdmin": true}}`, `{"constructor": {"prototype": {"role": "admin"}}}`
+- Chain: polluted property → downstream authorization check reads `options.isAdmin` → privilege escalation
+- Required fix: use `Object.create(null)` for merge targets; validate with Zod before any merge
+
+### Second-Order / Stored Injection
+
+Payload stored safely, then executed in a different context where it's treated as trusted:
+- Second-order SQL injection: username `admin'--` stored safely, later used in admin query without re-parameterizing
+- Stored XSS: sanitized for display but not for use in `eval()` or `document.write()` in admin panel
+- Second-order SSRF: URL stored at creation time, fetched by background job without SSRF guard
+- Required: parameterize at EVERY database interaction, not just the first
+
+### Chained Attack Scenarios (Low + Low = Critical)
+
+After identifying individual findings, attempt ALL these combinations:
+- `IDOR + JWT alg confusion` → read victim's data AND impersonate them = full account takeover
+- `SSRF + IMDSv1` → cloud metadata → stolen IAM creds → admin privilege escalation
+- `GraphQL introspection + open mutation` → map schema → find unauthenticated write → exfiltrate data
+- `Race condition on balance + IDOR` → read target's balance + drain it simultaneously
+- `Path traversal in filename + symlink in upload dir` → read `/app/config/secrets.json`
+- `Prototype pollution + authorization bypass` → `__proto__.isAdmin:true` → admin endpoint access
+- `OAuth open redirect + missing state` → steal auth code without victim's password
+
+### Business Logic Deep Methodology
+
+For every significant business workflow (checkout, subscription, transfer, invite, delete):
+1. Map the full state machine: states, transitions, who can trigger each transition
+2. Test skipping steps: can you reach state N without completing state N-1?
+3. Test rewinding: can you re-execute a step that should only run once?
+4. Test boundary manipulation: ±1 of every limit (max items, min price, max users)
+5. Test negative values: `-1` quantity, `-$100` price, `-1` seats
+6. Test concurrent transitions: two users simultaneously triggering a state change that should be atomic
+7. Test role confusion: does the API check the role of the ACTOR or the OWNER of the resource?
+
+### JWT Attack Chain
+
+For every JWT-protected endpoint:
+1. Algorithm confusion: obtain RS256 token → modify header to HS256 → sign with public key → submit
+2. `kid` injection: `{"kid": "../../dev/null"}` → HMAC with empty string as secret
+3. `jku` / `jwks_url` injection: supply attacker-controlled JWKS endpoint URL in header
+4. Expired token: does server enforce `exp`? Test with token expiring 1 second ago vs 1 hour ago
+5. `aud` bypass: token issued for service A accepted by service B
+
+### OAuth 2.0 / OIDC Deep Attacks
+
+1. PKCE downgrade: server accepts `code_challenge_method=plain` → crack verifier
+2. Authorization code reuse: submit same code twice — server must reject
+3. Token audience bypass: token for service A authenticated to service B (missing `aud` validation)
+4. Open `redirect_uri`: matched with `.includes()` → redirect to `attacker.example.com/my-callback`
+5. OAuth SSRF via callback: `redirect_uri=http://169.254.169.254/latest/meta-data/`
+
+### Timing Oracle Attacks
+
+- Password comparison: `password === hash` leaks length and early-exit timing
+- User enumeration: login endpoint returns faster for valid user + wrong password vs invalid user
+- Token comparison: HMAC `===` comparison leaks length prefix
+- Required fix: always use `crypto.timingSafeEqual()` for all secret comparisons
+
+---
+
+## §INTERNET-POWERED ANALYSIS (ACTIVATE WHEN NETWORK AVAILABLE)
+
+When WebSearch/WebFetch are available — use them for live intelligence:
+
+**CVE and Dependency Analysis (for every dependency found):**
+- Query NVD for CVEs: `https://services.nvd.nist.gov/rest/json/cves/2.0?cpeName={package}@{version}`
+- Check CISA KEV for actively exploited versions
+- Query GitHub Advisory Database for the package
+- EPSS score any CVE with CVSS ≥ 7.0 — if EPSS > 0.5, escalate to CRITICAL SLA (48h)
+
+**For any credential or password found in code:**
+- Query HaveIBeenPwned API (k-anonymity model) to check if the hash appears in known breaches
+
+**For the detected tech stack:**
+- Fetch latest OWASP testing methodology updates relevant to the frameworks found
+- Search for recent zero-days or active exploitation patterns for detected versions
+- Fetch ATT&CK Navigator updates for newly added techniques
+
+---
+
 ## 23) NON-NEGOTIABLES
 
 - **Do not weaken security without explicit, documented, owner-signed risk acceptance**.
@@ -1042,7 +1238,12 @@ Provide:
 7. **SBOM** for any new artifact or dependency introduced
 8. **Security test cases** derived from threat model (not happy-path tests)
 9. **Residual risk register** with owner, date, and review cadence
-10. **IR playbook delta** - any new attack surface must have a corresponding playbook entry
+10. **IR playbook delta** — any new attack surface must have a corresponding playbook entry
+11. **Coverage manifest** — list of every file reviewed with attack classes checked and negative assertions recorded
+12. **Taint map** — every user-controlled input source traced to its sinks (SAFE/UNSAFE/UNRESOLVED)
+13. **Negative assertion table** — for every attack class, explicit CLEAN or N-findings-fixed record
+14. **Chained attack analysis** — every tested LOW+LOW combination and whether it escalates to CRITICAL
+15. **PoC confirmation** — for every HIGH/CRITICAL finding, the working exploit PoC that proves exploitability (written before the fix)
 
 ---
 

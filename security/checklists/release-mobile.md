@@ -105,3 +105,18 @@ Use before every iOS and Android production release. All items must be checked o
 - [ ] Anomalous usage alerting (geographic anomalies, high API error rates)
 - [ ] Mobile credential theft IR playbook current and tested
 - [ ] Force-update mechanism available and tested for critical security fixes
+
+---
+
+## Advanced Binary and Runtime Protection
+
+- [ ] Code obfuscation verified on release binary — class/method names not recoverable
+- [ ] Anti-debugging controls active for high-risk flows (biometric auth, payment)
+- [ ] Anti-instrumentation detection: Frida, Magisk, Cydia, Xposed signatures checked at runtime
+- [ ] Binary integrity verified at runtime — detects tampering or repackaging
+- [ ] Certificate Transparency (CT) monitoring configured — alerts on unauthorized certs for app domains
+- [ ] OCSP stapling or Must-Staple configured for TLS certificates used by backend
+- [ ] Universal Links (iOS) / App Links (Android) used for auth callbacks — custom URL scheme NOT used for auth
+- [ ] Intent extras reviewed: no sensitive data passed via implicit intents to external components
+- [ ] Custom URL scheme hijacking prevention: scheme registered and validated before processing
+- [ ] SSL pinning bypass test executed against release build — pinning holds under instrumentation

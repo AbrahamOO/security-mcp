@@ -56,6 +56,7 @@ function getEditorTargets(opts: InstallOptions): EditorTarget[] {
   const cursorGlobalPath = resolveHome("~/.cursor/mcp.json");
   const cursorLocalPath = ".cursor/mcp.json";
   const vscodePath = getVsCodeSettingsPath();
+  const windsurfPath = resolveHome("~/.windsurf/mcp.json");
 
   const all: EditorTarget[] = [
     {
@@ -81,6 +82,12 @@ function getEditorTargets(opts: InstallOptions): EditorTarget[] {
       configPath: vscodePath,
       type: "vscode-settings",
       detected: existsSync(vscodePath)
+    },
+    {
+      name: "Windsurf",
+      configPath: windsurfPath,
+      type: "mcp-servers-json",
+      detected: existsSync(resolveHome("~/.windsurf"))
     }
   ];
 
@@ -204,10 +211,22 @@ function installSkill(dryRun: boolean): void {
  */
 // CWE-22: only alphanumeric, hyphens, and dots allowed in skill names
 const SAFE_SKILL_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/;
+// CWE-918: allowlist for skill download hosts — no user-controlled URLs reach the network
+const ALLOWED_SKILL_HOSTS = new Set(["raw.githubusercontent.com", "github.com"]);
 
 export async function downloadSkill(skillName: string, url: string, dryRun = false): Promise<void> {
   if (!SAFE_SKILL_NAME_RE.test(skillName)) {
     process.stdout.write(`  [error] invalid skill name "${skillName}" — skipping download\n`);
+    return;
+  }
+  try {
+    const { hostname } = new URL(url);
+    if (!ALLOWED_SKILL_HOSTS.has(hostname)) {
+      process.stdout.write(`  [error] blocked skill download from unauthorized host "${hostname}"\n`);
+      return;
+    }
+  } catch {
+    process.stdout.write(`  [error] invalid skill URL "${url}" — skipping download\n`);
     return;
   }
   const skillDest = resolveHome(`~/.claude/skills/${skillName}/SKILL.md`);
@@ -323,16 +342,23 @@ export async function runInstall(opts: InstallOptions): Promise<void> {
   installPolicy(dryRun);
 
   process.stdout.write("\n");
-  process.stdout.write(
-    dryRun
-      ? "Dry-run complete. Re-run without --dry-run to apply.\n"
-      : "Done! Restart your editor to activate the security-mcp server.\n"
-  );
-  process.stdout.write(
-    `Install mode: ${opts.useGlobalBinary ? "global binary (security-mcp serve)" : "npx (npx -y security-mcp@latest serve)"}\n`
-  );
+  if (dryRun) {
+    process.stdout.write("Dry-run complete. Re-run without --dry-run to apply.\n\n");
+    return;
+  }
+
+  process.stdout.write("Installation complete!\n");
+  process.stdout.write(`Install mode: ${opts.useGlobalBinary ? "global binary (security-mcp serve)" : "npx (npx -y security-mcp@latest serve)"}\n`);
   process.stdout.write("\nNext steps:\n");
-  process.stdout.write("  1. Restart your editor.\n");
-  process.stdout.write('  2. In Claude Code, type /senior-security-engineer to activate the security persona.\n');
-  process.stdout.write('  3. Ask your AI: "Run security.start_review with mode=recent_changes" to begin an auditable review.\n\n');
+  process.stdout.write("  1. Restart your editor (fully quit and reopen — not just reload window).\n");
+  process.stdout.write("  2. Verify the server loaded:\n");
+  process.stdout.write("       Claude Code: type /mcp and confirm security-mcp is listed as Connected.\n");
+  process.stdout.write("       Cursor:       Settings > MCP > security-mcp should show as active.\n");
+  process.stdout.write("  3. Run your first security review:\n");
+  process.stdout.write("       /senior-security-engineer\n");
+  process.stdout.write("     The agent will ask you to choose a scan scope (recent changes / full codebase / specific files).\n");
+  process.stdout.write("  4. For a deep 39-agent audit before a release:\n");
+  process.stdout.write("       /ciso-orchestrator\n");
+  process.stdout.write("\nVerify this install at any time:\n");
+  process.stdout.write("  npx -y security-mcp@latest --version\n\n");
 }

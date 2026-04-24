@@ -115,3 +115,20 @@ Use before every AI or LLM feature production release. All items must be checked
 - [ ] LLM prompt injection IR playbook current and on-call contacts verified
 - [ ] Model data poisoning IR playbook current
 - [ ] Incident response drill completed for AI-specific attack scenarios in last 6 months
+
+---
+
+## Advanced AI Attack Surface
+
+- [ ] System prompt extraction: model cannot be tricked into revealing full system prompt (OWASP LLM01)
+- [ ] Multi-turn attack chains: tested across 5+ conversation turns — instruction hierarchy holds
+- [ ] Context window overflow: very long inputs do not cause instruction truncation or bypass
+- [ ] Multimodal injection: image/audio/document inputs treated as untrusted — no instruction execution
+- [ ] Agent memory / scratchpad treated as untrusted — not elevated to trusted instruction context
+- [ ] Model inversion / training data extraction: probed for PII recitation or memorized secrets
+- [ ] Shadow alignment attacks: tested with gradual instruction-normalization attempts across sessions
+- [ ] Cross-session data leakage: confirmed no user data bleeds across sessions or tenants
+- [ ] Indirect injection via RAG: malicious content in retrieved documents cannot override system prompt
+- [ ] Agent memory poisoning: external data stored in agent memory validated before future use
+- [ ] AML.T0054 (LLM Prompt Injection) mitigations documented and verified in testing
+- [ ] AML.T0057 (Craft Adversarial Data) rate limits and content filtering active and tested

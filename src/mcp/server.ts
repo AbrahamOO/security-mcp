@@ -146,7 +146,19 @@ tool(
       headRef: headRef ?? "HEAD",
       requiredSteps: run.requiredSteps,
       operatingMandate: "90% fixing, 10% advisory. Write the fix. Implement the control. Enforce the policy. Do not list vulnerabilities and walk away.",
+      coverageProtocol: {
+        step0: "Enumerate ALL source files first → write .mcp/agent-runs/{runId}/coverage-manifest.json before any analysis",
+        step1: "Taint-trace every user-controlled input (req.body, req.query, event.data, etc.) to ALL sinks → write taint-map.json",
+        step2: "Negative assertion per attack class: 'ATTACK CLASS: {name} | FILES: {n}/{total} | PATTERNS: {list} | RESULT: CLEAN or N findings (N/N fixed)'",
+        step3: "Fix verification loop: re-run the triggering check after every fix — do NOT advance until VERIFIED CLEAN",
+        step4: "All HIGH/CRITICAL: FIXED with verified-clean re-run, OR formally blocked with risk-acceptance record + failing gate"
+      },
       nextSteps: [
+        "Step 0: Enumerate ALL source files → write coverage-manifest.json before any analysis begins.",
+        "Step 1: For every user-controlled input found, trace it to ALL sinks → write taint-map.json.",
+        "After every attack class reviewed: write NEGATIVE ASSERTION confirming files checked and result.",
+        "After every fix: re-run the triggering check and confirm CLEAN before proceeding to next finding.",
+        "All findings must be FIXED (verified-clean) or BLOCKED (risk-accepted + gate failing). No open HIGH/CRITICAL at completion.",
         "Run security.threat_model with this runId.",
         "Run security.checklist with this runId.",
         "Run security.run_pr_gate with this runId.",
@@ -473,22 +485,108 @@ Describe Level 0 (context) and Level 1 (process) flows in prose or embed a diagr
 |---|---|---|---|---|
 | TM-001 | | | | PENDING |
 
+## 4b. LINDDUN Privacy Threat Analysis
+
+| Category | Description | Threat | Mitigation |
+|---|---|---|---|
+| Linking | Can records across contexts be linked? | | |
+| Identifying | Can data be traced to an individual? | | |
+| Non-repudiation | Can users deny their actions? | | |
+| Detecting | Can sensitive behavior be inferred from metadata? | | |
+| Data Disclosure | Can data be exposed beyond its intended scope? | | |
+| Unawareness | Are users unaware of data collection? | | |
+| Non-compliance | Does the system violate regulations? | | |
+
+## 4c. TRIKE Risk Matrix
+
+| Actor | Action | Asset | Allowed? | Risk if Violated |
+|---|---|---|---|---|
+| Authenticated User | Read | Own profile | Yes | — |
+| Authenticated User | Read | Other user profile | No | CRITICAL |
+| Service Account | Write | Production DB | Restricted | HIGH |
+
+## 4d. DREAD Scoring
+
+| Threat | Damage (0-10) | Reproducibility | Exploitability | Affected Users | Discoverability | Total |
+|---|---|---|---|---|---|---|
+| _Threat 1_ | | | | | | |
+
+## 4e. Attack Trees — Top 3 Critical Paths
+
+**Goal 1: Achieve authentication bypass**
+- OR: Exploit JWT algorithm confusion (requires: access to token + public key)
+  - AND: Obtain RS256 public key (from JWKS endpoint or source code)
+  - AND: Re-sign token as HS256 using public key as HMAC secret
+- OR: Session fixation (requires: pre-auth request, no session regeneration)
+
+**Goal 2: Exfiltrate PII/cardholder data**
+- OR: IDOR via unvalidated object reference
+- OR: SQLi / NoSQL injection in query endpoint
+- OR: SSRF to internal data store
+
+**Goal 3: Achieve remote code execution**
+- OR: SSTI via template compilation from user input
+- OR: Deserialization gadget chain (node-serialize / eval)
+- OR: Prototype pollution → downstream exec sink
+
+## 5. Adversary Profiles
+
+| Profile | Goal | ATT&CK Techniques | Test Focus |
+|---|---|---|---|
+| APT / Nation-State | Persistent access + exfiltration | T1195, T1078, T1027 | What steps produce NO log entries? |
+| Ransomware Group | Encrypt backups, maximize leverage | T1490, T1485, T1496 | Can attacker reach and delete backups? |
+| Insider (DevOps) | Exfiltration or sabotage with valid creds | T1213, T1087 | What can a DevOps engineer access they shouldn't? |
+| Script Kiddie | Quick wins via automated tools | T1190, T1595 | Does WAF/rate limiting stop nuclei/sqlmap? |
+
+## 6. Supply Chain Threats
+
+| Threat | Vector | Likelihood | Mitigation |
+|---|---|---|---|
+| Dependency confusion | Private pkg name registered on npm | | SHA-pin all deps; use npm audit |
+| Typosquatting | Misspelled package installed | | Lock file + npm audit on CI |
+| CI cache poisoning | Malicious action poisons build cache | | Pin actions to SHA; no cache cross-branches |
+| Compromised upstream | Maintainer account takeover | | SBOM + Sigstore verification |
+| Malicious maintainer | Legitimate maintainer inserts backdoor | | OpenSSF scorecard + CISA KEV monitoring |
+| pwn-request | pull_request_target with head code | | Explicit head_ref check; no auto-use of forked code |
+
 ## 11. Pre-Release Checklist (Section 22E)
 
 - [ ] Threat model reviewed by security-designated reviewer
 - [ ] All SAST/SCA/IaC/container scan gates pass
 - [ ] Auth and authorization logic reviewed
-- [ ] Secrets handling reviewed - no hardcoded secrets
+- [ ] Secrets handling reviewed — no hardcoded secrets
 - [ ] Input validation present on all new inputs (server-side confirmed)
-- [ ] Error messages reviewed - no information leakage
-- [ ] Logging confirmed - required events logged, no PII in logs
+- [ ] Error messages reviewed — no information leakage
+- [ ] Logging confirmed — required events logged, no PII in logs
 - [ ] Security headers verified in staging
 - [ ] Rate limiting confirmed on all new endpoints
 - [ ] CORS configuration reviewed
 - [ ] Dependencies reviewed for new CVEs
-- [ ] Network rules reviewed - no 0.0.0.0/0, all traffic via private paths
+- [ ] Network rules reviewed — no 0.0.0.0/0, all traffic via private paths
 - [ ] IR playbook updated if new attack surface introduced
 - [ ] Compliance requirements addressed and documented
+
+## 12. Business Logic Abuse
+
+| Workflow | State Machine Step | Can skip? | Invariant | Test |
+|---|---|---|---|---|
+| _e.g. Checkout_ | Cart → Payment → Confirm | Can step 2 be skipped? | Amount must match cart total | POST /confirm without /payment |
+| _e.g. Subscription_ | Trial → Upgrade → Active | Can upgrade be replayed? | One upgrade per user | Concurrent PATCH /upgrade |
+
+- [ ] Full state machine mapped for all significant workflows
+- [ ] Step-skip tests designed and executed
+- [ ] Negative value inputs tested on all numeric fields (quantity, price, balance, seats)
+- [ ] Concurrent request tests executed for all limit-once invariants
+
+## 13. PoC Requirement
+
+**Every HIGH or CRITICAL finding must have a working PoC before sign-off.**
+
+| Finding ID | Severity | PoC Written | PoC Confirmed Working | Fix Written | Fix Verified Clean |
+|---|---|---|---|---|---|
+| | HIGH | [ ] | [ ] | [ ] | [ ] |
+
+Rule: PoC must be written BEFORE the fix. After the fix, re-run the PoC and confirm it fails.
 `;
 
     if (runId) {
@@ -520,80 +618,212 @@ Use before every production release. All items must be checked or explicitly ris
 ## All Surfaces
 
 - [ ] Threat model completed and reviewed by security-designated reviewer
-- [ ] SAST scan results reviewed - all CRITICAL/HIGH findings resolved
-- [ ] SCA scan - no CRITICAL CVEs in dependencies; HIGH CVEs triaged
-- [ ] Secrets scan clean (Trufflehog / Gitleaks)
-- [ ] IaC scan - no HIGH/CRITICAL misconfigurations (Checkov / tfsec)
-- [ ] Container scan - no CRITICAL CVEs with available fix (Trivy / Grype)
-- [ ] Error messages reviewed - no stack traces, schema details, or enum leakage
-- [ ] Logging reviewed - all required events logged; no PII, secrets, or tokens in logs
-- [ ] Dependencies reviewed for new CVEs introduced by this change
+- [ ] SAST scan results reviewed — all CRITICAL/HIGH findings resolved or risk-accepted with ticket
+- [ ] SCA scan — no CRITICAL CVEs in dependencies; HIGH CVEs triaged and scheduled
+- [ ] Secrets scan clean (Trufflehog / Gitleaks) — no credentials, tokens, or keys in source
+- [ ] IaC scan — no HIGH/CRITICAL misconfigurations (Checkov / tfsec)
+- [ ] Container scan — no CRITICAL CVEs with available fix (Trivy / Grype)
 - [ ] SBOM generated for this release artifact
-- [ ] Rollback plan documented and tested
+- [ ] SLSA provenance attestation generated for release artifacts
+- [ ] Error messages reviewed — no stack traces, schema details, internal paths, or enum leakage
+- [ ] Logging reviewed — all required events logged; no PII, secrets, or tokens in logs
+- [ ] Dependencies reviewed for new CVEs introduced by this change
+- [ ] CISA KEV cross-check completed for all dependency CVEs
+- [ ] Rollback plan documented and tested (can revert within 15 minutes)
 - [ ] IR playbook updated if a new attack surface was introduced
+- [ ] Regression gate: previous CRITICAL/HIGH findings verified still fixed
+- [ ] Coverage-gap disclosure: documented what this scan CANNOT catch (business logic, runtime behavior)
 
 ## Web / Frontend
 
-- [ ] Content-Security-Policy header present with nonce-based script control (no unsafe-inline)
-- [ ] HSTS header with includeSubDomains and preload
-- [ ] X-Frame-Options: DENY
-- [ ] X-Content-Type-Options: nosniff
+- [ ] Content-Security-Policy: nonce-based script control — unsafe-inline and unsafe-eval absent
+- [ ] Content-Security-Policy: default-src 'self' with explicit allowlists for external resources
+- [ ] HSTS: max-age=31536000; includeSubDomains; preload
+- [ ] X-Frame-Options: DENY (or SAMEORIGIN with justification)
+- [ ] X-Content-Type-Options: nosniff on all responses including error pages
 - [ ] Referrer-Policy: strict-origin-when-cross-origin
-- [ ] Permissions-Policy set
-- [ ] No inline JavaScript or inline event handlers
-- [ ] Subresource Integrity (SRI) on any third-party scripts
-- [ ] CSRF protection on all state-changing endpoints
-- [ ] XSS: no dangerouslySetInnerHTML without sanitization
+- [ ] Permissions-Policy: camera, microphone, geolocation restricted
+- [ ] Cross-Origin-Opener-Policy (COOP): same-origin
+- [ ] Cross-Origin-Embedder-Policy (COEP): require-corp where SharedArrayBuffer used
+- [ ] Cross-Origin-Resource-Policy (CORP): same-origin or same-site on API responses
+- [ ] Trusted Types policy enforced (require-trusted-types-for 'script') — DOM XSS sinks covered
+- [ ] No inline JavaScript or inline event handlers (onclick, onload, onerror, etc.)
+- [ ] No dangerouslySetInnerHTML without DOMPurify sanitization
+- [ ] All user-supplied data escaped before rendering in server-side templates
+- [ ] document.write(), innerHTML, insertAdjacentHTML, eval() DOM sink audit completed
+- [ ] postMessage handlers validate event.origin against explicit allowlist
+- [ ] Subresource Integrity (SRI) on all third-party scripts and stylesheets
+- [ ] CSRF protection on all state-changing endpoints (SameSite + CSRF tokens)
+- [ ] Open redirect prevention: redirect targets validated against allowlist
+- [ ] Subdomain takeover DNS audit — no dangling CNAME records to unprovisioned services
+- [ ] HTTP request smuggling: CL/TE header normalization at proxy layer confirmed
+- [ ] Session tokens are HttpOnly, Secure, SameSite=Strict — not localStorage
+- [ ] Session expiry: access tokens max 15 minutes, refresh tokens rotated on use
+- [ ] Login rate limiting: max 5 failures per IP per minute with progressive lockout
 
 ## API
 
-- [ ] All new endpoints require authentication (JWT RS256/ES256 validated)
-- [ ] Authorization checked server-side for every resource operation (IDOR prevention)
-- [ ] Input validation present on all new inputs - server-side schema validation confirmed
-- [ ] Rate limiting configured on all new endpoints
-- [ ] CORS origin allowlist reviewed (no wildcard on authenticated endpoints)
-- [ ] Request size limits enforced
-- [ ] SSRF protection on any server-side HTTP client (block private IPs, metadata endpoints)
+- [ ] All new endpoints require authentication — no unauthenticated access to sensitive data
+- [ ] JWT algorithm pinned to RS256 or ES256 in all jwt.verify() calls (CWE-327)
+- [ ] JWT expiry enforced — access tokens max 15 minutes, refresh tokens rotated on use
+- [ ] Authorization checked server-side for every resource operation — IDOR prevention confirmed
+- [ ] Row-level security enforced — cross-tenant access not possible
+- [ ] Privilege escalation paths reviewed — no client-supplied role claims accepted
+- [ ] Session regenerated after login — session fixation prevented (CWE-384)
+- [ ] OAuth state parameter generated and verified (CWE-352)
+- [ ] PKCE (S256) required for all public clients and SPAs
+- [ ] OAuth redirect_uri validated with exact equality — not includes/startsWith (CWE-601)
+- [ ] HTTP verb tampering: PUT/DELETE on read-only resources returns 405 not 200
+- [ ] BOPLA: PATCH/PUT handler rejects field updates beyond caller's role
+- [ ] Input validation: server-side schema validation on all new inputs (Zod / Joi / Valibot)
+- [ ] SQL injection: parameterized queries throughout — no raw string concat in query context
+- [ ] NoSQL injection: user input validated before passing to MongoDB/DynamoDB filters (CWE-943)
+- [ ] XML parsers: external entity processing disabled (XXE — CWE-611)
+- [ ] Deserialization: no node-serialize, eval(), or new Function() on user input (CWE-502)
+- [ ] SSTI: templates never compiled from user input (CWE-94)
+- [ ] Prototype pollution: Zod schema validation before any object merge (CWE-1321)
+- [ ] YAML parsing: safe/FAILSAFE schema used — not default js-yaml schema (CWE-502)
+- [ ] Path traversal: path.join() + user input always followed by prefix check (CWE-22)
+- [ ] Log injection: newlines stripped from user values before logging (CWE-117)
+- [ ] CRLF injection: user values sanitized before res.setHeader() (CWE-113)
+- [ ] Rate limiting on all new endpoints — per-user and per-IP
+- [ ] Aggressive rate limiting on auth endpoints (login, token refresh, password reset)
+- [ ] CORS origin allowlist reviewed — no wildcard on authenticated endpoints
+- [ ] Request size limits enforced — no unbounded body parsing
+- [ ] SSRF protection on server-side HTTP clients — blocks private IPs and metadata endpoints
 - [ ] Webhook signatures verified (HMAC-SHA256 + replay protection)
-- [ ] OpenAPI spec updated
+- [ ] Mass assignment prevented — explicit field allowlists, not object spread from request body
+- [ ] Response bodies reviewed — no internal IDs, system details, or field over-exposure (BOPLA)
+- [ ] OpenAPI spec updated for all new endpoints
+
+## GraphQL
+
+- [ ] Introspection disabled in production
+- [ ] Query depth limit enforced (max 10 or documented level)
+- [ ] Query complexity limit enforced
+- [ ] Batching limited (max 5 operations per request)
+- [ ] Field-level authorization enforced — not just type-level
+- [ ] Subscription auth enforced on WS handshake — not just on first message
 
 ## Infrastructure / Cloud
 
 - [ ] No 0.0.0.0/0 ingress or egress rules in any firewall / security group
 - [ ] All managed services accessed via VPC endpoints / private connectivity
 - [ ] No world-readable storage buckets
-- [ ] Secrets stored in secret manager - not in env files, CI logs, or container images
-- [ ] IAM roles follow least privilege - no wildcard permissions
+- [ ] Secrets stored in secret manager — not in env files, CI logs, or container images
+- [ ] IAM roles follow least privilege — no wildcard permissions
+- [ ] No long-lived static credentials — workload identity or short-lived tokens
+- [ ] Admin roles require MFA and are time-limited — no standing admin access
+- [ ] New IAM roles reviewed for privilege escalation paths
 - [ ] Network segmentation reviewed (web tier, app tier, data tier isolated)
 - [ ] WAF rules updated if new public endpoints added
 - [ ] Cloud audit logging confirmed for new resources
+- [ ] IMDSv2 enforced on all EC2 instances (HttpTokens=required)
+- [ ] S3 Block Public Access enabled at account level
+- [ ] S3 Object Lock (WORM) on backup buckets — prevents ransomware deletion
+- [ ] Threat detection enabled: AWS GuardDuty / GCP SCC / Azure Defender
+- [ ] SCP blocking: public S3 creation, CloudTrail disable, IAM * wildcards
+- [ ] CloudTrail log file integrity validation enabled
+- [ ] Container seccomp profile applied (RuntimeDefault or stricter)
+- [ ] Kubernetes resource limits (CPU and memory) set on all workloads
+
+## Supply Chain / CI-CD
+
+- [ ] All GitHub Actions pinned to full SHA — no floating tag references
+- [ ] No pull_request_target workflow without explicit head_ref validation (pwn-request prevention)
+- [ ] GITHUB_TOKEN permissions explicitly declared minimal — no inherited default write
+- [ ] SLSA Level 3 provenance or equivalent documented
+- [ ] SBOM signed with cosign — signature verified at deployment
+- [ ] No secrets readable in CI job logs — masked and audited
+
+## OAuth / OIDC
+
+- [ ] PKCE with S256 code challenge required for all public clients
+- [ ] state and nonce parameters generated and verified on every OAuth callback
+- [ ] redirect_uri exact-match only — no prefix or includes() matching
+- [ ] Authorization code reuse prevented — server rejects second use within validity window
+- [ ] Token audience (aud) validated against expected service identifier
+- [ ] Bearer token passed in Authorization header — not in URL query string
+
+## Business Logic
+
+- [ ] Rate-limited endpoints: every endpoint with a limit-once invariant has idempotency protection
+- [ ] Idempotency keys required on all payment/transfer mutations
+- [ ] Resource ownership verified on every write operation — not just on read
+- [ ] No sequential integer IDs for user-facing resources — use UUID or opaque tokens
+- [ ] Negative input values rejected: quantity, price, balance change, seat count all validated ≥ 0
+- [ ] Race condition test executed for any balance/quota/inventory limit (concurrent requests)
+
+## Serialization / Injection
+
+- [ ] XXE prevented: XML parsers disable external entities (processEntities:false)
+- [ ] SSTI prevented: no template compilation from user input
+- [ ] No eval(), new Function(), or setTimeout(string) with user-controlled content
+- [ ] No unsafe YAML.load() — FAILSAFE_SCHEMA or yaml.safeLoad() used
+- [ ] No node-serialize or other gadget-chain-capable deserialization library on user input
+- [ ] Prototype pollution mitigated: Zod validation before all object merges
+- [ ] Open redirect blocked: all res.redirect() targets validated against allowlist
+- [ ] CRLF injection blocked: response headers sanitized before setting
 
 ## Mobile
 
-- [ ] iOS: NSAllowsArbitraryLoads is false (ATS enforced)
+- [ ] iOS: NSAllowsArbitraryLoads is false — ATS strictly enforced
+- [ ] iOS: NSExceptionDomains documented and justified for any exceptions
 - [ ] Android: android:debuggable="false" in release build
 - [ ] Android: cleartext traffic disabled (usesCleartextTraffic="false")
+- [ ] Android: Network Security Config restricts cleartext and pins certificates
 - [ ] Certificate pinning verified for high-value API calls
-- [ ] Sensitive data not stored in shared preferences or external storage
+- [ ] Sensitive data stored in iOS Keychain / Android Keystore — not plaintext files
+- [ ] No sensitive data in SharedPreferences or NSUserDefaults in plaintext
+- [ ] Jailbreak/root detection implemented for high-risk operations
+- [ ] Obfuscation verified on release binary
+- [ ] Anti-instrumentation detection active (Frida / Magisk / Cydia)
+- [ ] Universal Links (iOS) / App Links (Android) used for auth callbacks — not custom scheme
 
 ## AI / LLM
 
 - [ ] All AI inputs sanitized and validated
-- [ ] System prompt structurally separated from user content (no string concatenation)
-- [ ] Indirect prompt injection: retrieved context (RAG, external data) treated as untrusted
+- [ ] System prompt structurally separated from user content — no string concatenation
+- [ ] Indirect prompt injection: RAG-retrieved context treated as untrusted — isolated from instructions
+- [ ] System prompt extraction resistance tested — model cannot be tricked into revealing it
+- [ ] Multi-turn attack chains tested across 5+ turns — instruction hierarchy holds
+- [ ] Multimodal injection: image/audio/document inputs treated as untrusted
 - [ ] Model outputs validated against JSON schema before acting on them
 - [ ] Output PII scan: no SSN, card numbers, tokens in model responses
+- [ ] Model output never passed to eval(), exec(), or shell commands
 - [ ] AI endpoints rate-limited independently from regular API
-- [ ] Model access logging enabled (user, timestamp, token counts)
-- [ ] Red-team test cases executed and results reviewed
+- [ ] Per-user token budgets enforced (daily and hourly)
+- [ ] Model access logging enabled (user, timestamp, token counts, model version)
+- [ ] Red-team test cases executed: jailbreak, prompt injection, PII exfiltration, DoS probes
+- [ ] Agentic tool allowlist — only permitted tools exposed to the model
+- [ ] High-impact tools require human-in-the-loop approval
+- [ ] AML.T0054 (LLM Prompt Injection) and AML.T0057 mitigations verified
 
 ## Payments (PCI DSS 4.0)
 
-- [ ] No card numbers, CVV, or PAN in any log, database, cache, or error message
-- [ ] Stripe / payment processor webhook verified (HMAC-SHA256)
-- [ ] PCI scope clearly defined and documented
+- [ ] No card numbers, CVV, or full PAN stored anywhere — tokenization confirmed
+- [ ] No card data in any log, database, cache, error message, or analytics system
+- [ ] PAN masked when displayed — last 4 digits only
+- [ ] Payment form hosted by processor (iFrame or redirect) — card data never touches app servers
+- [ ] Stripe / payment processor webhook verified (HMAC-SHA256 + replay protection)
+- [ ] Payment processor API keys stored in secret manager
 - [ ] Payment-adjacent systems network-segmented from non-payment systems
+- [ ] TLS 1.2+ required on all payment data flows
+- [ ] CSP extra-strict on checkout pages — no inline scripts, no external origins (Magecart prevention)
+- [ ] SRI on every script and stylesheet on checkout pages
+- [ ] DOM mutation monitoring active on payment form
+- [ ] EMV 3DS version 2.2+ for card-not-present transactions
 - [ ] Audit trail maintained for all payment operations
+- [ ] SAQ type documented and current for this release scope
+- [ ] PCI scope clearly defined and documented
+
+## Observability Gate
+
+- [ ] Anomaly detection baselines documented — normal traffic envelope defined
+- [ ] SLO (Service Level Objective) defined for security events (e.g. auth failure rate < 0.1%)
+- [ ] Alert fatigue reviewed — false positive rate for each security alert < 5%
+- [ ] Runbook linked from every security alert — on-call can respond in < 5 minutes
+- [ ] Log integrity check: logs are forwarded to tamper-evident storage; local deletion does not erase them
 `;
 
 tool(

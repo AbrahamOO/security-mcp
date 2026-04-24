@@ -29,6 +29,8 @@ import { runRuntimeChecks } from "./checks/runtime.js";
 import { runCiPipelineChecks } from "./checks/ci-pipeline.js";
 import { runNucleiChecks } from "./checks/nuclei.js";
 import { getCommitHash, loadBaseline, saveBaseline, compareBaseline } from "./baseline.js";
+import { checkInjectionDeep } from "./checks/injection-deep.js";
+import { checkAuthDeep } from "./checks/auth-deep.js";
 import { randomUUID } from "node:crypto";
 
 const PolicySchema = z.object({
@@ -213,7 +215,9 @@ export async function runPrGate(opts: {
       surfaces.ai ? runAiRedteamChecks({ changedFiles }) : Promise.resolve([]),
       process.env["SECURITY_STAGING_URL"] ? runRuntimeChecks({ targets, changedFiles }) : Promise.resolve([]),
       runCiPipelineChecks({ changedFiles }),
-      process.env["SECURITY_STAGING_URL"] ? runNucleiChecks({ changedFiles }) : Promise.resolve([])
+      process.env["SECURITY_STAGING_URL"] ? runNucleiChecks({ changedFiles }) : Promise.resolve([]),
+      (surfaces.api || surfaces.web) ? checkInjectionDeep({ changedFiles }) : Promise.resolve([]),
+      (surfaces.api || surfaces.web) ? checkAuthDeep({ changedFiles }) : Promise.resolve([])
     ]);
 
     rawFindings = [];

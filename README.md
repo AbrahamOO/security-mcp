@@ -17,6 +17,7 @@ Works with **Claude Code, GitHub Copilot, Cursor, Codex, Replit**, and any MCP-c
 
 ## Table of Contents
 
+- [What's New in 1.1.4](#whats-new-in-114)
 - [What Problem Does This Solve?](#what-problem-does-this-solve)
 - [Who Is This For?](#who-is-this-for)
 - [Two Modes - Pick Your Depth](#two-modes---pick-your-depth)
@@ -25,7 +26,9 @@ Works with **Claude Code, GitHub Copilot, Cursor, Codex, Replit**, and any MCP-c
   - [Claude Code](#step-by-step-claude-code)
   - [Cursor](#step-by-step-cursor)
   - [VS Code / GitHub Copilot](#step-by-step-vs-code--github-copilot)
+  - [Windsurf](#step-by-step-windsurf)
   - [Manual Configuration](#manual-configuration-any-mcp-editor)
+- [Verify Your Installation](#verify-your-installation)
 - [How to Run Your First Security Review](#how-to-run-your-first-security-review)
 - [CI/CD Security Gate](#cicd-security-gate)
 - [What Gets Fixed Automatically](#what-gets-fixed-automatically)
@@ -37,6 +40,57 @@ Works with **Claude Code, GitHub Copilot, Cursor, Codex, Replit**, and any MCP-c
 - [The 10 Rules That Are Never Broken](#the-10-rules-that-are-never-broken)
 - [Troubleshooting](#troubleshooting)
 - [FAQ](#faq)
+
+---
+
+## What's New in 1.1.4
+
+### 20 Checks (up from 18) - Deep Injection + Deep Auth Modules
+
+Two new deep-check modules run automatically for web and API surfaces:
+
+**`checkInjectionDeep`** — 11 new patterns: XXE (CWE-611), SSTI (CWE-94), prototype pollution (CWE-1321), open redirect (CWE-601), NoSQL operator injection (CWE-943), CRLF injection (CWE-113), unsafe YAML load (CWE-502), unsafe deserialization, path traversal (CWE-22), log injection (CWE-117), SSRF (CWE-918).
+
+**`checkAuthDeep`** — 12 new patterns: JWT algorithm confusion / `alg:none` (CWE-327), session fixation (CWE-384), OAuth missing state parameter (CWE-352), OAuth `redirect_uri` open redirect (CWE-601), PKCE not enforced (RFC 7636), hardcoded JWT secret (CWE-798), missing rate limit on auth endpoints (CWE-307), plaintext password comparison (CWE-256), SAML signature validation disabled (CWE-347), insecure cookie flags (CWE-1004/614), refresh token not rotated (CWE-613), JWT HS/RS confusion (CVE-2015-9235 pattern).
+
+### Coverage Completeness Protocol (§0)
+
+Every security review now runs a mandatory 5-step protocol before reporting any result:
+
+1. **Complete file inventory** — enumerate all source files into `coverage-manifest.json`; no attack class can be called CLEAN without checking every file.
+2. **Taint tracking** — trace every user-controlled input (`req.body`, `req.query`, WebSocket, env, file uploads, external API responses) to all downstream sinks, classifying each SAFE / UNSAFE / UNRESOLVED.
+3. **Negative assertions** — after each attack class: `ATTACK CLASS: {name} | FILES: N/N | PATTERNS: {list} | RESULT: CLEAN`.
+4. **Fix verification loop** — after every fix, re-run the triggering check and confirm it no longer fires before advancing.
+5. **All-or-nothing mandate** — every HIGH/CRITICAL finding is either FIXED (verified clean) or BLOCKED (risk-accepted, gate failing, remediation plan written to `deferred-fixes.json`).
+
+### Enhanced Threat Model Template
+
+The `security.threat_model` tool now generates a more complete template including LINDDUN privacy threat analysis (Linking, Identifying, Non-repudiation, Detecting, Data Disclosure, Unawareness, Non-compliance), TRIKE risk matrix (actor-action-asset-risk), DREAD scoring, attack trees for the top 3 critical paths, adversary profiles mapped to ATT&CK techniques, and supply chain threat enumeration.
+
+### Expanded Release Checklists
+
+All domain-specific release checklists now include:
+
+- **OAuth/OIDC** — PKCE with S256, state/nonce verification, exact-match `redirect_uri`, code reuse prevention, audience validation
+- **Business Logic** — idempotency keys on payment mutations, negative input validation, race condition testing for balance/quota/inventory
+- **Serialization/Injection** — XXE, SSTI, unsafe YAML, deserialization, prototype pollution, open redirect, CRLF in every checklist
+- **AI/LLM** — system prompt extraction resistance, multi-turn attack chains, multimodal injection, agentic tool allowlist, AML.T0054/T0057 mitigations
+- **Payments (PCI DSS 4.0)** — PAN masking, DOM mutation monitoring, EMV 3DS 2.2+, Magecart prevention (SRI on checkout pages)
+- **Observability Gate** (new) — anomaly detection baselines, SLO definitions for security events, alert fatigue review, runbook coverage
+
+### Windsurf Support
+
+The installer now detects and configures Windsurf (`~/.windsurf/mcp.json`) automatically alongside Claude Code, Cursor, and VS Code.
+
+### `doctor` Command
+
+Verify your installation health at any time:
+
+```bash
+npx -y security-mcp@latest doctor
+```
+
+Checks Node.js version, editor configs, and skill files — prints PASS/FAIL per check with actionable fix commands.
 
 ---
 
@@ -257,6 +311,45 @@ You should see:
 
 ---
 
+### Step-by-Step: Windsurf
+
+**Step 1 - Run the installer:**
+
+```bash
+npx -y security-mcp@latest install
+```
+
+This auto-detects Windsurf and writes to `~/.windsurf/mcp.json`.
+
+**Step 2 - Verify:**
+
+```bash
+cat ~/.windsurf/mcp.json
+```
+
+Expected output:
+
+```json
+{
+  "mcpServers": {
+    "security-mcp": {
+      "command": "npx",
+      "args": ["-y", "security-mcp@latest", "serve"]
+    }
+  }
+}
+```
+
+**Step 3 - Restart Windsurf.**
+
+**Step 4 - In the Windsurf AI chat, type:**
+
+```text
+Use /senior-security-engineer to review my recent changes
+```
+
+---
+
 ### Manual Configuration (Any MCP Editor)
 
 If the installer doesn't detect your editor, or you prefer to configure manually:
@@ -343,6 +436,28 @@ npx -y security-mcp@latest install --dry-run
 
 ---
 
+## Verify Your Installation
+
+After installing, confirm everything is wired up correctly:
+
+```bash
+npx -y security-mcp@latest doctor
+```
+
+This checks your Node.js version, editor config files, and installed skills — and prints `[PASS]` or `[FAIL]` per check with a fix command if anything is missing.
+
+Example output:
+
+```text
+  [PASS] Node.js 22.x
+  [PASS] Claude Code config (~/.claude/settings.json)
+  [PASS] senior-security-engineer skill (~/.claude/skills/senior-security-engineer/SKILL.md)
+
+All checks passed. Restart your editor, then type /senior-security-engineer.
+```
+
+---
+
 ## How to Run Your First Security Review
 
 ### Daily Workflow: `/senior-security-engineer`
@@ -365,7 +480,7 @@ npx -y security-mcp@latest install --dry-run
 
 1. Call `security.start_review` to create a tracked run
 2. Build a scan plan covering all relevant OWASP/NIST/ATT&CK controls
-3. Run 18 security checks in parallel across secrets, dependencies, crypto, auth, injection, cloud config, AI/LLM, mobile, and more
+3. Run 20 security checks in parallel across secrets, dependencies, crypto, auth, injection, cloud config, AI/LLM, mobile, and more
 4. Write fixes directly into your code for every finding it can remediate
 5. Generate a SHA-256 attested report at `.mcp/reports/{runId}.attestation.json`
 
@@ -463,7 +578,7 @@ jobs:
 
 ### What the CI Gate Checks
 
-The gate runs **18 checks in parallel** against your diff:
+The gate runs **20 checks in parallel** against your diff:
 
 | Category | What It Catches |
 | --- | --- |
@@ -486,6 +601,8 @@ The gate runs **18 checks in parallel** against your diff:
 | **AI red-team** | Static + optional dynamic probes against AI endpoints |
 | **Exceptions** | Validates any active security exceptions are non-expired and properly approved |
 | **Baseline regression** | Detects when previously-satisfied controls go missing (BASELINE_REGRESSION HIGH finding injected on regression) |
+| **Deep injection** | XXE, SSTI, prototype pollution, open redirect, NoSQL operator injection, CRLF, unsafe YAML load, deserialization, path traversal, log injection, SSRF (11 new patterns) |
+| **Deep auth** | JWT algorithm confusion, session fixation, OAuth missing state, OAuth open redirect_uri, PKCE not enforced, hardcoded JWT secret, missing rate limit on auth endpoints, plaintext password compare, SAML signature disabled, insecure cookie flags, refresh token not rotated, JWT HS/RS confusion (12 new patterns) |
 
 ### Customize the Gate Policy
 
@@ -652,15 +769,16 @@ app.use(helmet({
 ┌──────────────────────────────────────────────────────────────┐
 │               Policy Gate Engine  (src/gate/policy.ts)       │
 │                                                              │
-│  18 checks run in parallel:                                  │
+│  20 checks run in parallel:                                  │
 │  checkSecrets    checkDependencies   checkApi    checkInfra  │
 │  checkCrypto     checkMobileIos      checkMobileAndroid      │
 │  checkAi         checkGraphQL        checkKubernetes         │
 │  checkDatabase   checkDlp            checkWebNextjs          │
-│  runSbomChecks   runAiRedteamChecks  runRuntimeChecks  ...  │
+│  runSbomChecks   runAiRedteamChecks  runRuntimeChecks        │
+│  checkInjectionDeep (11 patterns)  checkAuthDeep (12 patterns)│
 │                                                              │
 │  Surface detection -> Control catalog -> Exception handling ->  │
-│  Confidence scoring -> PASS / FAIL                           │
+│  Coverage manifest -> Taint map -> Confidence scoring -> PASS / FAIL │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -684,10 +802,17 @@ User: /senior-security-engineer
     └── STRIDE + PASTA + ATT&CK template for changed surface
         │
         ▼
+  §0 Coverage Completeness Protocol (runs first)
+    ├── enumerate ALL source files → coverage-manifest.json
+    ├── taint-trace every user-controlled input → taint-map.json
+    ├── negative assertion per attack class: "FILES: N/N | RESULT: CLEAN"
+    └── fix verification loop: re-run check after every fix, confirm CLEAN
+        │
+        ▼
   security.run_pr_gate(runId, mode, targets)
     ├── git diff / glob targets -> changed files list
     ├── detectSurfaces()  ->  web? api? infra? mobile? ai?
-    ├── 18 checks in parallel
+    ├── 20 checks in parallel (incl. deep injection + deep auth)
     ├── apply exceptions from .mcp/exceptions/
     ├── compute confidence score
     └── returns PASS/FAIL + findings[]
@@ -695,6 +820,8 @@ User: /senior-security-engineer
         ▼
   Claude writes inline fixes for every finding
   (production-ready secure code, not suggestions)
+  Every HIGH/CRITICAL: FIXED with verified-clean re-run,
+  OR formally blocked with risk-acceptance record
         │
         ▼
   security.attest_review(runId)
@@ -853,7 +980,7 @@ Your AI uses these automatically. You don't call them directly, but understandin
 | Tool | What It Does |
 | --- | --- |
 | `security.start_review` | Starts a stateful review run; returns `runId` used to track all subsequent steps and produce the final attestation |
-| `security.run_pr_gate` | Runs 18 security checks in parallel; returns PASS/FAIL, findings with severity, and required actions |
+| `security.run_pr_gate` | Runs 20 security checks in parallel; returns PASS/FAIL, findings with severity, and required actions |
 | `security.threat_model` | Generates a STRIDE + PASTA + ATT&CK threat model template for a specific feature or surface |
 | `security.checklist` | Returns the pre-release security checklist, optionally filtered by surface (web / api / mobile / ai / infra / payments) |
 | `security.scan_strategy` | Builds an exhaustive scan plan mapping every check to OWASP, NIST, ATT&CK, and compliance controls |
