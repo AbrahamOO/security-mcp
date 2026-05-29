@@ -122,3 +122,88 @@ If internet permitted:
 Write `.mcp/agent-runs/{agentRunId}/mobile-findings.json`
 Every finding maps to: MASVS control ID, MSTG test case ID, CWE, CVSSv4.
 Code fixes written directly in the affected mobile source files.
+
+Every findings JSON MUST include `intelligenceForOtherAgents`:
+```json
+{
+  "intelligenceForOtherAgents": {
+    "forPentestTeam": [{ "type": "HIGH_VALUE_TARGET", "description": "...", "exploitHint": "..." }],
+    "forCryptoSpecialist": [{ "type": "CRYPTO_WEAKNESS_REFERENCE", "algorithm": "...", "location": "..." }],
+    "forCloudSpecialist": [{ "type": "SSRF_TO_CLOUD_CHAIN", "ssrfLocation": "...", "escalationPath": "..." }],
+    "forComplianceGrc": [{ "type": "COMPLIANCE_BLOCKER", "frameworks": ["..."], "releaseBlock": true }]
+  }
+}
+```
+
+## LEARNING SIGNAL
+
+On every finding resolved, emit:
+```json
+{
+  "findingId": "FINDING_ID",
+  "agentName": "AGENT_NAME",
+  "resolved": true,
+  "remediationTemplate": "one-line description of what was done",
+  "falsePositive": false
+}
+```
+Call `security.record_outcome` with this payload so the routing engine learns which agent resolves each finding class most successfully. If a finding is a false positive, set `falsePositive: true` — this prevents the false-positive pattern from being routed here again.
+
+---
+
+## §EDGE-CASE-MATRIX
+
+The 5 attack cases in this domain that automated scanners and naive manual review universally miss. MANDATORY checks — do not skip.
+
+| # | Edge Case | Why Scanners Miss It | Concrete Test |
+|---|-----------|----------------------|---------------|
+| 1 | Deep link / URL scheme parameter injection into WebView | Static scanners match URL handler registration, not downstream parameter consumption in WebView | Register a custom URL scheme; pass `javascript:` or `file://` as a parameter and confirm whether the embedded WebView evaluates it |
+| 2 | Keychain / Keystore item accessible after device unlock (kSecAttrAccessibleAlways) | Scanners flag string literals but miss the accessibility constant in programmatic API calls | Dump Keychain entries using `objection` or `frida-ios-dump`; confirm kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly or stricter is set for every sensitive item |
+| 3 | Certificate pinning bypass via dynamic pin update over HTTP | Scanner sees pinning code present and marks it clean; misses the pin being fetched from an unauthenticated endpoint | Intercept the pin-update call with a MITM proxy; substitute an attacker-controlled certificate fingerprint |
+| 4 | Second-order deserialization in push notification / silent push payload | Scanner checks incoming payload parsing but not deferred execution after background wake | Send a crafted APNs / FCM silent push payload with a nested serialized object; verify the deserialization code path handles malformed data without code execution |
+| 5 | Race condition in biometric + crypto object creation (TOCTOU on Android BiometricPrompt) | Sequential scanners model one authentication flow; concurrent requests to the same CryptoObject are not tested | Spawn two simultaneous authentication attempts sharing the same `CryptoObject` instance; confirm only one succeeds and no crash / bypass occurs |
+
+## §TEMPORAL-THREATS
+
+Threats materialising in the 2025–2030 window that defences designed today must account for.
+
+| Threat | Est. Timeline | Relevance to This Domain | Prepare Now By |
+|--------|--------------|--------------------------|----------------|
+| Cryptographically Relevant Quantum Computer (CRQC) | 2028–2032 | Harvest-now-decrypt-later: RSA/ECDSA keys protecting long-lived mobile session tokens or stored health data signed today will be decryptable | Inventory all RSA/ECDSA key usage in mobile crypto stack; migrate long-lived secrets to ML-KEM (FIPS 203) and hybrid TLS; begin with Secure Enclave / StrongBox key rotation plan |
+| AI-powered binary analysis (LLM-assisted reversing) | 2025–2027 (active) | Automated reverse engineering using GPT-4/Claude-level models identifies obfuscated logic, hardcoded secrets, and anti-tamper bypass paths in minutes, not days | Assume every binary will be fully deobfuscated; remove all secret material from binaries entirely; enforce hardware-backed key storage with no software fallback |
+| SIM-swap / eSIM hijack escalation | 2025–2026 (active) | GSMA eSIM transfer APIs (CVE-2023-38185 class) allow carrier-assisted SIM swap without physical store; any SMS OTP auth is now trivially bypassed for targeted users | Migrate all security-sensitive authentication from SMS OTP to TOTP or FIDO2 passkeys; treat phone number as identifier only, never as authenticator |
+| Malicious SDK update via compromised package registry | 2025–2026 (active) | Supply-chain attack on CocoaPods (CVE-2024-38368), npm packages used by React Native, or Maven Central compromises millions of apps silently | Pin SDK versions with hash verification; adopt SLSA L2 for mobile build pipeline; subscribe to vendor security advisories for every third-party SDK |
+| EU CRA / US EO 14028 mandatory SBOM enforcement | 2025–2026 (active) | Mobile apps shipping to EU markets must provide SBOM and demonstrate software supply chain provenance; non-compliant apps face market withdrawal | Generate CycloneDX SBOM per mobile release build; achieve SLSA L2 minimum; document all SDK provenance |
+
+## §DETECTION-GAP
+
+What current security monitoring CANNOT detect in this domain, and what to build to close each gap.
+
+**Standard gaps that MUST be checked:**
+
+- **Silent data exfiltration via third-party SDK analytics:** The SDK call looks like telemetry; no anomaly in network logs because the SDK domain is allowlisted. Need: per-SDK network traffic volume baseline; alert when any single SDK domain receives more than 3× its 30-day data volume baseline within a session.
+- **Jailbreak / root detection bypass at runtime:** Frida/Objection hooks are injected post-launch; device integrity checks pass at startup and never re-run. Need: periodic re-attestation using Apple DeviceCheck / Android Play Integrity API throughout the session, not only at login.
+- **Keychain item exfiltration on jailbroken device:** No log event emitted; attacker reads Keychain directly from SQLite on device. Need: server-side anomaly detection — flag authentication tokens used from a new device fingerprint without re-authentication.
+- **OTA code injection via compromised Expo / CodePush update:** Update download looks legitimate; only difference is the bundle hash. Need: enforce code signing verification (EAS Code Signing / CodePush code signing) and log bundle hash on every update; alert on hash mismatch or unexpected update outside release window.
+- **Cross-agent attack chains:** A weak certificate pin (mobile finding) + an SSRF endpoint (cloud finding) = a full MITM-to-IMDS chain invisible to either agent alone. Need: CISO orchestrator Phase 1 synthesis step — correlate all agent findings before Phase 2.
+
+## §ZERO-MISS-MANDATE
+
+This agent CANNOT declare any attack class clean without explicit evidence of checking. For each item, output one of:
+- `CHECKED: [N files] | [patterns used] | CLEAN`
+- `CHECKED: [N files] | [patterns used] | [N findings, all fixed]`
+- `SKIPPED: [reason — must be "not applicable: [evidence]"]`
+
+**Silent skip = FAILED COVERAGE.** The orchestrator flags this as a quality gap.
+
+The output findings JSON MUST include a `coverageManifest` key:
+```json
+{
+  "coverageManifest": {
+    "attackClassesCovered": [{ "class": "Insecure Keychain/Keystore Storage", "filesReviewed": 23, "patterns": ["kSecAttrAccessible", "KeyStore.getInstance"], "result": "CLEAN" }],
+    "filesReviewed": 23,
+    "negativeAssertions": ["Insecure storage: kSecAttrAccessibleAlways pattern searched across 23 files — 0 matches"],
+    "uncoveredReason": {}
+  }
+}
+```

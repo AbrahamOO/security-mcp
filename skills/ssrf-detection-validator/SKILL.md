@@ -227,3 +227,111 @@ If internet permitted:
 - `requiredActions`: ordered action list
 - `complianceImpact`: framework mappings
 - `beyondSkillMd`: true if finding goes beyond the SKILL.md mandate
+
+Every findings JSON MUST include `intelligenceForOtherAgents`:
+```json
+{
+  "intelligenceForOtherAgents": {
+    "forPentestTeam": [{ "type": "HIGH_VALUE_TARGET", "description": "URL parameter fed to outbound fetch without SSRF guard — direct pivot to cloud metadata endpoint", "exploitHint": "Send url=http://169.254.169.254/latest/meta-data/iam/security-credentials/; chain IMDSv1 token into lateral movement" }],
+    "forCryptoSpecialist": [{ "type": "CRYPTO_WEAKNESS_REFERENCE", "algorithm": "N/A — SSRF may expose secrets encrypted at rest; confirm KMS key scope", "location": "Any SSRF-reachable internal service returning signed tokens or keys" }],
+    "forCloudSpecialist": [{ "type": "SSRF_TO_CLOUD_CHAIN", "ssrfLocation": "file/line where outbound fetch occurs without validation", "escalationPath": "IMDSv1 → IAM credential theft → AssumeRole to production account" }],
+    "forComplianceGrc": [{ "type": "COMPLIANCE_BLOCKER", "frameworks": ["PCI DSS Req 6.2.4", "SOC 2 CC6.6", "NIST SP 800-53 SC-7"], "releaseBlock": true }]
+  }
+}
+```
+
+## BEYOND SKILL.MD — MANDATORY EXPANSIONS
+
+- **AI-Assisted SSRF Fuzzing via LLM-Generated Encoding Variants (ATT&CK T1190 / CWE-918):** Attacker feeds a target's URL parameter schema to an LLM fuzzer (e.g., `gau` + `nuclei` with GPT-generated payloads) that auto-generates every IP encoding variant — octal (`0177.0.0.1`), hex (`0x7f000001`), decimal integer (`2130706433`), IPv6-mapped IPv4 (`::ffff:127.0.0.1`), and mixed-case schemes (`hTTp://`) — achieving bypass rates 40-60x faster than manual testing. Test by: run `nuclei -t ssrf-detection-bypass.yaml` with the full encoding matrix from [https://github.com/swisskyrepo/PayloadsAllTheThings/tree/master/Server%20Side%20Request%20Forgery]; confirm every variant is blocked before the TCP socket opens. Finding threshold: any encoding variant that reaches `dns.lookup` or `fetch` without being normalised to a canonical IP and re-checked against `PRIVATE_IP_RANGES`.
+
+- **IMDSv1 Token Harvest via Blind SSRF + Harvest-Now-Decrypt-Later (CVE-2019-11043 pattern / ATT&CK T1552.005):** IMDSv1 (`http://169.254.169.254/latest/meta-data/iam/security-credentials/<role>`) returns long-lived IAM credentials over plain HTTP with no token requirement; credentials exfiltrated today via blind SSRF can be stored and replayed indefinitely (or until rotated). As post-quantum adversaries gain the ability to break ECDSA on JWT signing keys, stored credential packages become retroactively exploitable. Test by: confirm each EC2 instance has `HttpTokens: required` via `aws ec2 describe-instances --query 'Reservations[].Instances[].MetadataOptions'`; attempt `curl -s http://169.254.169.254/latest/meta-data/` from within the app's network context — it must time out or return 401. Finding threshold: any instance where `HttpTokens` is not `required`, or any code path where the app can reach `169.254.169.254` without a PUT-obtained token.
+
+- **Supply-Chain SSRF via Malicious Indirect Dependency HTTP Client (SLSA Level 0 Risk / ATT&CK T1195.001):** Third-party npm packages (`axios`, `got`, `node-fetch`, older versions of `undici`) may perform outbound HTTP calls internally (e.g., for telemetry, license checks, or proxied requests) that bypass the app's `ssrfSafeFetch` wrapper entirely because the import goes directly to the underlying `http` module. CVE-2023-45857 (`axios` CSRF bypass via crafted headers) demonstrates how transitive dependency behaviour can subvert request-level controls. Test by: generate a CycloneDX SBOM (`npx @cyclonedx/cyclonedx-npm --output-file sbom.json`), then cross-reference every dependency that imports `http`, `https`, `node:http`, or `undici` against the OSV database (`osv-scanner --sbom sbom.json`). Finding threshold: any transitive dependency with a known SSRF-class CVE, or any dependency that issues outbound HTTP without routing through `ssrfSafeFetch`.
+
+- **DNS Rebinding via TTL-0 Records Defeating Pre-Connection Validation (CWE-350 / ATT&CK T1557):** Attacker registers `rebind.attacker.com` with TTL=0 and two A records: the first resolves to a public IP (passes SSRF validation), the second resolves to `169.254.169.254` (served on the next query after validation). Because Node.js `dns.resolve4` and `fetch` use separate DNS resolution calls with no IP pinning, the window between validation and TCP connect is exploitable. Research: "DNS Rebinding Attacks" (James Kettle, PortSwigger 2017) remains the canonical reference. Test by: use `rbndr.us/<hex-public>/<hex-private>` as the test URL; confirm that the app's `ssrfSafeFetch` resolves the hostname to a public IP on first call but that a second unguarded `fetch` to the same hostname connects to the private IP. Finding threshold: any code path that resolves a hostname once at validation time and then passes the hostname string (not the resolved IP) to the outbound HTTP client.
+
+- **EU Cyber Resilience Act (CRA) Article 14 Mandatory SSRF Disclosure Trigger (Regulatory / Effective 2026-12-11):** Under CRA Article 14, manufacturers of products with digital elements must notify ENISA of actively exploited vulnerabilities within 24 hours of discovery. An SSRF finding that is exploited in production — even momentarily — becomes a legally mandated disclosure event. This applies to any SaaS product serving EU customers regardless of where the company is incorporated. Test by: verify the incident-response runbook explicitly names SSRF as a CRA-notifiable vulnerability class; confirm a VPC flow log alert fires within 5 minutes of an outbound request to a private CIDR. Finding threshold: absence of a CRA disclosure runbook, or VPC flow log detection latency exceeding 15 minutes for private-CIDR outbound traffic.
+
+- **Blind SSRF Exfiltration via Timing Oracle on Internal Service Response Latency (CWE-208 / ATT&CK T1046):** When SSRF is "blind" (no response body returned to the attacker), internal service reachability can still be inferred by measuring response time differentials: a request to an open internal port returns in ~2ms; a closed port or filtered address causes a TCP RST or timeout at 10s+. Attackers use this to map internal network topology without any out-of-band listener. Research: "Timing Side-Channel Attacks on SSRF" (Orange Tsai, HITCON 2017). Test by: issue URL-parameter requests pointing to `http://10.0.0.1:22`, `http://10.0.0.1:80`, and `http://10.0.0.1:9999` and measure response times from the client side; a statistically significant latency difference (>500ms) between port states indicates exploitable timing oracle. Finding threshold: any variance in HTTP response latency correlated with internal port state that exceeds 200ms median delta across 10 requests.
+
+## §EDGE-CASE-MATRIX
+
+The 5 SSRF attack cases that automated scanners and naive manual review universally miss. MANDATORY checks — do not skip.
+
+| # | Edge Case | Why Scanners Miss It | Concrete Test |
+|---|-----------|----------------------|---------------|
+| 1 | DNS rebinding — IP resolves to public during validation, then switches to private during the actual TCP connection | Scanner validates the URL at grep-time against a static blocklist; by the time the runtime fetch occurs the DNS TTL has expired and the attacker's DNS server has swapped the A record to `169.254.169.254` | Set up a rebinding domain (e.g. via `rbndr.us`); observe that validation passes but the HTTP request lands on the metadata endpoint. Fix: re-resolve and re-check the IP immediately before opening the TCP socket, or pin the resolved IP and connect to it directly. |
+| 2 | URL parser differential — `http://127.0.0.1:80@attacker.com` | The SSRF validator parses the host as `attacker.com` (passes allowlist); Node's `http.request` or `fetch` uses the userinfo-before-`@` as the host and connects to `127.0.0.1` | Submit `url=http://127.0.0.1:80@allowed-partner.example.com` and confirm whether the outbound request goes to `127.0.0.1`; fix by always reading `parsed.hostname` from `new URL()` and discarding any userinfo component. |
+| 3 | Redirect chain ending at a private address | Scanner checks only the initial URL; it does not follow the chain of `301`/`302` responses and recheck the final destination | Deploy a redirect chain: `attacker.com/r → attacker.com/r2 → http://192.168.1.1/admin`; confirm the target is reached. Fix: `redirect: "manual"` + recursive `ssrfSafeFetch` re-validation on every `Location` header. |
+| 4 | IPv6 and alternative IP representations | Blocklist checks decimal IPv4; attacker uses `http://[::1]/`, `http://0177.0.0.0.1/` (octal), `http://2130706433/` (decimal integer), or `http://0x7f000001/` (hex) | Submit each encoding variant of `127.0.0.1` and `169.254.169.254`; verify all are blocked. Fix: resolve to canonical IP via `dns.lookup` with `{all: true}` and check against `PRIVATE_IP_RANGES` after normalisation, not against the raw string. |
+| 5 | Blind SSRF via out-of-band HTTP/DNS callback (no inline response difference) | Scanner looks for a difference in HTTP response body or status; blind SSRF leaves the response identical whether or not the internal request succeeded | Inject `url=http://<interactsh-or-burp-collaborator-id>.oast.fun/` into every URL parameter; monitor the OOB listener for DNS or HTTP pings that confirm the server issued the request. Fix: the absence of an error response does NOT mean SSRF is impossible — require positive OOB evidence of blocking. |
+
+## §TEMPORAL-THREATS
+
+Threats materialising in the 2025–2030 window that SSRF defences designed today must account for.
+
+| Threat | Est. Timeline | Relevance to SSRF | Prepare Now By |
+|--------|--------------|-------------------|----------------|
+| AI-assisted SSRF fuzzing at scale | 2025–2027 (active) | LLM-powered tools enumerate every URL parameter and auto-generate encoding variants (octal, hex, IPv6, mixed-case protocols) orders of magnitude faster than manual testing | Assume attackers already run automated SSRF fuzzers; close all encoding bypasses now, not after a finding |
+| IMDSv1 deprecation enforcement by cloud providers | 2025–2026 | AWS/GCP are progressively disabling IMDSv1; workloads relying on it silently become misconfigured when migration is incomplete | Audit every EC2/GCE instance for `HttpTokens: required` (IMDSv2 only); set it at the IaC layer so new instances default to IMDSv2 |
+| EU Cyber Resilience Act (CRA) mandatory vulnerability disclosure | 2026 | SSRF findings in shipped software become legally reportable events within 24 hours of discovery | Treat every SSRF finding as a potential CRA disclosure candidate; have an incident-response runbook ready |
+| Harvest-now-decrypt-later attacks on stolen IMDSv1 tokens | 2025–2028 | Cloud credentials exfiltrated today via SSRF are stored and replayed; quantum computers will break RSA/ECDSA on the signing layer | Rotate IAM credentials on a short TTL; prefer short-lived assumed-role tokens (max 1h) over long-lived access keys |
+| Mandatory SBOM + SLSA provenance for cloud-connected services (US EO 14028 / EU CRA) | 2025–2026 (active) | SSRF in a third-party dependency is a supply-chain vulnerability; SBOM makes it attributable and legally reportable | Generate CycloneDX SBOM per release; map every outbound HTTP library to its version so SSRF CVEs in dependencies are detected immediately |
+
+## §DETECTION-GAP
+
+What current SSRF monitoring CANNOT detect, and what to build to close each gap.
+
+- **DNS rebinding mid-flight**: No log event shows the IP the socket actually connected to — only the URL string is logged. Gap: standard access logs record `url=attacker.com` even though the TCP connection went to `169.254.169.254`. Build: log the resolved IP address at connection time (not the hostname), and alert when any resolved IP falls in a private CIDR.
+
+- **Blind SSRF with no inline response delta**: The application response is identical whether or not the internal request succeeded. Standard HTTP response monitoring sees nothing. Build: instrument every outbound HTTP client with a trace ID; correlate outbound requests in network-flow logs (VPC flow logs / eBPF) against the trace ID — any request to a private CIDR that was not pre-authorised triggers an alert.
+
+- **Redirect chain destination**: Only the first hop URL is typically logged. The final destination after N redirects is invisible. Build: log every redirect hop in the `ssrfSafeFetch` recursive path, including the final resolved IP of the last hop.
+
+- **URL encoding bypass attempts**: A WAF or SSRF filter may block the plain string `169.254.169.254` but pass `%31%36%39%2e%32%35%34%2e%31%36%39%2e%32%35%34`. Standard string-match logging misses this. Build: normalise and decode all URL parameters before logging and before applying SSRF checks; alert on any request where the raw and decoded forms differ significantly.
+
+- **SSRF via file-upload URL fetch (import-by-URL features)**: An SSRF filter on the main API is bypassed because the import/ingest endpoint has a separate, unguarded HTTP client. Monitoring focused on the primary API surface misses this. Build: enforce that `ssrfSafeFetch` is the only export for outbound HTTP in the shared library; CI lints for direct `fetch`/`axios`/`got` calls outside that module.
+
+- **Cross-agent chain invisible to either agent alone**: SSRF finding + open redirect finding = critical chain (attacker controls redirect destination → SSRF validator is bypassed). Neither the SSRF agent nor the redirect agent sees the full picture. Build: CISO orchestrator Phase 1 synthesis correlates SSRF findings with open-redirect, CORS misconfiguration, and DNS rebinding findings before Phase 2.
+
+## §ZERO-MISS-MANDATE
+
+This agent CANNOT declare any SSRF attack class clean without explicit evidence of checking. For each item, output one of:
+- `CHECKED: [N files] | [patterns used] | CLEAN`
+- `CHECKED: [N files] | [patterns used] | [N findings, all fixed]`
+- `SKIPPED: [reason — must be "not applicable: [evidence]"]`
+
+**Silent skip = FAILED COVERAGE.** The orchestrator flags this as a quality gap.
+
+Attack classes that MUST be covered:
+
+| Attack Class | Patterns to Search |
+|---|---|
+| Unguarded outbound fetch | `fetch(`, `axios.`, `got(`, `http.request`, `https.get` with dynamic URL |
+| URL parameter sinks | `url=`, `webhook_url=`, `redirect=`, `callback=`, `src=`, `href=` in API routes |
+| Redirect without re-validation | `followRedirects`, `maxRedirects`, `redirect: "follow"` |
+| Direct IP access (no DNS) | IP literals in outbound requests; `isIP()` check absent |
+| IPv6 / alternate encoding | `[::1]`, `0x7f`, octal IP in URL params |
+| Metadata endpoint access | `169.254.169.254`, `metadata.google.internal`, `100.100.100.200` |
+| DNS rebinding window | Time gap between `dns.resolve` call and `fetch` call |
+| Blind SSRF (OOB) | No OOB testing harness configured |
+
+The output findings JSON MUST include a `coverageManifest` key:
+```json
+{
+  "coverageManifest": {
+    "attackClassesCovered": [
+      { "class": "Unguarded outbound fetch", "filesReviewed": 23, "patterns": ["fetch(", "axios.", "got("], "result": "CLEAN" },
+      { "class": "URL parameter sinks", "filesReviewed": 14, "patterns": ["url=", "webhook_url=", "redirect="], "result": "2 findings, both fixed" },
+      { "class": "Redirect without re-validation", "filesReviewed": 23, "patterns": ["followRedirects", "redirect: \"follow\""], "result": "CLEAN" },
+      { "class": "Metadata endpoint access", "filesReviewed": 23, "patterns": ["169.254.169.254", "metadata.google.internal"], "result": "CLEAN" }
+    ],
+    "filesReviewed": 23,
+    "negativeAssertions": [
+      "Unguarded outbound fetch: fetch/axios/got patterns searched across 23 files — 0 unguarded calls",
+      "Metadata endpoint access: hardcoded metadata IPs searched — 0 unblocked references"
+    ],
+    "uncoveredReason": {}
+  }
+}
+```

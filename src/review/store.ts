@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -109,6 +109,7 @@ const SAFE_SURFACE_RE = /^[a-z][a-z0-9_-]{0,63}$/;
  * Initialize a checklist for a run from the surface template.
  */
 export async function initChecklist(runId: string, surface: string): Promise<ChecklistState> {
+  assertRunId(runId); // CWE-22: validate UUID format before using as filename component
   if (!SAFE_SURFACE_RE.test(surface)) {
     throw new Error(`Invalid surface name "${surface}"`);
   }
@@ -151,6 +152,7 @@ export async function completeChecklistItem(
   completedBy: string,
   evidence?: string
 ): Promise<ChecklistState> {
+  assertRunId(runId); // CWE-22
   const state = await readChecklistRaw(runId);
   if (!state) throw new Error(`No checklist found for runId: ${runId}`);
 
@@ -176,6 +178,7 @@ export async function markChecklistItemNA(
   completedBy: string,
   reason: string
 ): Promise<ChecklistState> {
+  assertRunId(runId); // CWE-22
   const state = await readChecklistRaw(runId);
   if (!state) throw new Error(`No checklist found for runId: ${runId}`);
 
@@ -201,6 +204,7 @@ export async function failChecklistItem(
   completedBy: string,
   reason: string
 ): Promise<ChecklistState> {
+  assertRunId(runId); // CWE-22
   const state = await readChecklistRaw(runId);
   if (!state) throw new Error(`No checklist found for runId: ${runId}`);
 
@@ -224,6 +228,7 @@ export async function signOffChecklist(
   runId: string,
   signedOffBy: string
 ): Promise<ChecklistState> {
+  assertRunId(runId); // CWE-22
   const state = await readChecklistRaw(runId);
   if (!state) throw new Error(`No checklist found for runId: ${runId}`);
 
@@ -248,6 +253,7 @@ export async function signOffChecklist(
  * Read checklist state for a run.
  */
 export async function readChecklist(runId: string): Promise<ChecklistState | null> {
+  assertRunId(runId); // CWE-22
   return readChecklistRaw(runId);
 }
 
@@ -320,11 +326,24 @@ export async function updateReviewStep(
   return run;
 }
 
+// HMAC-SHA256 requires a key of at least 32 bytes (256 bits) to provide full
+// security. Keys shorter than the hash output degrade HMAC to effectively a
+// keyed hash with reduced security margin (NIST SP 800-107 §5.3.4).
+const HMAC_MIN_KEY_BYTES = 32;
+
 export async function createReviewAttestation(
   runId: string,
   payload: Record<string, unknown>,
   signatureKey?: string
 ): Promise<{ path: string; sha256: string; hmacSha256?: string }> {
+  if (signatureKey !== undefined && Buffer.byteLength(signatureKey, "utf-8") < HMAC_MIN_KEY_BYTES) {
+    throw new Error(
+      `HMAC signature key is too short (${Buffer.byteLength(signatureKey, "utf-8")} bytes). ` +
+      `Provide a key of at least ${HMAC_MIN_KEY_BYTES} bytes (256 bits) — ` +
+      `generate one with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
+    );
+  }
+
   const digestInput = JSON.stringify(payload);
   const sha256 = createHash("sha256").update(digestInput).digest("hex");
   const hmacSha256 = signatureKey
@@ -344,4 +363,48 @@ export async function createReviewAttestation(
     sha256,
     hmacSha256
   };
+}
+
+/**
+ * Verify a stored attestation HMAC using a timing-safe comparison.
+ * Returns true only if the stored hmacSha256 matches the recomputed value.
+ * Uses timingSafeEqual to prevent timing oracle attacks on the comparison.
+ */
+export async function verifyAttestationHmac(
+  runId: string,
+  signatureKey: string
+): Promise<{ valid: boolean; reason?: string }> {
+
+  if (Buffer.byteLength(signatureKey, "utf-8") < HMAC_MIN_KEY_BYTES) {
+    return { valid: false, reason: "Signature key too short — cannot verify." };
+  }
+
+  let stored: Record<string, unknown>;
+  try {
+    const raw = await readFile(reportPath(runId), "utf-8");
+    stored = JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return { valid: false, reason: "Attestation file not found or unreadable." };
+  }
+
+  const integrity = stored["integrity"] as Record<string, unknown> | undefined;
+  const storedHmac = typeof integrity?.["hmacSha256"] === "string" ? integrity["hmacSha256"] : null;
+  if (!storedHmac) {
+    return { valid: false, reason: "Attestation was not signed — no hmacSha256 field." };
+  }
+
+  // Recompute HMAC over payload (everything except the integrity wrapper)
+  const { integrity: _stripped, ...payloadOnly } = stored;
+  const digestInput = JSON.stringify(payloadOnly);
+  const expected = createHmac("sha256", signatureKey).update(digestInput).digest("hex");
+
+  // Timing-safe comparison — prevents oracle attacks that leak the correct HMAC
+  // byte-by-byte via response timing differences (CWE-208).
+  const storedBuf = Buffer.from(storedHmac, "hex");
+  const expectedBuf = Buffer.from(expected, "hex");
+  if (storedBuf.length !== expectedBuf.length) {
+    return { valid: false, reason: "HMAC length mismatch." };
+  }
+  const match = timingSafeEqual(storedBuf, expectedBuf);
+  return match ? { valid: true } : { valid: false, reason: "HMAC mismatch — attestation may have been tampered." };
 }

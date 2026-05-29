@@ -88,6 +88,8 @@ Use before every web production release. All items must be checked or explicitly
 - [ ] SSRF guard on all server-side HTTP clients — blocks private IPs and metadata endpoints
 - [ ] URL allowlist enforced for all outbound calls
 - [ ] Tests cover: 127.0.0.1, 10/8, 172.16/12, 192.168/16, 169.254.169.254
+- [ ] Webhook and callback URLs validated before use — private ranges blocked after DNS resolution, not just on raw input
+- [ ] Policy and configuration files loaded from disk are integrity-verified (HMAC or hash) before being parsed and applied — tampered configs are rejected, not silently trusted
 
 ---
 
@@ -145,3 +147,24 @@ Use before every web production release. All items must be checked or explicitly
 
 - [ ] Regression gate: all CRITICAL/HIGH findings from previous security reviews verified still fixed
 - [ ] Coverage-gap disclosure: documented what this scan CANNOT catch (runtime behavior, business logic, third-party libraries)
+
+---
+
+## Post-Quantum Readiness Gate
+
+- [ ] TLS certificate key algorithm documented — EC P-256 preferred; RSA 2048 flagged for post-quantum review
+- [ ] JWT signing keys with validity > 24h assessed for harvest-now-decrypt-later risk
+- [ ] Any client-side cryptography (SubtleCrypto) using RSA reviewed for migration timeline
+- [ ] HTTPS certificate chain uses CT log monitoring — any lapsed transparency log monitoring flagged
+
+## Learning Loop Review
+
+- [ ] `security.pattern_report` reviewed — highest-frequency web findings (XSS, CSRF, IDOR) addressed
+- [ ] All CRITICAL/HIGH findings from this run recorded via `security.record_outcome`
+- [ ] dangerouslySetInnerHTML, open redirect, and prototype pollution patterns from prior runs confirmed fixed
+
+## Cross-Checklist Dependencies
+
+- [ ] Web frontend calls APIs? → `release-api.md` CORS and authentication controls also verified
+- [ ] Web app uses AI/LLM features? → `release-ai.md` prompt injection controls also verified
+- [ ] Web app handles payment forms? → `release-payments.md` PCI SAQ scope also verified

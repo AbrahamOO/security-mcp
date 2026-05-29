@@ -43,6 +43,11 @@ async function readExceptionsJson(): Promise<string> {
     return await readFile(resolved, "utf-8");
   }
 
+  // Project-level CI exceptions file (suppresses self-scan false positives)
+  try {
+    return await readFile(join(process.cwd(), ".github", "security-exceptions-ci.json"), "utf-8");
+  } catch { /* not present — continue */ }
+
   try {
     return await readFile(join(process.cwd(), ".mcp", "exceptions", "security-exceptions.json"), "utf-8");
   } catch {

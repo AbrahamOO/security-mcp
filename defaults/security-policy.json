@@ -4,8 +4,8 @@
   "description": "Default security gate policy for security-mcp. Copy to .mcp/policies/security-policy.json and customize for your project.",
   "required_checks": {
     "secrets_scan": { "severity_block": ["HIGH", "CRITICAL"] },
-    "dependency_scan": { "severity_block": ["CRITICAL"] },
-    "sast": { "severity_block": ["CRITICAL"] },
+    "dependency_scan": { "severity_block": ["HIGH", "CRITICAL"] },
+    "sast": { "severity_block": ["HIGH", "CRITICAL"] },
     "iac_scan": { "severity_block": ["HIGH", "CRITICAL"] }
   },
   "environments": {

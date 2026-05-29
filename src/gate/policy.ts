@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { createHmac, timingSafeEqual, randomUUID } from "node:crypto";
 import fg from "fast-glob";
 import { GateResult, Finding, FindingSeverity, ControlCoverage } from "./result.js";
 import { getChangedFiles } from "./diff.js";
@@ -31,7 +32,6 @@ import { runNucleiChecks } from "./checks/nuclei.js";
 import { getCommitHash, loadBaseline, saveBaseline, compareBaseline } from "./baseline.js";
 import { checkInjectionDeep } from "./checks/injection-deep.js";
 import { checkAuthDeep } from "./checks/auth-deep.js";
-import { randomUUID } from "node:crypto";
 
 const PolicySchema = z.object({
   name: z.string(),
@@ -107,7 +107,7 @@ async function resolveScopedFiles(opts: {
       dot: true,
       ignore: SCOPE_IGNORE_GLOBS
     });
-    return Array.from(new Set(files)).sort();
+    return Array.from(new Set(files)).sort((a, b) => a.localeCompare(b));
   }
 
   const folderGlobs = targets.map((target) => `${target.replace(/\/+$/, "")}/**/*`);
@@ -116,11 +116,64 @@ async function resolveScopedFiles(opts: {
     dot: true,
     ignore: SCOPE_IGNORE_GLOBS
   });
-  return Array.from(new Set(files)).sort();
+  return Array.from(new Set(files)).sort((a, b) => a.localeCompare(b));
+}
+
+// POC-8 fix: HMAC-SHA256 verification of the policy file on load.
+// Minimal tamper that bypasses all HIGH/CRITICAL findings: change
+//   "severity_block": ["HIGH", "CRITICAL"]  →  "severity_block": []
+// With HMAC verification that tampered file is detected and rejected.
+const POLICY_HMAC_MIN_KEY_BYTES = 32;
+
+function getPolicyHmacKey(): string | null {
+  const key = process.env["SECURITY_POLICY_HMAC_KEY"];
+  if (!key) return null;
+  if (Buffer.byteLength(key, "utf-8") < POLICY_HMAC_MIN_KEY_BYTES) {
+    throw new Error(
+      `SECURITY_POLICY_HMAC_KEY is too short (${Buffer.byteLength(key, "utf-8")} bytes). ` +
+      `Minimum ${POLICY_HMAC_MIN_KEY_BYTES} bytes required.`
+    );
+  }
+  return key;
+}
+
+/**
+ * Write the HMAC signature for a policy file to <policyPath>.hmac.
+ * Call this after generating or updating the policy. Not exported from the
+ * module — callers use the CLI helper `security-mcp sign-policy`.
+ */
+export function signPolicyFile(raw: string, key: string): string {
+  return createHmac("sha256", key).update(raw, "utf-8").digest("hex");
 }
 
 export async function loadPolicy(policyPath: string): Promise<Policy> {
   const raw = await readFileSafe(policyPath);
+
+  // POC-8: verify HMAC when a key is configured
+  const hmacKey = getPolicyHmacKey();
+  if (hmacKey) {
+    let storedSig: string | null = null;
+    try {
+      storedSig = (await readFileSafe(`${policyPath}.hmac`)).trim();
+    } catch {
+      // .hmac sidecar missing — reject to prevent stripping the sig to bypass verification
+      throw new Error(
+        `[loadPolicy] Policy file "${policyPath}" has no .hmac sidecar but ` +
+        `SECURITY_POLICY_HMAC_KEY is set. Generate a signature with: security-mcp sign-policy`
+      );
+    }
+    const expected = createHmac("sha256", hmacKey).update(raw, "utf-8").digest("hex");
+    const storedBuf   = Buffer.from(storedSig, "hex");
+    const expectedBuf = Buffer.from(expected,  "hex");
+    const valid = storedBuf.length === expectedBuf.length && timingSafeEqual(storedBuf, expectedBuf);
+    if (!valid) {
+      throw new Error(
+        `[loadPolicy] HMAC verification failed for "${policyPath}" — policy file may have been tampered. ` +
+        `Re-sign with: security-mcp sign-policy`
+      );
+    }
+  }
+
   const parsed = JSON.parse(raw);
   return PolicySchema.parse(parsed);
 }
@@ -156,6 +209,159 @@ function assignRiskSlas(findings: Finding[]): Finding[] {
   return findings.map((f) => ({ ...f, sla: SLA_MAP[f.severity], slaAssignedAt: now }));
 }
 
+// ---------------------------------------------------------------------------
+// runPrGate helpers — extracted to keep cognitive complexity within limits
+// ---------------------------------------------------------------------------
+
+type ScannerReadiness = Awaited<ReturnType<typeof checkScannerReadiness>>;
+type Surfaces = ReturnType<typeof detectSurfaces>;
+
+/** Run every applicable security check in parallel and collect findings. */
+async function runAllChecks(opts: {
+  policy: Policy;
+  changedFiles: string[];
+  targets: string[];
+  surfaces: Surfaces;
+  scannerReadiness: ScannerReadiness;
+  evidenceCoverage: { findings: Finding[] };
+}): Promise<Finding[]> {
+  const { policy, changedFiles, targets, surfaces, scannerReadiness, evidenceCoverage } = opts;
+  const stagingUrl = process.env["SECURITY_STAGING_URL"];
+  const isApiOrWeb = surfaces.api || surfaces.web;
+
+  const settled = await Promise.allSettled([
+    checkRequiredArtifacts({ policy, changedFiles }),
+    checkSecrets({ changedFiles }),
+    checkDependencies({ changedFiles }),
+    Promise.resolve(scannerReadiness.findings),
+    Promise.resolve(evidenceCoverage.findings),
+    surfaces.web          ? checkWebNextjs({ changedFiles })                : Promise.resolve([]),
+    surfaces.api          ? checkApi({ changedFiles })                      : Promise.resolve([]),
+    surfaces.infra        ? checkInfra({ changedFiles })                    : Promise.resolve([]),
+    surfaces.mobileIos    ? checkMobileIos({ changedFiles })                : Promise.resolve([]),
+    surfaces.mobileAndroid ? checkMobileAndroid({ changedFiles })           : Promise.resolve([]),
+    surfaces.ai           ? checkAi({ changedFiles })                       : Promise.resolve([]),
+    checkGraphQL({ changedFiles }),
+    checkKubernetes({ changedFiles }),
+    checkDatabase({ changedFiles }),
+    checkCrypto({ changedFiles }),
+    checkDlp({ changedFiles }),
+    runSbomChecks({ changedFiles, targets }),
+    runPlaybookChecks({ changedFiles, surfaces }),
+    surfaces.ai  ? runAiRedteamChecks({ changedFiles })                     : Promise.resolve([]),
+    stagingUrl   ? runRuntimeChecks({ targets, changedFiles })              : Promise.resolve([]),
+    runCiPipelineChecks({ changedFiles }),
+    stagingUrl   ? runNucleiChecks({ changedFiles })                        : Promise.resolve([]),
+    isApiOrWeb   ? checkInjectionDeep({ changedFiles })                     : Promise.resolve([]),
+    isApiOrWeb   ? checkAuthDeep({ changedFiles })                          : Promise.resolve([])
+  ]);
+
+  const findings: Finding[] = [];
+  for (const r of settled) {
+    if (r.status === "fulfilled") findings.push(...r.value);
+    else console.warn("[policy] Check failed:", r.reason);
+  }
+  return findings;
+}
+
+/** Build tooling-based control coverage from the catalog. */
+function buildToolingCoverage(
+  catalog: Awaited<ReturnType<typeof loadControlCatalog>>,
+  surfaces: Surfaces,
+  scannerReadiness: ScannerReadiness
+): ControlCoverage[] {
+  return catalog.controls
+    .filter((c) => c.automation === "tooling" && controlApplies(c, surfaces))
+    .map((c) => {
+      const required = c.required_scanners ?? [];
+      const missing = required.filter(
+        (id) => !scannerReadiness.configured.includes(id) || scannerReadiness.missing.includes(id)
+      );
+      return {
+        id: c.id,
+        description: c.description,
+        automation: c.automation,
+        frameworks: c.frameworks,
+        status: missing.length > 0 ? "missing" : "satisfied",
+        details: missing.length > 0 ? missing : required
+      } satisfies ControlCoverage;
+    });
+}
+
+type ConfidenceMetrics = {
+  automatedCoverage: number;
+  scannerScore: number;
+  confidenceScore: number;
+  missingControls: number;
+  riskAcceptedControls: number;
+};
+
+/** Compute coverage and confidence scores from control coverage + scanner readiness. */
+function computeConfidence(
+  controlCoverage: ControlCoverage[],
+  scannerReadiness: ScannerReadiness
+): ConfidenceMetrics {
+  const relevant = controlCoverage.filter((c) => c.status !== "not_applicable");
+  const satisfied = relevant.filter((c) => c.status === "satisfied").length;
+  const riskAccepted = relevant.filter((c) => c.status === "risk_accepted").length;
+  const missing = relevant.filter((c) => c.status === "missing").length;
+
+  const automatedCoverage = relevant.length === 0
+    ? 100
+    : Math.round((satisfied + riskAccepted * 0.5) / relevant.length * 100);
+
+  const { configured, missing: scanMissing } = scannerReadiness;
+  const scannerScore = configured.length === 0
+    ? 0
+    : Math.round((configured.length - scanMissing.length) / configured.length * 100);
+
+  const confidenceScore = Math.max(0, Math.min(100,
+    Math.round(automatedCoverage * 0.7 + scannerScore * 0.3)
+  ));
+
+  return { automatedCoverage, scannerScore, confidenceScore, missingControls: missing, riskAcceptedControls: riskAccepted };
+}
+
+/** Inject regression findings when a baseline exists and controls have regressed. */
+function applyBaselineDiff(
+  findings: Finding[],
+  controlCoverage: ControlCoverage[],
+  previousBaseline: GateResult,
+  changedFiles: string[],
+  surfaces: Surfaces,
+  confidence: { automatedCoverage: number }
+): { findings: Finding[]; diff: ReturnType<typeof compareBaseline> } {
+  const snapshot: GateResult = {
+    findings,
+    controlCoverage,
+    confidence: { automatedCoverage: confidence.automatedCoverage, score: 0, missingControls: 0, scannerReadiness: 0, summary: "" },
+    status: "PASS",
+    policyVersion: "",
+    evaluatedAt: "",
+    scope: { changedFiles, surfaces }
+  };
+  const diff = compareBaseline(snapshot, previousBaseline);
+
+  if (diff.regressions.length === 0) return { findings, diff };
+
+  const regressionFindings: Finding[] = diff.regressions.map((r) => ({
+    id: "BASELINE_REGRESSION",
+    title: `Security regression: control "${r.controlId}" was previously satisfied but is now missing`,
+    severity: "HIGH" as const,
+    evidence: [`Control ${r.controlId}: "satisfied" → "missing" since last gate run`],
+    requiredActions: [
+      `Restore control "${r.controlId}" to a satisfied state.`,
+      "Investigate what change caused this regression and revert or remediate."
+    ]
+  }));
+
+  return { findings: [...regressionFindings, ...findings], diff };
+}
+
+// ---------------------------------------------------------------------------
+// Main gate entry point
+// ---------------------------------------------------------------------------
+
 export async function runPrGate(opts: {
   baseRef?: string;
   headRef?: string;
@@ -172,149 +378,60 @@ export async function runPrGate(opts: {
   const targets = normalizeTargets(opts.targets);
 
   const changedFiles = await resolveScopedFiles({
-    mode,
-    targets,
+    mode, targets,
     baseRef: opts.baseRef ?? "origin/main",
     headRef: opts.headRef ?? "HEAD"
   });
 
-  // Classify the change type to apply appropriate gate tier
   const changeType = classifyChangeType(changedFiles);
-
   const surfaces = detectSurfaces(changedFiles);
-  const catalog = await loadControlCatalog();
-  const scannerReadiness = await checkScannerReadiness({ surfaces });
-  const evidenceCoverage = await evaluateEvidenceCoverage({ policy, surfaces });
 
-  let rawFindings: Finding[];
+  const [catalog, scannerReadiness, evidenceCoverage] = await Promise.all([
+    loadControlCatalog(),
+    checkScannerReadiness({ surfaces }),
+    evaluateEvidenceCoverage({ policy, surfaces })
+  ]);
 
-  // "docs" tier: only run secrets check to avoid unnecessary overhead
-  if (changeType === "docs") {
-    rawFindings = await checkSecrets({ changedFiles });
-  } else {
-    // Run all independent checks in parallel
-    const checkResults = await Promise.allSettled([
-      checkRequiredArtifacts({ policy, changedFiles }),
-      checkSecrets({ changedFiles }),
-      checkDependencies({ changedFiles }),
-      Promise.resolve(scannerReadiness.findings),
-      Promise.resolve(evidenceCoverage.findings),
-      surfaces.web ? checkWebNextjs({ changedFiles }) : Promise.resolve([]),
-      surfaces.api ? checkApi({ changedFiles }) : Promise.resolve([]),
-      surfaces.infra ? checkInfra({ changedFiles }) : Promise.resolve([]),
-      surfaces.mobileIos ? checkMobileIos({ changedFiles }) : Promise.resolve([]),
-      surfaces.mobileAndroid ? checkMobileAndroid({ changedFiles }) : Promise.resolve([]),
-      surfaces.ai ? checkAi({ changedFiles }) : Promise.resolve([]),
-      checkGraphQL({ changedFiles }),
-      checkKubernetes({ changedFiles }),
-      checkDatabase({ changedFiles }),
-      checkCrypto({ changedFiles }),
-      checkDlp({ changedFiles }),
-      runSbomChecks({ changedFiles, targets }),
-      runPlaybookChecks({ changedFiles, surfaces }),
-      surfaces.ai ? runAiRedteamChecks({ changedFiles }) : Promise.resolve([]),
-      process.env["SECURITY_STAGING_URL"] ? runRuntimeChecks({ targets, changedFiles }) : Promise.resolve([]),
-      runCiPipelineChecks({ changedFiles }),
-      process.env["SECURITY_STAGING_URL"] ? runNucleiChecks({ changedFiles }) : Promise.resolve([]),
-      (surfaces.api || surfaces.web) ? checkInjectionDeep({ changedFiles }) : Promise.resolve([]),
-      (surfaces.api || surfaces.web) ? checkAuthDeep({ changedFiles }) : Promise.resolve([])
-    ]);
+  // Collect raw findings — docs tier runs secrets-only to reduce overhead
+  const rawChecked = changeType === "docs"
+    ? await checkSecrets({ changedFiles })
+    : await runAllChecks({ policy, changedFiles, targets, surfaces, scannerReadiness, evidenceCoverage });
 
-    rawFindings = [];
-    for (const result of checkResults) {
-      if (result.status === "fulfilled") {
-        rawFindings.push(...result.value);
-      } else {
-        console.warn("[policy] Check failed:", result.reason);
-      }
-    }
-  }
+  const rawFindings = assignRiskSlas(rawChecked);
 
-  rawFindings = assignRiskSlas(rawFindings);
-
-  const toolingCoverage: ControlCoverage[] = catalog.controls
-    .filter((control) => control.automation === "tooling" && controlApplies(control, surfaces))
-    .map((control) => {
-      const required = control.required_scanners ?? [];
-      const missing = required.filter(
-        (scannerId) => !scannerReadiness.configured.includes(scannerId) || scannerReadiness.missing.includes(scannerId)
-      );
-      return {
-        id: control.id,
-        description: control.description,
-        automation: control.automation,
-        frameworks: control.frameworks,
-        status: missing.length > 0 ? "missing" : "satisfied",
-        details: missing.length > 0 ? missing : required
-      };
-    });
-
+  // Build control coverage
+  const toolingCoverage = buildToolingCoverage(catalog, surfaces, scannerReadiness);
   const controlCoverage: ControlCoverage[] = [
-    ...evidenceCoverage.controls.filter((control) => control.automation === "evidence"),
+    ...evidenceCoverage.controls.filter((c) => c.automation === "evidence"),
     ...toolingCoverage
   ];
 
+  // Apply exceptions
   const exceptionResult = await applySecurityExceptions(rawFindings);
-  const controlCoverageWithExceptions: ControlCoverage[] = controlCoverage.map((control) => {
-    if (exceptionResult.activeControlExceptionIds.includes(control.id) && control.status === "missing") {
-      return {
-        ...control,
-        status: "risk_accepted",
-        details: [...control.details, "Covered by an active approved control exception."]
-      };
+  const controlCoverageWithExceptions = controlCoverage.map((control) => {
+    const excepted = exceptionResult.activeControlExceptionIds.includes(control.id);
+    if (excepted && control.status === "missing") {
+      return { ...control, status: "risk_accepted" as const, details: [...control.details, "Covered by an active approved control exception."] };
     }
     return control;
   });
-  const findings = [...exceptionResult.findings, ...exceptionResult.exceptionFindings];
 
-  // Apply risk-based adaptive gating tier overrides
-  let effectiveFindings = findings;
+  const baseFindings = [...exceptionResult.findings, ...exceptionResult.exceptionFindings];
 
-  if (changeType === "payment") {
-    // Payment changes: treat as prod-equivalent — block on all HIGH+
-    effectiveFindings = findings;
-  } else if (changeType === "auth") {
-    // Auth changes: always block on HIGH+ even in dev
-    effectiveFindings = findings;
-  }
+  // Confidence metrics
+  const cm = computeConfidence(controlCoverageWithExceptions, scannerReadiness);
 
-  const relevantControls = controlCoverageWithExceptions.filter((control) => control.status !== "not_applicable");
-  const satisfiedControls = relevantControls.filter((control) => control.status === "satisfied").length;
-  const riskAcceptedControls = relevantControls.filter((control) => control.status === "risk_accepted").length;
-  const automatedCoverage = relevantControls.length === 0
-    ? 100
-    : Math.round((((satisfiedControls) + (riskAcceptedControls * 0.5)) / relevantControls.length) * 100);
-  const scannerScore = scannerReadiness.configured.length === 0
-    ? 0
-    : Math.round(((scannerReadiness.configured.length - scannerReadiness.missing.length) / scannerReadiness.configured.length) * 100);
-  const confidenceScore = Math.max(0, Math.min(100, Math.round((automatedCoverage * 0.7) + (scannerScore * 0.3))));
-  const missingControls = relevantControls.filter((control) => control.status === "missing").length;
-
-  // Baseline regression detection: compare current run against previous baseline
+  // Baseline regression injection
+  let effectiveFindings = baseFindings;
   let baselineDiff: ReturnType<typeof compareBaseline> | undefined;
   if (previousBaseline) {
-    baselineDiff = compareBaseline(
-      { findings: effectiveFindings, controlCoverage: controlCoverageWithExceptions, confidence: { automatedCoverage, score: 0, missingControls: 0, scannerReadiness: 0, summary: "" }, status: "PASS", policyVersion: "", evaluatedAt: "", scope: { changedFiles, surfaces } },
-      previousBaseline
-    );
-    if (baselineDiff.regressions.length > 0) {
-      const regressionFindings: Finding[] = baselineDiff.regressions.map((r) => ({
-        id: "BASELINE_REGRESSION",
-        title: `Security regression: control "${r.controlId}" was previously satisfied but is now missing`,
-        severity: "HIGH" as const,
-        evidence: [`Control ${r.controlId}: "satisfied" → "missing" since last gate run`],
-        requiredActions: [
-          `Restore control "${r.controlId}" to a satisfied state.`,
-          "Investigate what change caused this regression and revert or remediate."
-        ]
-      }));
-      effectiveFindings = [...regressionFindings, ...effectiveFindings];
-    }
+    const br = applyBaselineDiff(baseFindings, controlCoverageWithExceptions, previousBaseline, changedFiles, surfaces, cm);
+    effectiveFindings = br.findings;
+    baselineDiff = br.diff;
   }
 
   const status = effectiveFindings.some((f) => f.severity === "HIGH" || f.severity === "CRITICAL")
-    ? "FAIL"
-    : "PASS";
+    ? "FAIL" : "PASS";
 
   const result: GateResult = {
     status,
@@ -324,17 +441,14 @@ export async function runPrGate(opts: {
     findings: effectiveFindings,
     suppressedFindings: exceptionResult.suppressed,
     controlCoverage: controlCoverageWithExceptions,
-    scannerReadiness: {
-      configured: scannerReadiness.configured,
-      missing: scannerReadiness.missing
-    },
+    scannerReadiness: { configured: scannerReadiness.configured, missing: scannerReadiness.missing },
     confidence: {
-      score: confidenceScore,
-      automatedCoverage,
-      missingControls,
-      riskAcceptedControls,
-      scannerReadiness: scannerScore,
-      summary: `Automated coverage ${automatedCoverage}%, scanner readiness ${scannerScore}%, missing controls ${missingControls}, risk-accepted controls ${riskAcceptedControls}. Change type: ${changeType}.`
+      score: cm.confidenceScore,
+      automatedCoverage: cm.automatedCoverage,
+      missingControls: cm.missingControls,
+      riskAcceptedControls: cm.riskAcceptedControls,
+      scannerReadiness: cm.scannerScore,
+      summary: `Automated coverage ${cm.automatedCoverage}%, scanner readiness ${cm.scannerScore}%, missing controls ${cm.missingControls}, risk-accepted controls ${cm.riskAcceptedControls}. Change type: ${changeType}.`
     },
     baselineDiff
   };

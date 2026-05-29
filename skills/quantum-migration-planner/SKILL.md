@@ -182,3 +182,99 @@ const valid = ml_dsa65.verify(signPub, message, signature);
 - `requiredActions`: phased migration steps
 - `complianceImpact`: framework mappings
 - `beyondSkillMd`: true — entirely beyond-policy (PQC is forward-looking)
+
+  - `intelligenceForOtherAgents`: cross-agent intelligence block (schema below)
+
+Every findings JSON MUST include `intelligenceForOtherAgents`:
+```json
+{
+  "intelligenceForOtherAgents": {
+    "forPentestTeam": [{ "type": "HIGH_VALUE_TARGET", "description": "Quantum-vulnerable key exchange in use — ciphertext intercepted today will be decryptable post-CRQC", "exploitHint": "Intercept TLS handshakes where ECDHE is negotiated; store ciphertext for future offline Shor's attack" }],
+    "forCryptoSpecialist": [{ "type": "CRYPTO_WEAKNESS_REFERENCE", "algorithm": "RSA-2048 / ECDSA P-256 / ECDH P-256", "location": "See files[] in each QUANTUM_ finding" }],
+    "forCloudSpecialist": [{ "type": "HSM_PQC_SUPPORT_GAP", "description": "Cloud HSMs (AWS CloudHSM, GCP Cloud HSM) do not yet support ML-KEM/ML-DSA key generation natively — migration requires software-side key generation with HSM wrapping", "escalationPath": "Evaluate AWS KMS ML-KEM preview or software PQC + HSM wrapping" }],
+    "forComplianceGrc": [{ "type": "COMPLIANCE_BLOCKER", "frameworks": ["CNSA 2.0", "NIST SP 800-208", "FIPS 140-3", "NSM-10"], "releaseBlock": true, "note": "NSM-10 mandates PQC migration plans for US federal systems by 2025; CNSA 2.0 requires full migration by 2030" }]
+  }
+}
+```
+
+## BEYOND SKILL.MD — MANDATORY EXPANSIONS
+
+- **Harvest-Now-Decrypt-Later via Nation-State TLS Interception (ATT&CK T1040 — Network Sniffing / NIST SP 800-208 §3.1):** Adversaries (e.g., documented in NSA/GCHQ Bullrun program disclosures) are archiving TLS sessions encrypted with ECDHE today for offline Shor's-algorithm decryption post-CRQC. Test by: deploy a canary secret under ECDH key exchange; confirm it does not appear in any external threat-intel feed after 30 days; separately, run `testssl.sh --openssl-legacy --curves` against all public endpoints and flag any that still negotiate secp256r1 or secp384r1 without a hybrid ML-KEM offer. Finding threshold: any endpoint negotiating classical-only ECDHE for sessions carrying data with a confidentiality horizon past 2030.
+
+- **ML-KEM Decapsulation Fault Injection (CVE-2024-31497 analogy — ECDSA nonce bias; post-quantum equivalent in @noble/post-quantum pre-1.0.0):** Side-channel and fault-injection attacks against software PQC implementations can leak the secret key via timing or induced decapsulation failures. The `@noble/post-quantum` library versions prior to 1.0.0 had unverified decapsulation paths. Test by: run `npm ls @noble/post-quantum` and assert version ≥ 1.0.0; verify `decapsulate()` calls are wrapped so a failure throws rather than returning a zero/empty key silently; run the NIST KAT (Known Answer Test) vectors against the deployed library build. Finding threshold: version < 1.0.0 or any code path that treats a decapsulation failure as a recoverable condition returning partial key material.
+
+- **AI-Assisted Cryptographic Algorithm Discovery for Harvest Targeting (ATT&CK T1590.002 — Gather Victim Network Information):** LLM-powered reconnaissance tools (e.g., Nuclei AI templates, Burp AI extensions) now auto-detect cipher suite advertisements from TLS ClientHello/ServerHello transcripts and prioritise targets exposing classical key exchange for harvest operations. Test by: capture a TLS handshake with `tshark -r capture.pcap -T json | jq '.[] | ."_source".layers.tls'` and verify the `supported_groups` extension includes `0x0200` (ML-KEM-768 IANA draft code point) or the X-Wing hybrid group; confirm no server response selects a classical-only group. Finding threshold: server accepting a ClientHello that offers only secp256r1/secp384r1 without rejecting or downgrading to a PQC-capable alternative.
+
+- **Supply Chain Risk — Vendored PQC Library Substitution (ATT&CK T1195.001 — Compromise Software Dependencies):** The post-quantum ecosystem has a proliferation of unmaintained or adversarially-seeded npm packages mimicking legitimate PQC libraries (e.g., `noble-post-quantum` vs `@noble/post-quantum`, `ml-kem` vs `@stablelib/kyber`). A dependency confusion or typosquatting attack installs a lookalike that returns weak key material. Test by: run `cat package-lock.json | jq '.packages | to_entries[] | select(.key | test("kem|kyber|dilithium|lattice|pqc|post.quantum")) | {pkg: .key, resolved: .value.resolved, integrity: .value.integrity}'`; verify each resolved URL is the canonical npm registry entry and the SHA-512 integrity hash matches the published package; cross-reference against OSV.dev for known malicious packages. Finding threshold: any PQC-related dependency resolved from a non-canonical registry URL or with a mismatched integrity hash.
+
+- **Regulatory Cliff — CNSA 2.0 and NSM-10 Compliance Gap (NIST SP 800-208, NSM-10 §3):** The US National Security Memorandum 10 (May 2022) mandates that all National Security Systems (NSS) submit a PQC migration inventory by 2023 and complete migration by 2035; CNSA 2.0 requires PQC-only algorithms for software and firmware signing by 2025 and for all key establishment by 2030. Non-compliance exposes federal contractors to contract termination and ATO revocation. Test by: grep the repository for any FIPS 140-2/3 module references (`fips140`, `cmvp`, `validated module`) and cross-check against the NIST CMVP Active Validations list for ML-KEM/ML-DSA certificates; confirm the migration roadmap document includes explicit CNSA 2.0 and NSM-10 milestone dates. Finding threshold: absence of a dated migration plan referencing CNSA 2.0 milestones in any system that processes CUI or operates under a US federal ATO.
+
+- **HSM Firmware PQC Support Gap Blocking Migration (ATT&CK T1600.001 — Reduce Key Space; real-world: AWS CloudHSM PQC preview 2024, Thales Luna HSM firmware 7.7+):** Hardware Security Modules are the root of trust for key generation and wrapping; if HSM firmware does not support ML-KEM/ML-DSA, the migration is blocked at the hardware layer regardless of software readiness. Attackers aware of this gap can time exfiltration operations to the window between software PQC deployment and HSM firmware upgrade (when key material may be temporarily held in software). Test by: query the HSM vendor firmware version via `pkcs11-tool --module <hsm.so> -L` and cross-reference against the vendor's PQC roadmap (AWS CloudHSM: requires `cloudhsm-pkcs11` ≥ 5.12 for ML-KEM preview; Thales Luna: requires firmware ≥ 7.7.2); confirm no interim period exists where ML-KEM keys are generated in software and then imported into the HSM without hardware attestation. Finding threshold: HSM firmware version below vendor's PQC-capable baseline combined with a migration plan that has already begun software-side PQC key generation.
+
+## §EDGE-CASE-MATRIX
+
+The 5 quantum-migration attack cases that automated scanners and naive manual review universally miss. MANDATORY checks — do not skip.
+
+| # | Edge Case | Why Scanners Miss It | Concrete Test |
+|---|-----------|----------------------|---------------|
+| 1 | Cryptographic algorithm negotiated at runtime from config/env — not hardcoded | Grep for literal algorithm names finds nothing; actual algorithm determined by `process.env.JWT_ALG` or a config map at startup | Audit all `config.*`, `env.*`, and dynamic algorithm selectors; map every possible resolved value at runtime |
+| 2 | Hybrid scheme implemented with XOR of secrets — one side is classical-only in a fallback branch | The happy path uses hybrid; the error/fallback path silently drops to classical-only ECDH | Trace all branches in key-agreement code; assert no code path reaches `sharedSecret = classicalOnly` without PQC |
+| 3 | Long-lived session tokens signed with RS256/ES256 — will remain in use past CRQC window | JWT expiry is 30 days or "never" — tokens minted today may still be active when a CRQC is available | Grep `expiresIn`, `exp` claims; flag tokens with lifetime >1 year or no expiry; require re-issuance plan |
+| 4 | Key wrapping layer (KEK) is RSA/ECDH while the wrapped DEK is AES-256 — only the outer layer is quantum-vulnerable | Scanner reports AES-256 (safe) without inspecting the key-encryption-key wrapping it | Trace `wrapKey` / `unwrapKey` call sites; confirm the KEK is also PQC-migrated, not just the DEK |
+| 5 | Third-party SDK or vendored library performs its own key exchange internally (e.g., gRPC TLS, database driver, message queue client) | Only first-party crypto code is grepped; internal SDK TLS session uses ECDHE configured by the SDK | Enumerate all SDK dependencies that open TLS connections; verify each supports PQC cipher suite configuration |
+
+## §TEMPORAL-THREATS
+
+Threats materialising in the 2025–2030 window that defences designed today must account for.
+
+| Threat | Est. Timeline | Relevance to This Domain | Prepare Now By |
+|--------|--------------|--------------------------|----------------|
+| Cryptographically Relevant Quantum Computer (CRQC) | 2028–2032 | Harvest-now-decrypt-later attacks active today; all RSA/ECDSA/ECDH keys signed or exchanged today will be retrospectively broken | Inventory all RSA/ECDSA/ECDH usage; migrate long-lived data to ML-KEM (FIPS 203) and ML-DSA (FIPS 204) immediately |
+| Large-scale encrypted-traffic archiving by nation-state adversaries | 2024–present (active) | Nation-states are capturing TLS sessions at scale today, targeting financial, health, and defence sectors — to decrypt post-CRQC | Prioritise hybrid TLS key exchange (X-Wing / ML-KEM-768 + X25519) in all public-facing services now |
+| NIST PQC FIPS enforcement deadlines | 2025–2026 (active) | CNSA 2.0 requires PQC-only for NSS by 2030; FIPS 140-3 module approvals required for PQC usage in federal products | Begin FIPS 140-3 validated PQC module evaluation; track CMVP queue for ML-KEM/ML-DSA validation |
+| Post-quantum TLS migration deadline | 2028–2030 | Browser vendors will drop classical-only cipher suites; services that have not enabled hybrid/PQC TLS will fail handshakes | Begin TLS agility assessment; test hybrid key exchange in staging; plan cert rotation to ML-DSA |
+| HSM vendor PQC support rollout | 2025–2027 | HSM firmware upgrades for ML-KEM/ML-DSA are rolling out now — systems that miss the upgrade window will be blocked from hardware-backed PQC | Audit HSM firmware version and vendor PQC roadmap; schedule upgrade before migration Phase 2 |
+
+## §DETECTION-GAP
+
+What current security monitoring CANNOT detect in the quantum-migration domain, and what to build to close each gap.
+
+**Domain-specific gaps that MUST be checked:**
+
+- **Harvest-now-decrypt-later traffic capture**: No log event indicates a passive TLS session copy. An adversary capturing ciphertext leaves no trace in application logs. Need: network-layer monitoring for anomalous TLS session mirroring or unexplained traffic duplication at the load-balancer/firewall layer; treat all data encrypted with ECDH today as future-compromised.
+- **Silent fallback to classical cipher in hybrid negotiation**: If the PQC side of a hybrid key exchange fails (library error, peer incompatibility), code may silently fall back to ECDH only — log shows "handshake complete" with no indication that PQC was skipped. Need: instrument hybrid key-agreement paths to emit a structured log event recording which algorithms were actually negotiated; alert on any session that did not use ML-KEM.
+- **Expired PQC migration milestone**: Migration roadmaps are created and then not enforced. No runtime check confirms that the migration phase target date was met. Need: a scheduled CI/CD gate that re-scans for quantum-vulnerable algorithm usage and fails the build if findings persist past their scheduled remediation date.
+- **Vendor-supplied certificate rotation gap**: The application migrated to ML-DSA signing internally, but a third-party CDN or WAF is still presenting RSA-2048 leaf certificates to end users. Standard crypto audits only inspect code, not the full TLS chain as seen by the client. Need: scheduled external TLS probing (testssl.sh or SSLLabs API) that inspects the certificate chain as the client sees it — not just application-side config.
+- **Cross-agent chain — key export + quantum vulnerability**: Phase 1 finding of insecure key export (another agent) + Phase 1 finding of RSA key in use (this agent) = CRITICAL chain: key can be exfiltrated today, decrypted by quantum tomorrow. Need: CISO orchestrator Phase 1 synthesis step to correlate key-management findings with quantum-vulnerability findings before Phase 2.
+
+## §ZERO-MISS-MANDATE
+
+This agent CANNOT declare any attack class clean without explicit evidence of checking. For each item, output one of:
+- `CHECKED: [N files] | [patterns used] | CLEAN`
+- `CHECKED: [N files] | [patterns used] | [N findings, all fixed]`
+- `SKIPPED: [reason — must be "not applicable: [evidence]"]`
+
+**Silent skip = FAILED COVERAGE.** The orchestrator flags this as a quality gap.
+
+The output findings JSON MUST include a `coverageManifest` key:
+```json
+{
+  "coverageManifest": {
+    "attackClassesCovered": [
+      { "class": "RSA key usage", "filesReviewed": 12, "patterns": ["generateKeyPair.*rsa", "RS256", "sha256WithRSAEncryption"], "result": "CLEAN" },
+      { "class": "ECDSA/ECDH key usage", "filesReviewed": 12, "patterns": ["EC|ECDSA|ECDH|secp256|P-256|P-384|ES256"], "result": "2 findings, both remediated" },
+      { "class": "Dynamic algorithm selection via config/env", "filesReviewed": 8, "patterns": ["process.env.*ALG", "config.algorithm", "getAlgorithm()"], "result": "CLEAN" },
+      { "class": "Hybrid scheme fallback branches", "filesReviewed": 4, "patterns": ["catch.*kem", "fallback.*classical", "classicalOnly"], "result": "CLEAN" },
+      { "class": "Long-lived JWT token expiry", "filesReviewed": 6, "patterns": ["expiresIn", "exp:", "never", "0"], "result": "1 finding, remediated" },
+      { "class": "KEK wrapping algorithm", "filesReviewed": 3, "patterns": ["wrapKey", "unwrapKey", "RSA-OAEP", "ECDH-ES"], "result": "CLEAN" },
+      { "class": "Third-party SDK TLS cipher configuration", "filesReviewed": 15, "patterns": ["grpc", "pg.*ssl", "redis.*tls", "amqp.*tls"], "result": "CLEAN" }
+    ],
+    "filesReviewed": 60,
+    "negativeAssertions": [
+      "RSA usage: pattern searched across 60 files — 0 matches",
+      "Dynamic algorithm config: env/config grep across 60 files — 0 matches"
+    ],
+    "uncoveredReason": {}
+  }
+}
+```

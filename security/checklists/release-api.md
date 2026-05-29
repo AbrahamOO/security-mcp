@@ -79,6 +79,8 @@ Use before every API production release. All items must be checked or explicitly
 - [ ] Outgoing webhooks use mTLS or HMAC signing
 - [ ] Third-party API keys stored in secret manager — not in code or env files
 - [ ] Outbound HTTP calls have SSRF guard — private IPs and metadata endpoints blocked
+- [ ] Webhook target URLs validated before first use — private IP ranges (10/8, 172.16/12, 192.168/16), link-local (169.254.0.0/16), and loopback blocked even after DNS resolution
+- [ ] Webhook URL re-validated on every redirect — SSRF-via-redirect attack confirmed blocked
 
 ---
 
@@ -136,3 +138,24 @@ Use before every API production release. All items must be checked or explicitly
 
 - [ ] Regression gate: CRITICAL/HIGH findings from prior reviews verified still fixed
 - [ ] Coverage-gap disclosure: documented what this scan cannot catch (runtime, business logic)
+
+---
+
+## Post-Quantum Readiness Gate
+
+- [ ] JWT signing algorithm inventoried — RS256/ES256 keys with long-lived tokens flagged for migration
+- [ ] API-to-API mTLS certificates use minimum EC P-256; RSA 2048 keys flagged for post-quantum review
+- [ ] Tokens with validity > 24h that protect high-value resources assessed for harvest-now-decrypt-later risk
+- [ ] Migration path documented: hybrid ML-KEM + existing key exchange for TLS connections
+
+## Learning Loop Review
+
+- [ ] `security.pattern_report` reviewed — highest-frequency API finding types addressed in this release
+- [ ] All CRITICAL/HIGH findings from this run recorded via `security.record_outcome`
+- [ ] Findings resolved 3+ times across runs confirmed to have gate check automation
+
+## Cross-Checklist Dependencies
+
+- [ ] API serves a web frontend? → `release-web.md` CSP and header controls also verified
+- [ ] API calls AI/LLM services? → `release-ai.md` prompt injection and rate-limit controls also verified
+- [ ] API handles payments? → `release-payments.md` PCI scope verification also completed

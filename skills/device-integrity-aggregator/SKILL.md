@@ -219,3 +219,111 @@ If internet permitted:
 - `requiredActions`: ordered action list
 - `complianceImpact`: framework mappings
 - `beyondSkillMd`: true if finding goes beyond the SKILL.md mandate
+
+Every findings JSON MUST include `intelligenceForOtherAgents`:
+```json
+{
+  "intelligenceForOtherAgents": {
+    "forPentestTeam": [{ "type": "HIGH_VALUE_TARGET", "description": "Bypassable certificate pinning on /api/payments — leaf-only check confirmed", "exploitHint": "Use Frida script to hook SecTrustEvaluate / OkHttp CertificatePinner; leaf reissue or custom CA in emulator bypasses" }],
+    "forCryptoSpecialist": [{ "type": "CRYPTO_WEAKNESS_REFERENCE", "algorithm": "RSA-2048 (DeviceCheck key)", "location": "iOS KeychainWrapper.swift line 47 — key not backed by Secure Enclave" }],
+    "forCloudSpecialist": [{ "type": "SSRF_TO_CLOUD_CHAIN", "ssrfLocation": "Attestation token verification endpoint accepts caller-supplied verification URL", "escalationPath": "Attacker controls verification server → always-valid attestation response → IMDS access from backend" }],
+    "forComplianceGrc": [{ "type": "COMPLIANCE_BLOCKER", "frameworks": ["PCI DSS Req 4.2.1", "NIST SP 800-53 SC-8", "OWASP M5:2024"], "releaseBlock": true }]
+  }
+}
+```
+
+---
+
+## BEYOND SKILL.MD — MANDATORY EXPANSIONS
+
+- **AI-Generated Frida Bypass Scripts (ATT&CK T1629.003 — Impair Defenses: Disable or Modify Tools):** LLM-assisted tooling (e.g., FridaGPT, GPT-4-generated Frida hooks) can generate working certificate pinning and RASP bypass scripts in seconds for common frameworks (OkHttp, TrustKit, Cordova). The barrier to attack has effectively collapsed. Test by: prompt an LLM with the app's framework stack and ask for a Frida bypass script; if the generated script works unmodified against the app's jailbreak/root and pinning checks, those checks are trivially bypassable. Finding threshold: any RASP or pinning check that a publicly documented Frida snippet circumvents within one attempt is a CRITICAL finding.
+
+- **Supply Chain Compromise of Attestation SDK (ATT&CK T1195.002 — Compromise Software Supply Chain):** The Play Integrity API client library and DCAppAttestService are distributed via Google Maven and Apple's SDK respectively — malicious or tampered versions could suppress integrity verdicts silently. CVE-2021-39749 (Google Play Core) demonstrated that SDK-level supply chain attacks are realistic. Test by: verify the SHA-256 checksum of `play-integrity` and `device_check` artifacts against the official published checksums in `gradle/verification-metadata.xml`; confirm Gradle dependency verification is enabled with `--verify-metadata`. Finding threshold: absent `gradle/verification-metadata.xml` or disabled checksum verification (`verification-mode=off`) is a HIGH finding.
+
+- **Post-Quantum Harvest-Now-Decrypt-Later Against Attestation Tokens (NIST IR 8413, ATT&CK T1557):** Attestation tokens signed with ECDSA P-256 (the current standard for both Play Integrity and App Attest) are vulnerable to retroactive forgery once a Cryptographically Relevant Quantum Computer (CRQC) exists. Adversaries collecting today's tokens can forge device identity assertions in the 2030–2035 window. Test by: audit the attestation token TTL configured on the backend verification server; if token validity exceeds 15 minutes or tokens are stored without expiry, the replay/forgery window is unacceptably large. Finding threshold: token TTL > 15 minutes or lack of short-lived nonce binding in attestation flows is a MEDIUM finding today, escalating to HIGH once NIST PQC standards (ML-DSA / FIPS 204) have platform support.
+
+- **Insecure StrongBox / Secure Enclave Key Export via Backup API (CVE-2023-20963 — Android WorkSource Parceling; related: adb backup extraction):** Android's `FLAG_SECURE` and StrongBox-backed keys are hardware-protected, but the data _encrypted_ by those keys (databases, SharedPreferences) may still be extracted via `adb backup` if `android:allowBackup="true"` and no `fullBackupContent` exclusion rule is set. iOS equivalents exist when `kSecAttrAccessibleAlways` is used without `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`. Test by: run `adb backup -apk -shared com.targetapp`; use `android-backup-extractor` to convert the `.ab` file; inspect for token, session, or credential files not excluded from backup. Finding threshold: any credential or session file present in the backup archive is a CRITICAL finding.
+
+- **Play Integrity Verdict Downgrade via Network Interception (ATT&CK T1557.002 — AiTM; Google Play Integrity API documentation — error handling):** When the Play Integrity API call fails (network timeout, API quota exhaustion, transient error), many apps fall back to accepting the operation without attestation rather than denying it. An attacker-controlled network can force API failures to trigger this silent downgrade. Test by: intercept and drop all traffic to `https://playintegrity.googleapis.com` using a proxy rule while performing a sensitive in-app operation; confirm the app blocks the operation rather than proceeding. Finding threshold: any sensitive operation (payment, account change, admin action) that completes successfully when the attestation API is unreachable is a CRITICAL finding.
+
+- **EU Cyber Resilience Act (CRA) Annex I — Device Integrity as a Mandatory Security Property (enforcement 2027):** CRA Annex I, Part I, §1 requires that connected app products be placed on the market only with documented vulnerability handling and integrity assurance mechanisms. Failure to implement certificate pinning, attestation, or key protection for apps distributed in the EU constitutes a documented CRA non-conformity. Test by: map each existing control (pinning config, attestation call, keystore usage) against CRA Annex I Essential Requirements §1–§13; document each gap with the specific requirement reference. Finding threshold: absence of any attested device integrity mechanism for apps processing personal or financial data in EU markets is a MEDIUM compliance finding now and a blocking HIGH after October 2027 enforcement date.
+
+---
+
+## §EDGE-CASE-MATRIX
+
+The 5 attack cases in the device integrity domain that automated scanners and naive manual review universally miss. MANDATORY checks — do not skip.
+
+| # | Edge Case | Why Scanners Miss It | Concrete Test |
+|---|-----------|----------------------|---------------|
+| 1 | Leaf-only certificate pinning bypass via intermediate CA swap | Static analysis confirms a pin is set; scanners don't model chain validation. If only the leaf hash is pinned, an attacker with a compromised intermediate CA can issue a new leaf that passes the pin check on chain-trusting implementations | Build a test CA chain; issue a new leaf with a matching subject but different public key; confirm app rejects it — if it accepts, pinning is leaf-only and bypassable |
+| 2 | Attestation token replay across devices or sessions | Attestation APIs return a signed token; scanners verify the call exists but not that the server enforces nonce freshness or device binding. A token captured from a genuine device is replayed from an emulator/rooted device | Capture a valid Play Integrity / App Attest token; replay it from a different device ID within the token TTL; the backend must reject based on nonce or device binding |
+| 3 | SafetyNet/Play Integrity result cached without re-attestation window | The attestation check fires once at app launch; scanners see the API call but not the cache lifetime. Attacker roots the device after the initial check passes and the positive result stays valid indefinitely | Force root/jailbreak the device after the positive attestation result; navigate to sensitive features; confirm the app re-attests before each sensitive operation, not only at launch |
+| 4 | RASP / jailbreak detection bypass via Frida early instrumentation | RASP hooks run at app layer; Frida can inject before the detection fires using spawn-gating. Scanner sees jailbreak checks in code but cannot model the runtime hook order | Attach Frida with `--pause` flag; hook `isJailbroken()` before the app's first instruction executes; confirm the app detects the Frida process itself via `/proc/self/maps` or similar |
+| 5 | Keystore key extraction via Android backup API (adb backup) | Static analysis confirms `AndroidKeyStore` usage; scanners don't check `android:allowBackup` or `android:fullBackupContent` exclusion rules. Keys stored in hardware-backed keystore cannot be extracted, but the data encrypted with them may be backed up, enabling offline brute force | Run `adb backup -apk -shared com.yourapp`; inspect the backup archive for SharedPreferences or database files; confirm the backup agent excludes all sensitive data or that `android:allowBackup="false"` is set |
+
+---
+
+## §TEMPORAL-THREATS
+
+Threats materialising in the 2025–2030 window that device integrity defences designed today must account for.
+
+| Threat | Est. Timeline | Relevance to Device Integrity | Prepare Now By |
+|--------|--------------|-------------------------------|----------------|
+| Play Integrity API v3 — stronger device verdict granularity | 2025–2026 (active) | `MEETS_STRONG_INTEGRITY` verdict will become the bar for high-value operations; apps still checking `MEETS_BASIC_INTEGRITY` will be under-enforcing | Audit all attestation verdict checks; upgrade to `MEETS_STRONG_INTEGRITY` or `MEETS_DEVICE_INTEGRITY` for payment/auth flows |
+| Apple removing DeviceCheck fallback for non-App Attest devices | 2026–2027 | DeviceCheck tokens carry no device integrity assertion; App Attest is the only signal that the app binary is unmodified on a genuine device. Apple has signalled progressive tightening | Migrate all attestation flows from DeviceCheck to App Attest (`DCAppAttestService`) now; maintain DeviceCheck only as a fallback for iOS <14 |
+| Cryptographically Relevant Quantum Computer (CRQC) — harvest-now-decrypt-later | 2028–2032 | Attestation tokens signed with ECDSA today can be stockpiled and forged retroactively once CRQC exists; long-lived device identity keys are highest risk | Inventory all ECDSA device-identity keys; plan migration to ML-DSA (FIPS 204) when platform support arrives; enforce short-lived token TTLs now to limit replay window |
+| EU Cyber Resilience Act (CRA) mandatory device security requirements | 2027 (enforcement) | CRA mandates vulnerability handling and update mechanisms for connected devices/apps sold in EU; insufficient device integrity controls are a CRA compliance gap | Map current controls to CRA Annex I essential requirements; document attestation architecture in security technical file |
+| AI-assisted Frida script generation for pinning/RASP bypass | 2025–2027 (active) | LLMs already generate working Frida bypass scripts for common frameworks in seconds; threshold to attack has collapsed | Assume Frida bypasses for any check that looks at userspace symbols; move integrity checks into native code / TEE where possible; detect Frida presence via `/proc/self/maps` fd scan |
+
+---
+
+## §DETECTION-GAP
+
+What current security monitoring CANNOT detect in the device integrity domain, and what to build to close each gap.
+
+**Domain-specific gaps that MUST be checked:**
+
+- **Attestation token replay post-compromise**: The token verification log shows a valid signature from Apple/Google — it does not show that the underlying device was rooted after attestation. Need: server-side session binding — tie each attestation token to a session ID and device fingerprint; flag any reuse across differing fingerprints within the token TTL.
+- **Gradual pin expiration drift**: No alert fires when a pinned certificate approaches its expiration date. Apps silently break when the cert expires if no backup pin was staged. Need: certificate expiry monitoring — parse all `network_security_config.xml` and `TrustKit` config pin expiration dates at build time; fail the CI pipeline if any pin expires within 60 days without a backup.
+- **ProGuard/R8 regression in a new build variant**: ProGuard is enabled for the `release` variant but a new `releaseStaging` variant was added without inheriting the rule. Static analysis checks the canonical release config. Need: build-variant audit — assert that every non-debug variant in `build.gradle` has `minifyEnabled true` and `shrinkResources true`; add this as a lint rule.
+- **Silent attestation downgrade**: The app falls back to a weaker check (e.g., SafetyNet BasicIntegrity) if the Play Integrity API is unreachable. No error is surfaced to the user or backend. Need: attestation failure logging — emit a distinct event when the app falls back to a weaker attestation path; alert if fallback rate exceeds 1% of sessions (legitimate network errors are rare, coordinated downgrade attacks are not).
+- **Cross-agent chain: MITM + weak attestation**: A MITM finding from the network-security agent combined with a leaf-only pinning finding from this agent creates a CRITICAL exploitable chain that neither agent flags alone. Need: CISO orchestrator Phase 1 synthesis — correlate all agent findings before Phase 2; any MITM-capable finding paired with a pinning weakness must be escalated to CRITICAL regardless of individual severity.
+
+---
+
+## §ZERO-MISS-MANDATE
+
+This agent CANNOT declare any attack class clean without explicit evidence of checking. For each item, output one of:
+- `CHECKED: [N files] | [patterns used] | CLEAN`
+- `CHECKED: [N files] | [patterns used] | [N findings, all fixed]`
+- `SKIPPED: [reason — must be "not applicable: [evidence]"]`
+
+**Silent skip = FAILED COVERAGE.** The orchestrator flags this as a quality gap.
+
+**Attack classes that must be explicitly covered:**
+
+| Attack Class | Patterns to Search | Minimum Evidence Required |
+|---|---|---|
+| Disabled ATS / cleartext permitted | `NSAllowsArbitraryLoads`, `cleartextTrafficPermitted` | Grep result + file list |
+| Missing or leaf-only certificate pinning | `checkServerTrusted`, `return null`, `pinnedCertificates`, `pin-set` | Config file content |
+| Attestation absent or cached indefinitely | `PlayIntegrityAPI`, `DCAppAttestService`, `SafetyNet` | Call site + nonce freshness |
+| Custom TrustManager that accepts all certs | `X509TrustManager`, `checkClientTrusted`, `checkServerTrusted` | All implementations reviewed |
+| Backup-enabled keystore data | `android:allowBackup`, `fullBackupContent` | Manifest check |
+| ProGuard/R8 disabled on non-debug variant | `minifyEnabled`, `build.gradle` | All variants enumerated |
+| Secret in SharedPreferences / NSUserDefaults | `SharedPreferences`, `NSUserDefaults`, key names containing `token|secret|key|password` | Grep with key names |
+
+The output findings JSON MUST include a `coverageManifest` key:
+```json
+{
+  "coverageManifest": {
+    "attackClassesCovered": [
+      { "class": "Disabled ATS / cleartext permitted", "filesReviewed": 3, "patterns": ["NSAllowsArbitraryLoads", "cleartextTrafficPermitted"], "result": "CLEAN" },
+      { "class": "Leaf-only certificate pinning", "filesReviewed": 12, "patterns": ["pinnedCertificates", "pin-set", "CertificatePinner"], "result": "1 finding, fixed" }
+    ],
+    "filesReviewed": 47,
+    "negativeAssertions": ["Custom TrustManager: checkServerTrusted searched across 47 files — 0 instances return null without chain validation"],
+    "uncoveredReason": {}
+  }
+}
+```

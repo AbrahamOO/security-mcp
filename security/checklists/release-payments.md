@@ -134,3 +134,24 @@ Use before every payment-related production release. All items must be checked o
 - [ ] SAQ (Self-Assessment Questionnaire) type documented and current for this release scope
 - [ ] QSA (Qualified Security Assessor) engagement status documented — next assessment date known
 - [ ] Tokenization confirmed throughout app tier — no raw PAN ever reaches application code
+
+---
+
+## Post-Quantum Readiness Gate
+
+- [ ] All RSA keys used in payment token signing inventoried (Stripe webhook signatures, 3DS tokens)
+- [ ] Webhook signature validation keys with long rotation cycles assessed for harvest-now-decrypt-later exposure
+- [ ] PAN tokenization scheme uses AES-256 (quantum-resistant) — not RSA-encrypted token vaults
+- [ ] Post-quantum migration timeline communicated to payment processor (Stripe/Adyen) partner contacts
+
+## Learning Loop Review
+
+- [ ] `security.pattern_report` reviewed — top payment-specific findings (price manipulation, webhook replay) addressed
+- [ ] All CRITICAL/HIGH payment findings from this run recorded via `security.record_outcome`
+- [ ] Race conditions and integer overflow patterns found in prior runs confirmed fixed with regression test
+
+## Cross-Checklist Dependencies
+
+- [ ] Payment flows use backend APIs? → `release-api.md` authentication and input validation also verified
+- [ ] Payment UI is a web frontend? → `release-web.md` CSP and form hijacking controls also verified
+- [ ] Payment data stored in cloud infrastructure? → `release-infra.md` encryption at rest and access controls also verified
