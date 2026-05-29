@@ -183,3 +183,115 @@ slsa-verifier verify-artifact release.tar.gz \
 - `requiredActions`: ordered action list
 - `complianceImpact`: framework mappings
 - `beyondSkillMd`: true — this agent goes beyond standard SLSA Level 2
+- `intelligenceForOtherAgents`: REQUIRED — see schema below
+
+Every findings JSON MUST include `intelligenceForOtherAgents`:
+```json
+{
+  "intelligenceForOtherAgents": {
+    "forPentestTeam": [{ "type": "HIGH_VALUE_TARGET", "description": "Unsigned artifact accepted by deployment pipeline — attacker who compromises artifact storage can ship malicious binary with no verification gate", "exploitHint": "Replace artifact between build and deploy step; no provenance check means it lands silently" }],
+    "forCryptoSpecialist": [{ "type": "CRYPTO_WEAKNESS_REFERENCE", "algorithm": "RSA/ECDSA signing key used for provenance attestation", "location": ".github/workflows/release.yml — Sigstore/Cosign signing step" }],
+    "forCloudSpecialist": [{ "type": "SSRF_TO_CLOUD_CHAIN", "ssrfLocation": "Self-hosted runner with cloud IAM role — build script can call IMDS endpoint", "escalationPath": "Compromised build step reads cloud credentials via 169.254.169.254; exfiltrates to attacker-controlled URL" }],
+    "forComplianceGrc": [{ "type": "COMPLIANCE_BLOCKER", "frameworks": ["SLSA L3", "NIST SP 800-218", "US EO 14028", "EU CRA Art. 13"], "releaseBlock": true }]
+  }
+}
+```
+
+---
+
+## BEYOND SKILL.MD — MANDATORY EXPANSIONS
+
+- **AI-Assisted Provenance Confusion via LLM-Generated Workflow Injection (ATT&CK T1195.002 + T1059.004):** An adversary uses an LLM to generate syntactically valid GitHub Actions YAML that inserts a provenance-generation step controlled by the attacker's OIDC identity, producing a `.intoto.jsonl` file that passes schema validation but whose `builderID` references a fork of `slsa-github-generator`. Test by: extract the `builderID` field from every `.intoto.jsonl` in releases and assert it exactly matches `https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@refs/tags/v*`; any deviation is a finding. Finding threshold: one non-canonical `builderID` in any release provenance.
+
+- **Harvest-Now-Break-Later Attack on ECDSA Provenance Signatures (Post-Quantum / NIST IR 8413):** Provenance files signed today with Sigstore's ECDSA P-256 (via Fulcio/Rekor) are being harvested by nation-state actors for decryption once a Cryptographically Relevant Quantum Computer (CRQC) is available (est. 2028–2032 per NIST IR 8413). Long-lived artifacts (container images, firmware, SDKs) released under current SLSA L3 workflows will have forgeable provenance retroactively. Test by: audit all release provenance for signing algorithm — `jq '.dsseEnvelope.signatures[].sig' release.intoto.jsonl | base64 -d | openssl asn1parse` — confirm algorithm OID; document each artifact's expected shelf-life. Finding threshold: any artifact with expected lifetime >3 years signed with classical ECDSA.
+
+- **Artifact Namespace Collision via Concurrent Release Runs (Real-World: GitHub Actions Artifact Overwrite, 2023):** GitHub's artifact store uses workflow-scoped naming; if two release workflows run concurrently for different tags, `upload-artifact` with the same artifact name silently overwrites the earlier artifact. The provenance job in the second run downloads the overwritten artifact, computing a hash that does not match the first run's build output — or worse, the first run's provenance job downloads the second run's artifact. Demonstrated in the wild during rapid tag pushes in monorepos. Test by: trigger two concurrent tag pushes; diff `sha256sum` of artifact consumed by each provenance job against the hash emitted by the corresponding build job — any mismatch is a critical finding. Finding threshold: any hash divergence between build-job output and provenance-job input.
+
+- **`workflow_run` Privilege Escalation from Fork PRs (CVE-2021-22862 class / GitHub Security Advisory GHSA-g86g-chm8-46qh):** Workflows triggered by `on: workflow_run` inherit the permissions of the triggering workflow's caller context, not the fork. A malicious fork PR triggers an unprivileged `pull_request` workflow; the downstream `workflow_run` listener then runs with `id-token: write` and `contents: write` on the base repo, allowing the attacker to mint OIDC tokens or upload artifacts as if they were a trusted committer. Test by: enumerate all workflows with `on: workflow_run` using `grep -rn 'workflow_run' .github/workflows/`; for each, verify the `workflow_run` listener checks `github.event.workflow_run.head_branch` against a protected-branch allowlist before any privileged step executes. Finding threshold: any `workflow_run` listener with write permissions that does not gate on branch origin.
+
+- **Supply Chain Risk via Transitive Dependency Substitution Bypassing SLSA Provenance (SolarWinds-class / SLSA Threat INT-2):** SLSA L3 provenance attests the build process and source commit but does not validate the integrity of resolved transitive dependencies. An attacker who compromises an upstream package (e.g., a rarely-audited transitive `devDependency`) can ship malicious code that is baked into the artifact and covered by valid SLSA provenance — the provenance is authentic; the artifact is malicious. This mirrors the SolarWinds SUNBURST pattern at the package-manager layer. Test by: generate a CycloneDX SBOM in the build job (`npx @cyclonedx/cyclonedx-npm --output-file sbom.json`) and diff it against the previous release SBOM; block the release if any transitive dependency hash changed without a corresponding lock-file PR review. Finding threshold: any transitive dependency hash change not traceable to a reviewed `package-lock.json` commit.
+
+- **Regulatory Trigger: US EO 14028 / EU CRA Article 13 SBOM + Provenance Attestation Mandate (Effective 2025–2026):** US Executive Order 14028 (May 2021, operationalised via NIST SP 800-218 and CISA guidance 2024) and EU Cyber Resilience Act Article 13 (enforcement begins late 2026) require software vendors selling to government or EU markets to provide machine-readable SBOMs and build provenance attestations for every release. A SLSA L3 pipeline without CycloneDX/SPDX SBOM generation and without provenance attached to each GitHub Release asset is a compliance blocker today. Test by: check each GitHub Release for attached `.intoto.jsonl` provenance and a `sbom.json` or `sbom.spdx` asset — absence of either is a regulatory finding. Finding threshold: any public release asset missing either a provenance file or an SBOM attachment.
+
+## §EDGE-CASE-MATRIX
+
+The 5 attack cases in the SLSA / software supply chain domain that automated scanners and naive manual review universally miss. MANDATORY checks — do not skip.
+
+| # | Edge Case | Why Scanners Miss It | Concrete Test |
+|---|-----------|----------------------|---------------|
+| 1 | Provenance generated by build script rather than build platform | Linters check that a provenance file exists, not who signed it; a build step can self-generate a compliant-looking `.intoto.jsonl` with a user-controlled key | Inspect `builderID` in provenance — must be `https://github.com/slsa-framework/slsa-github-generator`, not a repo-owned identity; reject any provenance whose signer is not the trusted builder OIDC issuer |
+| 2 | Pinned action SHA that resolves to a mutable tag via a fork or mirror | `uses: action@abc123` looks pinned, but the SHA can belong to a fork that the org accidentally mirrors; the action executes attacker code | Resolve every pinned SHA via `gh api repos/<owner>/<repo>/git/commits/<sha>` — confirm it belongs to the canonical upstream repo, not a fork |
+| 3 | `workflow_run` trigger grants write permissions to a PR from a fork | Scanners check branch protection but miss the indirect permission grant through `workflow_run`; a forked PR can trigger a privileged downstream workflow | Audit every workflow with `on: workflow_run` for `permissions: contents: write` or `id-token: write` — these must require the triggering run to originate from a protected branch |
+| 4 | Artifact substitution between `upload-artifact` and `download-artifact` steps in the same run | The hash computed in the build job and the artifact consumed in the provenance job can diverge if a concurrent run overwrites the artifact store slot (GitHub artifact namespace collision) | Build artifact name must include `${{ github.run_id }}-${{ github.run_attempt }}` to be globally unique; verify hash in provenance job before signing |
+| 5 | Self-hosted runner left in SLSA Level 3 workflow after an org migration | CI migrates to managed runners for new repos but the release workflow still references a self-hosted runner label that was never removed — it silently falls back to an unregistered runner or a stale self-hosted one | Grep all release workflows for `runs-on` values; assert every release job uses only `ubuntu-latest`, `macos-latest`, or an explicit managed runner label — never a custom label that could resolve to self-hosted |
+
+---
+
+## §TEMPORAL-THREATS
+
+Threats materialising in the 2025–2030 window relevant to SLSA Level 3 and software supply chain integrity.
+
+| Threat | Est. Timeline | Relevance to SLSA L3 | Prepare Now By |
+|--------|--------------|----------------------|----------------|
+| Cryptographically Relevant Quantum Computer (CRQC) | 2028–2032 | Sigstore/Cosign uses ECDSA P-256; provenance signatures on artifacts released today will be forgeable once CRQC arrives — harvest-now-break-later already active | Inventory all provenance signing algorithms; plan migration to ML-DSA (FIPS 204) for long-lived artifacts; enable Sigstore's PQ roadmap tracking |
+| AI-assisted dependency confusion and typosquatting at scale | 2025–2027 (active) | LLM-generated lookalike package names bypass human review; lock-file confusion installs wrong package while passing SLSA checks (SLSA doesn't validate what you depend on) | Combine SLSA attestation with SBOM + `npm audit signatures` + provenance verification for every transitive dep |
+| Mandatory SBOM + build provenance (US EO 14028 / EU CRA Art. 13) | 2025–2026 (active) | SLSA L3 provenance is the technical foundation for compliance; SBOM generation must be wired into the same pipeline | Generate CycloneDX SBOM in the build job and attach it as a release asset alongside the `.intoto.jsonl` provenance |
+| GitHub Actions runner compromise via supply chain | 2025–2027 | Managed GitHub-hosted runners are SLSA L3 trusted; a compromise of the GitHub Actions runner image (via upstream packages) would break the trust anchor for the entire ecosystem | Pin runner OS images where possible; monitor GitHub's runner image changelogs; consider Sigstore policy enforcement at deploy time |
+| Post-quantum TLS for artifact registries | 2028–2030 | Container registries and npm/PyPI served over TLS with classical ECDH; MITM during artifact download becomes feasible post-CRQC | Begin registry TLS agility assessment; verify artifact integrity via SLSA provenance (not just TLS) as a defence-in-depth measure |
+
+---
+
+## §DETECTION-GAP
+
+What current security monitoring CANNOT detect in the SLSA / software supply chain domain, and what to build to close each gap.
+
+- **Provenance file tampering after generation but before upload**: The `.intoto.jsonl` file is written to disk by the generator action then uploaded as a release asset in a subsequent step. A compromised intermediate step could replace the file. Gap close: verify the provenance signature immediately after the `slsa-github-generator` step completes and before any subsequent steps run; fail the workflow if verification fails.
+
+- **Reuse of a valid provenance from a previous release with a different artifact**: Provenance is cryptographically bound to the artifact hash, but deployment pipelines that accept `*.intoto.jsonl` by glob pattern may pick up a stale file if artifact cleanup is incomplete. Gap close: `slsa-verifier verify-artifact` must be called at deploy time — not just at release time — with the exact artifact hash confirmed live.
+
+- **Self-hosted runner silently falling back when managed runner quota is exhausted**: GitHub queues jobs for managed runners, but some configurations fall back to self-hosted runners on timeout. A build that ran on a self-hosted runner cannot achieve SLSA L3 but will still produce a provenance file claiming the managed `builderID`. Gap close: add a workflow step that asserts `runner.environment == 'github-hosted'` and fails the build if false.
+
+- **Dependency version pinning drift between `package-lock.json` and the actual installed tree**: `npm ci` uses the lock file, but a corrupted or manually edited lock file can install a different version than the reviewed one. SLSA provenance covers the source repo state, not the resolved dependency tree. Gap close: generate and attest an SBOM in the same build job; diff the SBOM against the previous release SBOM in CI and block on unexpected transitive dependency changes.
+
+- **Cross-workflow secret exfiltration via environment variable bleed**: A job that runs after a secret-consuming step in the same workflow can read secrets leaked into the environment. SLSA L3 isolates the build environment from the build definition, but secrets in `env:` blocks at the workflow level are visible to all jobs. Gap close: scope all secrets to the specific job step that requires them using `env:` at the `step` level, not the `job` or `workflow` level; audit with `grep -n 'env:' .github/workflows/*.yml` for top-level secret assignments.
+
+---
+
+## §ZERO-MISS-MANDATE
+
+This agent CANNOT declare any SLSA requirement clean without explicit evidence of checking. For each item, output one of:
+- `CHECKED: [N files] | [patterns used] | CLEAN`
+- `CHECKED: [N files] | [patterns used] | [N findings, all fixed]`
+- `SKIPPED: [reason — must be "not applicable: [evidence]"]`
+
+**Silent skip = FAILED COVERAGE.** The orchestrator flags this as a quality gap.
+
+**SLSA L3 mandatory check classes:**
+
+| Check | Pattern | Must Not Skip Because |
+|-------|---------|----------------------|
+| Non-forgeable provenance | `builderID` in every `.intoto.jsonl` must be the slsa-github-generator OIDC URI | Self-signed provenance is legally equivalent to no provenance |
+| Managed runner only for release jobs | `runs-on` in release workflows | Self-hosted runners forfeit L3 trust |
+| OIDC permissions scoped | `id-token: write` present only on provenance job | Workflow-level OIDC grants every job the ability to mint tokens |
+| Two-party review enforced | Branch protection `required_approving_review_count >= 2` on release branch | Single-approver workflows cannot achieve L3 |
+| No mutable action references | Every `uses:` in release workflows pinned to a commit SHA | Tag references allow silent substitution |
+| Artifact hash continuity | Hash emitted by build job matches hash in provenance job inputs | Artifact namespace collision can break continuity |
+
+The output findings JSON MUST include a `coverageManifest` key:
+```json
+{
+  "coverageManifest": {
+    "attackClassesCovered": [
+      { "class": "Provenance Forgery", "filesReviewed": 4, "patterns": ["builderID", "slsa-github-generator"], "result": "CLEAN" },
+      { "class": "Self-Hosted Runner in Release Path", "filesReviewed": 4, "patterns": ["runs-on"], "result": "CLEAN" },
+      { "class": "Mutable Action Reference", "filesReviewed": 4, "patterns": ["uses: .*@[^a-f0-9]"], "result": "2 findings, both fixed" }
+    ],
+    "filesReviewed": 4,
+    "negativeAssertions": [
+      "Provenance Forgery: builderID checked in all .intoto.jsonl files — matches slsa-github-generator OIDC URI",
+      "Self-Hosted Runner: runs-on values in all release workflows — only github-hosted labels found"
+    ],
+    "uncoveredReason": {}
+  }
+}
+```

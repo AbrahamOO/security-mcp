@@ -1,0 +1,63 @@
+# Prevent sensitive and development files from being included in the npm package.
+# The package.json "files" array is the primary allowlist (dist/, prompts/, skills/,
+# defaults/, README.md, LICENSE). This .npmignore provides defence-in-depth to block
+# anything that might be picked up by wildcard publishing.
+
+# Source files (only dist/ is needed at runtime)
+src/
+tsconfig.json
+tsconfig*.json
+eslint.config.js
+*.config.js
+*.config.ts
+*.config.mjs
+
+# Test and development artifacts
+fixtures/
+*.test.ts
+*.test.js
+*.spec.ts
+*.spec.js
+**/__tests__/
+
+# CI / GitHub configuration
+.github/
+.husky/
+
+# Local environment and secrets
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+id_rsa*
+id_ed25519*
+
+# IDE and OS artifacts
+.vscode/
+.idea/
+*.code-workspace
+.DS_Store
+Thumbs.db
+
+# Build tooling
+node_modules/
+coverage/
+.nyc_output/
+
+# Project management docs (not needed at runtime)
+HANDOFF.md
+CONTRIBUTING.md
+SECURITY.md
+tasks/
+plans/
+
+# MCP baselines (runtime users don't need these)
+.mcp/
+
+# Mobile security directory (internal only)
+mobile-security/
+security/

@@ -4,8 +4,12 @@ on:
   pull_request:
     branches: ["main"]
 
+# Explicit least-privilege permissions.
+# security-events:write enables SARIF upload to GitHub Security tab for Trivy/Semgrep results.
+# No write to contents, pull-requests, or packages — prevents NPM_TOKEN exposure from fork PRs.
 permissions:
   contents: read
+  security-events: write
 
 jobs:
   security-gate:
@@ -13,7 +17,7 @@ jobs:
 
     steps:
       - name: Checkout (full history for diff)
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af68  # actions/checkout@v4.2.2
         with:
           fetch-depth: 0
 
@@ -37,14 +41,21 @@ jobs:
         with:
           args: "--redact --verbose"
 
-      # 2) Dependency scanning (filesystem)
+      # 2) Dependency scanning (filesystem) — results uploaded as SARIF to GitHub Security tab
       - name: Trivy FS scan
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1  # aquasecurity/trivy-action@v0.35.0
         with:
           scan-type: "fs"
           ignore-unfixed: true
-          format: "table"
+          format: "sarif"
+          output: "trivy-results.sarif"
           severity: "CRITICAL,HIGH"
+
+      - name: Upload Trivy SARIF
+        uses: github/codeql-action/upload-sarif@03e4368ac7daa2bd82b3e85262f3bf87ee112f57  # codeql-action@v3.36.0
+        if: always()
+        with:
+          sarif_file: "trivy-results.sarif"
 
       # 3) SAST (Semgrep) — Note: org renamed from returntocorp to semgrep
       - name: Semgrep
@@ -52,7 +63,8 @@ jobs:
         with:
           config: "p/owasp-top-ten"
 
-      # 4) IaC scan (if you have Terraform/K8s)
+      # 4) IaC scan — continue-on-error is intentional: repo has no Terraform/K8s today.
+      #    Remove continue-on-error if IaC files are added so findings block merges.
       - name: Checkov
         uses: bridgecrewio/checkov-action@0ce65fae06c148e349f955c3c35ad049c11e838c  # bridgecrewio/checkov-action@v12
         with:

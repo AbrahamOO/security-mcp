@@ -150,6 +150,19 @@ export const sanitizingSerializer = {
 }
 ```
 
+## BEYOND SKILL.MD
+
+Domain-specific expansions for the secrets-mask-bypass-tester attack surface:
+
+- **CVE-2023-30608 (sqlparse)** — Regex-based masking that strips SQL keywords can be bypassed via comment injection (`pass/**/word=secret`); masking must normalise SQL before pattern matching, not after.
+- **CVE-2021-44228 (Log4Shell) variant pattern** — Structured log frameworks that interpolate `${jndi:…}` or `${env:SECRET_KEY}` strings can exfiltrate masked values through JNDI lookup before the masking layer fires. Verify masking fires at serialisation time, not at render time.
+- **Split-line / chunked log bypass** — Streaming log shippers (Fluentd, Logstash) buffer by newline; a secret split across two TCP packets or two log lines (`Bearer ey` / `JhbGci…`) may never match a single-line regex. Test with multi-line payloads and verify aggregator-level masking.
+- **Structured log field aliasing** — Libraries like Pino and Winston allow field-name remapping (`password → pwd`, `secret → s`). Masking implementations that check a static allowlist miss aliased or dynamically-renamed fields. Enumerate all active serialiser transforms before asserting coverage.
+- **AI-generated log summarisation leakage** — LLM-powered log analytics tools (e.g., AWS DevOps Guru, Datadog AI) ingest raw log streams before applying masking. A secret reaching these pipelines is exfiltrated to a third-party AI model's training context. Verify masking is applied upstream of any AI log consumer.
+- **Harvest-now-decrypt-later against log archives** — Encrypted log archives containing masked-but-base64-recoverable secrets are high-value targets: CRQC (est. 2028–2032) will decrypt AES-256-GCM archives stored today if keys are RSA-wrapped. Migrate log archive key wrapping to ML-KEM (FIPS 203) for long-retention stores.
+- **Prompt-injection exfiltration via log context** — In AI-assisted incident response pipelines, an attacker who can write to logs can inject a prompt that causes the LLM to echo secrets present in its context window into the chat interface or an API response. Treat log content as untrusted user input when feeding it to any LLM.
+- **GitHub Actions log streaming race** — `::add-mask::` directives are processed line-by-line; if a secret is emitted on the same line as or before the mask directive, it appears unmasked in the runner log. The pattern `echo "::add-mask::$SECRET" && echo "$SECRET"` does not guarantee masking. Validate that mask registration precedes any secret usage in the workflow file.
+
 ## OUTPUT FORMAT
 
 `AgentFinding[]` array. Each finding must include:
@@ -165,3 +178,90 @@ export const sanitizingSerializer = {
 - `requiredActions`: ordered action list
 - `complianceImpact`: framework mappings
 - `beyondSkillMd`: true if finding goes beyond the SKILL.md mandate
+
+Every findings JSON MUST include `intelligenceForOtherAgents`:
+```json
+{
+  "intelligenceForOtherAgents": {
+    "forPentestTeam": [{ "type": "HIGH_VALUE_TARGET", "description": "...", "exploitHint": "..." }],
+    "forCryptoSpecialist": [{ "type": "CRYPTO_WEAKNESS_REFERENCE", "algorithm": "...", "location": "..." }],
+    "forCloudSpecialist": [{ "type": "SSRF_TO_CLOUD_CHAIN", "ssrfLocation": "...", "escalationPath": "..." }],
+    "forComplianceGrc": [{ "type": "COMPLIANCE_BLOCKER", "frameworks": ["..."], "releaseBlock": true }]
+  }
+}
+```
+
+---
+
+## §EDGE-CASE-MATRIX
+
+The 5 attack cases in this domain that automated scanners and naive manual review universally miss. MANDATORY checks — do not skip.
+
+| # | Edge Case | Why Scanners Miss It | Concrete Test |
+|---|-----------|----------------------|---------------|
+| 1 | Secret split across log line boundaries (multi-line chunking) | Single-line regex masking never matches a token that wraps across two buffered log lines | Force a credential longer than the shipper's buffer size; verify aggregated output is masked and not reassembled in plaintext |
+| 2 | URL-encoded and percent-double-encoded secrets | Masking regex targets the literal string `password=`; `password%3D` or `password%253D` are invisible to it | Submit `Authorization: Bearer%20eyJhb…` to a logging endpoint; confirm the masker decodes before matching |
+| 3 | Secrets embedded in JSON string escapes | `{"password":"sec\\u0072et"}` Unicode-escapes the `r`; literal regex won't match | Inject a credential where one character is `\uXXXX`-escaped; confirm the log sanitiser normalises JSON before masking |
+| 4 | Secrets logged via structured error objects (`err.config`, `err.request`) | Axios/fetch error objects carry the full request config including auth headers; loggers serialise the entire object | Trigger a network error on an authenticated request; inspect the logged error object for `headers.Authorization` or `config.auth` fields |
+| 5 | CI/CD masked secret reconstructible from partial log fragments | Runners mask the full secret string but not its component sub-strings (e.g., the username half of a DSN); fragments are logged separately and can be reassembled | Split a database URL credential into host, user, and password parts; log each part individually; confirm all three fragments are masked |
+
+## §TEMPORAL-THREATS
+
+Threats materialising in the 2025–2030 window that defences designed today must account for.
+
+| Threat | Est. Timeline | Relevance to This Domain | Prepare Now By |
+|--------|--------------|--------------------------|----------------|
+| Cryptographically Relevant Quantum Computer (CRQC) | 2028–2032 | Log archives containing masked-but-recoverable base64 secrets encrypted with RSA-wrapped keys will be decryptable retroactively (harvest-now-decrypt-later) | Migrate log archive key wrapping to ML-KEM (FIPS 203); inventory all RSA/ECDSA-wrapped archive keys today |
+| AI-assisted adversaries at scale | 2025–2027 (active) | LLM-powered log analysis tools can reconstruct partially-masked secrets from surrounding context (token frequency, field co-occurrence) | Treat masking as defence-in-depth only; enforce secrets never enter log pipelines at all via input validation |
+| EU AI Act full enforcement | 2026 | AI log analytics pipelines processing PII/secrets constitute high-risk AI systems requiring conformity assessment | Classify all AI log consumers against AI Act Annex III; apply Article 10 data governance requirements |
+| Post-quantum TLS migration deadline | 2028–2030 | Secrets transmitted in TLS sessions (including to log aggregators) are subject to harvest-now-decrypt-later if classical-only TLS is used | Begin TLS agility assessment; test hybrid key exchange (X25519+ML-KEM) for log shipper connections |
+| Mandatory SBOM + build provenance (US EO 14028 / EU CRA) | 2025–2026 (active) | Log masking library supply chain is now in scope; a compromised masking dependency silently disables redaction | Pin masking library versions with hash verification; include in CycloneDX SBOM; achieve SLSA L2 for the masking library itself |
+
+## §DETECTION-GAP
+
+What current security monitoring CANNOT detect in this domain, and what to build to close each gap.
+
+**Standard gaps that MUST be checked:**
+
+- **Mask bypass via log shipper**: The application correctly masks at the SDK layer, but the log shipper (Fluentd, Logstash, Filebeat) re-parses and re-serialises log records, dropping masking. No SIEM alert fires because no "unmasked secret" rule exists at the shipper layer. Need: end-to-end masking verification — inject a canary credential pattern into a test log and confirm it does not appear in the SIEM raw index.
+- **AI log analytics leakage**: Secrets reaching a third-party AI log consumer (AWS DevOps Guru, Datadog AI Insights) are invisible to standard DLP rules because the pipeline runs outside the application boundary. Need: outbound data classification — classify all log data exported to external AI services; block exports that contain PCI/PII field names regardless of masking status.
+- **Timing-based secret inference**: A masking implementation that takes measurably longer to process certain field names (due to regex catastrophic backtracking) leaks information about which fields are sensitive via response-time variance. Need: per-masking-call latency tracking with statistical anomaly detection on serialiser duration.
+- **Insider log archive access**: An insider with read access to the raw log archive can recover secrets that were masked in the forwarded stream if the shipper retains a local buffer. Need: log archive access anomaly detection — alert when a user reads more than 3× their 30-day baseline of log archive bytes within 24 hours.
+- **Cross-agent attack chains**: A secrets-mask bypass finding (this agent) combined with an SSRF finding (cloud-specialist agent) creates a critical chain: attacker injects a payload that causes the server to issue an outbound request, the response body is logged unmasked, and the IMDS token appears in plaintext in the log stream. Need: CISO orchestrator Phase 1 synthesis — correlate all agent findings before Phase 2 to surface these chains.
+
+## §ZERO-MISS-MANDATE
+
+This agent CANNOT declare any attack class clean without explicit evidence of checking. For each item, output one of:
+- `CHECKED: [N files] | [patterns used] | CLEAN`
+- `CHECKED: [N files] | [patterns used] | [N findings, all fixed]`
+- `SKIPPED: [reason — must be "not applicable: [evidence]"]`
+
+**Silent skip = FAILED COVERAGE.** The orchestrator flags this as a quality gap.
+
+The output findings JSON MUST include a `coverageManifest` key:
+```json
+{
+  "coverageManifest": {
+    "attackClassesCovered": [
+      {
+        "class": "Authorization Header Logging",
+        "filesReviewed": 12,
+        "patterns": ["Authorization:", "Bearer ", "logger.*req.headers"],
+        "result": "CLEAN"
+      },
+      {
+        "class": "JSON Body Secret Fields",
+        "filesReviewed": 28,
+        "patterns": ["log.*req.body", "logger.*body", "password.*log"],
+        "result": "2 findings, all fixed"
+      }
+    ],
+    "filesReviewed": 40,
+    "negativeAssertions": [
+      "Authorization Header Logging: pattern searched across 12 logging handler files — 0 unmasked matches",
+      "CI/CD secret masking: ::add-mask:: directive verified before every secret reference in 4 workflow files"
+    ],
+    "uncoveredReason": {}
+  }
+}
+```

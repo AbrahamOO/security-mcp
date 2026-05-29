@@ -8,13 +8,18 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    # TODO: add `environment: npm-publish` once the environment is created in
+    # GitHub → Settings → Environments with required-reviewers protection.
+    # Without it, any maintainer who can push a v* tag can trigger npm publish
+    # unilaterally. The environment acts as a second approval gate.
     permissions:
       contents: read
       id-token: write
+      attestations: write
 
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af68  # actions/checkout@v4.2.2
 
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # actions/setup-node@v4
@@ -31,10 +36,13 @@ jobs:
       - name: Test
         run: npm test
 
-      - name: Run security gate (self-check)
+      - name: Run security gate (self-check — folder_by_folder on src/ skills/ defaults/)
+        # FIX for TM-005: HEAD..HEAD always produces an empty diff → zero findings → gate
+        # trivially passes on every publish. Use folder_by_folder mode so the gate scans
+        # the actual source tree regardless of what changed since the last commit.
         env:
-          SECURITY_GATE_BASE_REF: "HEAD"
-          SECURITY_GATE_HEAD_REF: "HEAD"
+          SECURITY_GATE_MODE: "folder_by_folder"
+          SECURITY_GATE_TARGETS: "src,skills,defaults"
           SECURITY_GATE_POLICY: "defaults/security-policy.json"
           SECURITY_GATE_EVIDENCE_MAP: "defaults/evidence-map.json"
           SECURITY_GATE_CONTROL_CATALOG: "defaults/control-catalog.json"

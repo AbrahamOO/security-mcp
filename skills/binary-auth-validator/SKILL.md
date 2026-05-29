@@ -182,3 +182,114 @@ resource "google_binary_authorization_policy" "policy" {
 - `requiredActions`: ordered action list
 - `complianceImpact`: framework mappings
 - `beyondSkillMd`: true if finding goes beyond the SKILL.md mandate
+  - `intelligenceForOtherAgents`: cross-agent intelligence object (see schema below)
+
+Every findings JSON MUST include `intelligenceForOtherAgents`:
+```json
+{
+  "intelligenceForOtherAgents": {
+    "forPentestTeam": [{ "type": "HIGH_VALUE_TARGET", "description": "Admission webhook bypass possible via namespace label manipulation", "exploitHint": "Create namespace with label 'admission.kubernetes.io/ignore'; deploy unsigned image inside it" }],
+    "forCryptoSpecialist": [{ "type": "CRYPTO_WEAKNESS_REFERENCE", "algorithm": "RSA-2048 Notary v1 key used for image signing", "location": "notation/trust-policy.json" }],
+    "forCloudSpecialist": [{ "type": "SSRF_TO_CLOUD_CHAIN", "ssrfLocation": "Image pull from user-controlled registry URL", "escalationPath": "Attacker registry returns malicious image → runs in cluster with node IAM role → IMDS credential theft" }],
+    "forComplianceGrc": [{ "type": "COMPLIANCE_BLOCKER", "frameworks": ["PCI DSS Req 6.3.2", "NIST SA-12", "SOC2 CC8.1"], "releaseBlock": true }]
+  }
+}
+```
+
+---
+
+## BEYOND SKILL.MD — MANDATORY EXPANSIONS
+
+- **Namespace Admission Webhook Bypass via Label Manipulation (ATT&CK T1610 — Deploy Container):** Kyverno and OPA Gatekeeper policies commonly exempt `kube-system` or namespaces labeled `admission.kubernetes.io/ignore`; an attacker with `create namespace` RBAC rights can create a namespace with the exempt label and deploy unsigned images freely. Test by: `kubectl create namespace attacker-ns --dry-run=client -o yaml | kubectl annotate --local -f - 'admission.kubernetes.io/ignore=true' -o yaml | kubectl apply -f -`; then attempt `kubectl run pwned --image=alpine:latest -n attacker-ns` — policy must still block. Finding threshold: any unsigned image successfully scheduled in a non-kube-system namespace labeled with an exemption pattern.
+
+- **AI-Generated Malicious Image Payload Evasion (Emerging — LLM-Assisted Supply Chain, 2025):** Attackers use LLMs to generate syntactically correct, policy-compliant Dockerfiles and SBOM manifests that pass cosign signature checks while embedding obfuscated payloads (e.g., staged reverse shells in entrypoint scripts encoded as base64 env vars). Static admission checks verify signature validity but not image content semantics. Test by: build a signed test image containing `CMD ["sh","-c","echo ${PAYLOAD}"]` where PAYLOAD is base64-encoded; verify Kyverno admits it; confirm Falco/Tetragon runtime rules fire on the shell exec. Finding threshold: any image policy that relies solely on signature presence without runtime behavioral monitoring in place.
+
+- **Post-Quantum Signing Key Vulnerability — RSA-2048 Notary v1 / Early cosign Keyful Keys (NIST IR 8105 / FIPS 203/204 transition):** RSA-2048 and ECDSA P-256 keys used in Notary v1 trust stores and cosign keyful signing are vulnerable to harvest-now-attack-later (HNDL) attacks by CRQC adversaries targeting 2028–2032. Signed image manifests recorded today in immutable registries are at risk. Test by: `grep -r "rsa\|ecdsa\|key-algorithm" notation/trust-policy.json .cosign/` and `openssl x509 -in cosign.pub -noout -text | grep "Public Key Algorithm"`; flag any RSA or P-256 key. Finding threshold: any active signing key using RSA or ECDSA P-256; remediate by migrating to keyless sigstore (Fulcio + Rekor with ECDSA P-384) or ML-DSA (FIPS 204) when toolchain support lands.
+
+- **OCI Referrers API Signing Gap — Admission Controllers Missing Referrer-Attached Signatures (CVE-2024-25125 / Notary Project Advisory 2024-01):** Admission controllers checking only the legacy `<tag>.sig` cosign suffix will silently admit images whose signatures are stored as OCI referrers (the current standard for GHCR, ECR, and ORAS registries). Sigstore cosign 2.x and notation 1.x both write signatures as referrers by default; older Kyverno (<1.11) and OPA image-verify policies do not read the referrers API. Test by: push a cosign 2.x signed image to GHCR; install Kyverno <1.11; attempt to deploy — legacy policy may admit it as "unsigned." Finding threshold: Kyverno version below 1.11 or any `verifyImages` rule without `referrers: true` on a registry that uses the referrers API.
+
+- **Multi-Arch Manifest List Partial Signing — Platform-Specific Digest Unsigned (Supply Chain Risk, SLSA L2 Gap):** CI pipelines commonly sign only the `linux/amd64` platform manifest, leaving `linux/arm64` or `linux/arm/v7` variants unsigned. Kubernetes on ARM nodes (EKS Graviton, GKE Tau T2A) pulls the platform-specific digest via the manifest list; admission controllers verifying the manifest list digest may not recurse into platform-specific child digests. Test by: `cosign verify <registry>/<image>@<manifest-list-sha256>` then `cosign verify <registry>/<image>@<arm64-child-sha256>`; both must return valid signatures. Finding threshold: any image where the manifest list carries a signature but one or more platform-specific child digests do not.
+
+- **US EO 14028 / EU Cyber Resilience Act SBOM Attestation Non-Compliance (Regulatory — Active 2025):** Federal contractors and EU market participants are now required to produce and attach SBOM attestations (SPDX or CycloneDX) to every container image as a Sigstore attestation. Kyverno 1.11+ supports `verifyImages[].attestations` rules that block admission if the SBOM attestation is absent or fails schema validation; most clusters have not yet added this rule. Test by: `cosign verify-attestation --type spdxjson <image>` — absence of output is a compliance blocker; in Kyverno: add `attestations: [{predicateType: "https://spdx.dev/Document", conditions: [...]}]` to the `verifyImages` rule and attempt to deploy an image without an SBOM attestation — it must be rejected. Finding threshold: any production workload image lacking a cosign-attached SPDX or CycloneDX attestation when the cluster serves regulated or federal workloads.
+
+---
+
+## §EDGE-CASE-MATRIX
+
+The 5 attack cases in binary authorization that automated scanners and naive manual review universally miss. MANDATORY checks — do not skip.
+
+| # | Edge Case | Why Scanners Miss It | Concrete Test |
+|---|-----------|----------------------|---------------|
+| 1 | Namespace label exemption bypass | Kyverno/OPA policies often exclude `kube-system` or namespaces with specific labels; attacker creates namespace with the exempt label | Create namespace with `admission.kubernetes.io/ignore: "true"` or equivalent exemption label; deploy unsigned image inside it — policy must still block |
+| 2 | Init container and ephemeral container blind spots | Policy rules match `spec.containers[]` but forget `spec.initContainers[]` and `spec.ephemeralContainers[]` | Submit a Pod with a signed main container and an unsigned `initContainer`; scanner reports clean while unsigned code runs first |
+| 3 | Image digest pinning bypass via tag mutation at pull time | Digest is verified at admission but `imagePullPolicy: Always` with a tag reference re-pulls at runtime; attacker poisons registry tag between admission and runtime | Pin every reference to `image@sha256:<digest>`; test that admission webhook rejects `image:tag` without digest — even if cosign signature exists |
+| 4 | Admission webhook failure-open configuration | `admissionReviewVersions` misconfiguration or TLS error causes webhook to time out; `failurePolicy: Ignore` (the default) lets the unsigned image through silently | Simulate webhook unavailability (`kubectl scale deployment kyverno -n kyverno --replicas=0`); attempt to deploy unsigned image — it must be blocked by `failurePolicy: Fail` |
+| 5 | Multi-arch manifest list signing gap | CI pipeline signs the `linux/amd64` manifest but not the multi-arch index; Kubernetes pulls the index and selects an unsigned platform-specific digest | Run `cosign verify <image>` for the manifest list digest (not just the amd64 digest); all platform variants must carry a valid signature |
+
+---
+
+## §TEMPORAL-THREATS
+
+Threats materialising in the 2025–2030 window that binary authorization defences designed today must account for.
+
+| Threat | Est. Timeline | Relevance to Binary Auth | Prepare Now By |
+|--------|--------------|--------------------------|----------------|
+| Cryptographically Relevant Quantum Computer (CRQC) | 2028–2032 | RSA/ECDSA keys used in Notary v1 and early cosign keyful signing will be broken; harvest-now-attack-later active today | Migrate to keyless sigstore (Fulcio + Rekor) with ECDSA P-384 minimum; inventory all RSA-2048 signing keys and schedule rotation to ML-DSA (FIPS 204) |
+| Sigstore transparency log compromise | 2025–2027 | If Rekor is compromised, attacker can forge valid inclusion proofs; keyless signing trust anchored to Rekor | Implement `tlog: false` + bring-your-own PKI for regulated workloads; monitor Rekor checkpoint consistency proofs |
+| AI-assisted supply chain attacks (LLM-generated malicious images) | 2025–2027 (active) | LLMs assist attackers in generating convincing, policy-compliant container images that pass SBOM checks but hide payloads | Add runtime behavioural controls (Falco/Tetragon) as second layer; do not rely on static admission checks alone |
+| Mandatory SBOM + build provenance (US EO 14028 / EU CRA) | 2025–2026 (active) | SBOM attestations are becoming legally required per container image; Kyverno can now verify SBOM attestations as part of admission | Require `cosign attest --type spdxjson` in CI; add Kyverno `verifyImages[].attestations` rule for SBOM type |
+| OCI Reference Types / Referrers API adoption | 2025–2026 | Admission controllers that only check legacy `tag.sig` suffix will miss signatures stored as OCI referrers | Upgrade to Kyverno 1.13+ or notation 1.x that reads the OCI referrers API; test against registries with referrers support (ORAS, GHCR, ECR) |
+
+---
+
+## §DETECTION-GAP
+
+What current binary authorization monitoring CANNOT detect, and what to build to close each gap.
+
+**Standard gaps MUST be checked:**
+
+- **Admission webhook audit log suppression**: Webhook decision events appear in the Kubernetes API audit log, but `audit-policy.yaml` with overly broad `omitStages` or `level: None` rules can silently drop admission events. Need: ensure audit policy logs `RequestResponse` level for `admissionwebhooks` resource group; alert on any admission webhook decision that lacks a corresponding audit event.
+- **Post-admission image substitution (registry tag mutation)**: The admission controller verifies the image at deploy time, but if `imagePullPolicy: Always` with a mutable tag is used, a subsequent Pod restart silently pulls a new, potentially unsigned image. Need: enforce image digest pinning (`image@sha256:`) at admission; add Kyverno rule rejecting any image reference without a digest suffix.
+- **Approved registry allowlist drift**: The registry allowlist is defined in policy YAML; when a new registry is added to manifests without updating the policy, it silently falls through if the `deny` rule has a gap. Need: CI gate — diff all `image:` values in merged PRs against the approved registry list; fail build on mismatch before cluster admission.
+- **Keyless signing identity sprawl**: Keyless signatures are scoped to a subject (OIDC identity); if a PR renames the workflow file or changes the branch, the expected subject no longer matches and old images appear unsigned. Need: Kyverno policy must include `subject` and `issuer` assertions; log all signature verification failures with the observed vs. expected subject for triage.
+- **Cross-agent chain — unsigned image + overprivileged pod**: Binary auth finding (unsigned image allowed) + RBAC finding (pod runs as root with hostPID) = container escape to node. Neither agent sees this in isolation. Need: CISO orchestrator Phase 1 synthesis — correlate binary-auth-validator findings with rbac-auditor and pod-security-checker findings before Phase 2.
+
+---
+
+## §ZERO-MISS-MANDATE
+
+This agent CANNOT declare any attack class clean without explicit evidence of checking. For each item below, output one of:
+- `CHECKED: [N files] | [patterns used] | CLEAN`
+- `CHECKED: [N files] | [patterns used] | [N findings, all fixed]`
+- `SKIPPED: [reason — must be "not applicable: [evidence]"]`
+
+**Silent skip = FAILED COVERAGE.** The orchestrator flags this as a quality gap.
+
+**Attack classes that MUST be accounted for:**
+
+1. Missing or permissive admission controller (`failurePolicy: Ignore` or no webhook)
+2. Unsigned image allowed through (no `verifyImages` rule or Binary Authorization disabled)
+3. Floating tag (`image:latest` or no digest pin)
+4. Unapproved registry source (image not in allowlist)
+5. Init/ephemeral container blind spot (policy only covers `spec.containers[]`)
+6. Namespace label exemption that can be exploited
+7. Signing key algorithm weakness (RSA-2048 or SHA-1 in trust store)
+8. SBOM attestation absent when required by policy
+
+The output findings JSON MUST include a `coverageManifest` key:
+```json
+{
+  "coverageManifest": {
+    "attackClassesCovered": [
+      { "class": "Missing admission controller", "filesReviewed": 12, "patterns": ["admissionwebhook", "kyverno", "gatekeeper", "binaryauthorization"], "result": "CLEAN" },
+      { "class": "Floating image tag", "filesReviewed": 34, "patterns": ["image:.*latest", "image:.*tag without digest"], "result": "3 findings, all fixed" }
+    ],
+    "filesReviewed": 34,
+    "negativeAssertions": [
+      "Floating tag: grepped image:.*latest across 34 k8s manifests — 3 matches remediated, 0 remaining",
+      "Init container blind spot: verified Kyverno verifyImages rule covers initContainers[] — CLEAN"
+    ],
+    "uncoveredReason": {}
+  }
+}
+```

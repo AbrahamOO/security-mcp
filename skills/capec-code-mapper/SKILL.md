@@ -161,3 +161,87 @@ If internet permitted:
 - `requiredActions`: ordered action list
 - `complianceImpact`: framework mappings
 - `beyondSkillMd`: true if finding goes beyond the SKILL.md mandate
+
+Every findings JSON MUST include `intelligenceForOtherAgents`:
+```json
+{
+  "intelligenceForOtherAgents": {
+    "forPentestTeam": [{ "type": "HIGH_VALUE_TARGET", "description": "...", "exploitHint": "..." }],
+    "forCryptoSpecialist": [{ "type": "CRYPTO_WEAKNESS_REFERENCE", "algorithm": "...", "location": "..." }],
+    "forCloudSpecialist": [{ "type": "SSRF_TO_CLOUD_CHAIN", "ssrfLocation": "...", "escalationPath": "..." }],
+    "forComplianceGrc": [{ "type": "COMPLIANCE_BLOCKER", "frameworks": ["..."], "releaseBlock": true }]
+  }
+}
+```
+
+## BEYOND SKILL.MD
+
+Domain-specific intelligence that extends beyond the base CAPEC mapping mandate:
+
+- **CAPEC-194 + CVE-2023-29374 (Spring Framework mass assignment)**: Auto-binding frameworks silently map attacker-controlled HTTP parameters to model fields. Grep for `@ModelAttribute`, `@RequestBody` without `@JsonIgnoreProperties` — one field difference between "safe" and "full account takeover."
+- **CAPEC-460 (HTTP Response Splitting) via CRLF injection** — still present in raw header-write code even in 2025; CVE-2023-24998 (Apache Commons FileUpload) demonstrates the chain. Search for `res.setHeader` with unsanitized user input.
+- **CAPEC-666 (Exploitation of Permissions via Confused Deputy) — AI/LLM era**: When an LLM agent can call tools on behalf of users, prompt injection (CAPEC-114) becomes a confused-deputy attack. Attacker-controlled document content tricks the LLM into invoking privileged tools with the user's credentials. No CVE yet, but PortSwigger Research 2024 demonstrated full account takeover via indirect prompt injection in a GenAI assistant.
+- **CAPEC-116 (Excavation via Differential Analysis) + post-quantum timing**: Classical constant-time code guarantees break under quantum simulation environments. Harvest-now-decrypt-later (HNDL) attacks mean RSA-2048 ciphertext captured today is already at risk. CVE-2024-28882 illustrates OpenSSH timing leakage. Inventory all `crypto.createDiffieHellman` and `crypto.generateKeyPairSync` calls for algorithm agility.
+- **CAPEC-153 (Input Data Manipulation) via GraphQL batching abuse** — CVE-2023-28425 (Redis) and analogous patterns in Apollo Server: attackers batch thousands of mutations in a single HTTP request, bypassing per-request rate limits. Check for `apollo-server` without `@graphql-armor/max-directives` or query-cost analysis.
+- **CAPEC-1 (Accessing Functionality Not Properly Constrained) in server-side AI tool calls**: LLM function-calling surfaces expose internal APIs to model-controlled dispatch. Without a capability allowlist, an attacker who controls the prompt controls which functions are called. Map every `tools: [...]` array in Anthropic/OpenAI SDK calls to a permission boundary check.
+- **CAPEC-56 (Removing/Adding Data Stores) via prototype pollution** — CVE-2022-37601 (webpack loader-utils), CVE-2023-26136 (tough-cookie): `__proto__` mutation still appears in lodash `_.merge` and `JSON.parse` + dynamic key assignment patterns. Grep for `Object.assign(target, userInput)` and `[userKey] =` with untrusted keys.
+- **CAPEC-549 (Local Execution of Code) via supply-chain compromised package** — post-quantum threat vector: adversaries use AI-generated lookalike packages (typosquatting at scale) to inject CAPEC-549 payloads. CVE-2024-21501 (sanitize-html bypass) illustrates how a "security" package itself became the attack vector. Verify every `package.json` dependency against npm provenance attestations (`npm audit signatures`).
+
+---
+
+## §EDGE-CASE-MATRIX
+
+The 5 attack cases in this domain that automated scanners and naive manual review universally miss. MANDATORY checks — do not skip.
+
+| # | Edge Case | Why Scanners Miss It | Concrete Test |
+|---|-----------|----------------------|---------------|
+| 1 | Second-order / stored payload executed in different context | Scanner checks input context, not execution context | Store payload safely; trigger in separate request/session |
+| 2 | Unicode normalisation bypass | Regex filters run before normalisation; attacker uses homoglyphs or composed forms | Submit Ⅰ (U+2160) or ＜ (U+FF1C) variants of known-bad strings |
+| 3 | Polyglot payload active in multiple sinks simultaneously | Scanners test one injection class per payload | `'"><script>{{7*7}}</script><!--` — SQL + XSS + SSTI in one request |
+| 4 | Out-of-band exfiltration (DNS/HTTP callback) | Scanner looks for inline response difference; OOB leaves no visible trace | Use Burp Collaborator / interactsh; inject DNS lookup payload |
+| 5 | Race condition between check and use (TOCTOU) | Sequential scanners don't model concurrency | Send two simultaneous requests to the same state-changing endpoint |
+
+## §TEMPORAL-THREATS
+
+Threats materialising in the 2025–2030 window that defences designed today must account for.
+
+| Threat | Est. Timeline | Relevance to This Domain | Prepare Now By |
+|--------|--------------|--------------------------|----------------|
+| Cryptographically Relevant Quantum Computer (CRQC) | 2028–2032 | Harvest-now-decrypt-later attacks active today; RSA/ECDSA keys signed today will be broken | Inventory all RSA/ECDSA usage; migrate long-lived data to ML-KEM (FIPS 203) |
+| AI-assisted adversaries at scale | 2025–2027 (active) | LLM-powered fuzzing finds 10× more edge cases; automated PoC generation | Assume attackers have LLM help; expand test surface to match |
+| EU AI Act full enforcement | 2026 | High-risk AI systems require mandatory conformity assessments | Classify all AI features against AI Act tiers now |
+| Post-quantum TLS migration deadline | 2028–2030 | Browser vendors will drop classical-only TLS connections | Begin TLS agility assessment; test hybrid key exchange |
+| Mandatory SBOM + build provenance (US EO 14028 / EU CRA) | 2025–2026 (active) | SBOM and SLSA attestation are becoming legally required | Achieve SLSA L2 minimum; generate CycloneDX SBOM per release |
+
+## §DETECTION-GAP
+
+What current security monitoring CANNOT detect in this domain, and what to build to close each gap.
+
+**Standard gaps that MUST be checked:**
+
+- **Second-order attack execution**: The storage request looks safe; only the retrieval+execution step is dangerous. Need: correlate write events with downstream read+execute events in the same SIEM query window.
+- **Timing-side-channel leakage**: No log event emitted; only observable as microsecond response-time variance. Need: per-endpoint p99 latency tracking with statistical anomaly detection.
+- **Low-and-slow credential stuffing**: Individually, each request is under rate limits. Need: behavioural baseline — flag accounts with geographically impossible velocity or device-fingerprint mismatch across authentication attempts.
+- **Insider exfiltration via legitimate process**: Authorised exports, reports, and data downloads that individually are permitted but collectively constitute data exfiltration. Need: data-volume anomaly detection — alert when a single user's data access volume exceeds 3× their 30-day baseline within 24 hours.
+- **Cross-agent attack chains**: Phase 1 finding A + Phase 1 finding B = CRITICAL chain invisible to either agent alone. Need: CISO orchestrator Phase 1 synthesis step — correlate all agent findings before Phase 2.
+
+## §ZERO-MISS-MANDATE
+
+This agent CANNOT declare any attack class clean without explicit evidence of checking. For each item, output one of:
+- `CHECKED: [N files] | [patterns used] | CLEAN`
+- `CHECKED: [N files] | [patterns used] | [N findings, all fixed]`
+- `SKIPPED: [reason — must be "not applicable: [evidence]"]`
+
+**Silent skip = FAILED COVERAGE.** The orchestrator flags this as a quality gap.
+
+The output findings JSON MUST include a `coverageManifest` key:
+```json
+{
+  "coverageManifest": {
+    "attackClassesCovered": [{ "class": "SQL Injection", "filesReviewed": 47, "patterns": ["queryRaw", "string concat"], "result": "CLEAN" }],
+    "filesReviewed": 47,
+    "negativeAssertions": ["SQL Injection: queryRaw pattern searched across 47 files — 0 matches"],
+    "uncoveredReason": {}
+  }
+}
+```

@@ -3,6 +3,8 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { readFileSync, existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import * as dns from "node:dns/promises";
+import * as net from "node:net";
 import { z } from "zod";
 import { runPrGate } from "../gate/policy.js";
 import { readFileSafe } from "../repo/fs.js";
@@ -98,6 +100,83 @@ function safeTool(
       return asTextResponse(`[security-mcp error] ${msg}`);
     }
   };
+}
+
+// ---------------------------------------------------------------------------
+// CWE-918: SSRF guard for operator-configured webhook URLs.
+// Blocks private/link-local/metadata IP ranges so env-var webhooks cannot be
+// weaponised to reach internal services (e.g. 169.254.169.254 metadata endpoint).
+// ---------------------------------------------------------------------------
+
+const WEBHOOK_PRIVATE_CIDR = [
+  /^127\./,
+  /^10\./,
+  /^172\.(1[6-9]|2\d|3[01])\./,
+  /^192\.168\./,
+  /^169\.254\./,
+  /^::1$/,
+  /^fc/,
+  /^fd/,
+  /^0\./,
+];
+
+function webhookIsPrivateIp(ip: string): boolean {
+  return WEBHOOK_PRIVATE_CIDR.some((r) => r.test(ip));
+}
+
+/**
+ * Validates a webhook URL loaded from an environment variable.
+ * Returns the URL unchanged if it resolves to a public host, throws otherwise.
+ * CWE-918 / MITRE ATT&CK T1090 (Proxy via internal host).
+ *
+ * Security properties enforced:
+ *   1. HTTPS-only — plaintext HTTP would expose Bearer tokens (SECURITY_JIRA_TOKEN)
+ *      and webhook payloads to network eavesdroppers (CWE-319).
+ *   2. No embedded Basic Auth credentials in the URL — these appear verbatim in
+ *      logs, error messages, and network traces (CWE-312 / CWE-522).
+ *   3. Private/link-local/metadata IP ranges are blocked to prevent SSRF
+ *      (CWE-918) against cloud metadata endpoints and internal services.
+ */
+async function validateWebhookUrl(url: string, label: string): Promise<void> {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`${label}: invalid URL`);
+  }
+
+  // Enforce HTTPS — plaintext HTTP exposes auth tokens in transit (CWE-319).
+  if (parsed.protocol !== "https:") {
+    throw new Error(`${label}: webhook URL must use https (plaintext HTTP is not permitted — tokens would be sent unencrypted)`);
+  }
+
+  // Reject URLs with embedded credentials (e.g. https://user:pass@host).
+  // These leak into logs, error messages, and HTTP Referer headers (CWE-312/CWE-522).
+  if (parsed.username || parsed.password) {
+    throw new Error(`${label}: webhook URL must not contain embedded credentials — pass auth via a separate header or secret`);
+  }
+
+  const host = parsed.hostname;
+  if (host === "localhost" || host === "metadata.google.internal" ||
+      host === "169.254.169.254" || host.endsWith(".internal")) {
+    throw new Error(`${label}: webhook URL resolves to a blocked internal host`);
+  }
+  if (net.isIP(host)) {
+    if (webhookIsPrivateIp(host)) throw new Error(`${label}: webhook URL is a private IP`);
+    return; // public bare-IP — allow
+  }
+  try {
+    const resolved = await dns.lookup(host, { all: true });
+    for (const { address } of resolved) {
+      if (webhookIsPrivateIp(address)) {
+        throw new Error(`${label}: webhook URL resolves to private IP ${address}`);
+      }
+    }
+  } catch (e) {
+    if (e instanceof Error && e.message.startsWith(label)) throw e;
+    // DNS failure → block conservatively
+    throw new Error(`${label}: could not resolve webhook hostname`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1571,6 +1650,8 @@ tool(
     const slackWebhook = process.env["SECURITY_SLACK_WEBHOOK"];
     if (slackWebhook) {
       try {
+        // CWE-918: validate before connecting — blocks SSRF to internal hosts
+        await validateWebhookUrl(slackWebhook, "SECURITY_SLACK_WEBHOOK");
         const color = gateFailed ? "#d32f2f" : "#388e3c";
         const statusEmoji = gateFailed ? ":red_circle:" : ":large_green_circle:";
         const body = {
@@ -1646,6 +1727,8 @@ tool(
     const genericWebhook = process.env["SECURITY_WEBHOOK_URL"];
     if (genericWebhook) {
       try {
+        // CWE-918: validate before connecting
+        await validateWebhookUrl(genericWebhook, "SECURITY_WEBHOOK_URL");
         const body = { runId, gateFailed, findingCount, criticalCount, timestamp: new Date().toISOString() };
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 10000);
@@ -1672,6 +1755,8 @@ tool(
     const jiraProject = process.env["SECURITY_JIRA_PROJECT"] ?? "SECURITY";
     if (jiraUrl && jiraToken && gateFailed) {
       try {
+        // CWE-918: validate Jira base URL before connecting
+        await validateWebhookUrl(jiraUrl, "SECURITY_JIRA_URL");
         const body = {
           fields: {
             project: { key: jiraProject },

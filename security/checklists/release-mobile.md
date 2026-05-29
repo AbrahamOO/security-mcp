@@ -120,3 +120,24 @@ Use before every iOS and Android production release. All items must be checked o
 - [ ] Intent extras reviewed: no sensitive data passed via implicit intents to external components
 - [ ] Custom URL scheme hijacking prevention: scheme registered and validated before processing
 - [ ] SSL pinning bypass test executed against release build — pinning holds under instrumentation
+
+---
+
+## Post-Quantum Readiness Gate
+
+- [ ] Certificate pinning uses EC keys (P-256 minimum) — RSA 2048 pins flagged for timeline migration
+- [ ] Any token stored in Keychain / Keystore with validity > 1 year reviewed for harvest-now-decrypt-later risk
+- [ ] App-to-backend mTLS certificates: key algorithms inventoried and migration plan documented
+- [ ] On-device ML models (ONNX, CoreML, TFLite): model provenance verified; no RSA-signed model manifest with long-lived signature
+
+## Learning Loop Review
+
+- [ ] `security.pattern_report` reviewed — most common mobile findings (MASVS-STORAGE, MASVS-AUTH) addressed
+- [ ] All CRITICAL/HIGH findings from this run recorded via `security.record_outcome`
+- [ ] Platform-specific bypass techniques found in prior runs confirmed still blocked in release build
+
+## Cross-Checklist Dependencies
+
+- [ ] Mobile app calls backend APIs? → `release-api.md` authentication and rate-limit controls also verified
+- [ ] Mobile app handles payments? → `release-payments.md` PCI mobile scope verification also completed
+- [ ] Mobile app uses AI/LLM features? → `release-ai.md` on-device model security also verified

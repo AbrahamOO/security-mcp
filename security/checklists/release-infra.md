@@ -127,3 +127,33 @@ Use before every infrastructure or IaC production release. All items must be che
 - [ ] Container runtime: seccomp profile applied (RuntimeDefault or stricter)
 - [ ] Container runtime: AppArmor or SELinux profile enforced — not unconfined
 - [ ] Kubernetes resource limits (CPU and memory) set on all workloads — no unbounded pods
+
+---
+
+## Post-Quantum Readiness Gate
+
+- [ ] All KMS keys used for SIGN_VERIFY with RSA algorithm inventoried
+- [ ] CloudFront signed URLs using RSA keys with validity > 1 year flagged for migration timeline
+- [ ] TLS termination points inventoried — hybrid post-quantum key exchange readiness assessed
+- [ ] IAM certificate-based authentication (mTLS) using RSA 2048+ documented for migration
+- [ ] NIST FIPS 203/204/205 migration plan exists for any long-lived infrastructure secrets
+
+## Security-MCP Specific Gates
+
+- [ ] CI security gate base/head refs confirmed — `SECURITY_GATE_BASE_REF` and `SECURITY_GATE_HEAD_REF` are NOT both set to `HEAD` (a HEAD..HEAD diff is always empty and makes the gate a no-op)
+- [ ] Branch protection confirmed active on `main` — direct pushes blocked, PR reviews required, status checks (security-gate workflow) must pass before merge
+- [ ] Publish workflow environment protection enabled — `environment: npm-publish` with required-reviewers configured in GitHub Settings so any maintainer cannot unilaterally trigger npm publish by pushing a `v*` tag
+
+---
+
+## Learning Loop Review
+
+- [ ] `security.pattern_report` reviewed — most-frequently-recurring infrastructure findings addressed
+- [ ] All CRITICAL/HIGH findings from this run recorded via `security.record_outcome`
+- [ ] IAM privilege escalation paths found in previous runs confirmed still blocked
+
+## Cross-Checklist Dependencies
+
+- [ ] Infrastructure runs containerized workloads? → Kubernetes/Docker security section required
+- [ ] Infrastructure serves AI/LLM workloads? → `release-ai.md` access controls and model endpoints also verified
+- [ ] Infrastructure handles payment processing? → `release-payments.md` network segmentation also completed

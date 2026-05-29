@@ -1,0 +1,7 @@
+# Checkov configuration for security-mcp CI
+# The fixtures/infra-insecure/ directory contains intentionally vulnerable Terraform
+# used as test input for the security gate engine. Suppress findings from that path
+# so Checkov can still enforce checks on any real IaC added to the repo in the future.
+
+skip-path:
+  - fixtures/infra-insecure

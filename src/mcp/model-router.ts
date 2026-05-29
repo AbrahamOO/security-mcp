@@ -40,7 +40,7 @@ const USAGE_FILE = join(MEMORY_DIR, "model-usage.json");
 const HEALTH_FILE = join(MEMORY_DIR, "provider-health.json");
 const POLICY_FILE = join(".mcp", "policies", "security-policy.json");
 
-const DEFAULT_BUDGET_USD = 5.0;
+const DEFAULT_BUDGET_USD = 5;
 const CIRCUIT_BREAKER_THRESHOLD = 3;   // failures before circuit opens
 const CIRCUIT_BREAKER_COOLDOWN_MS = 60_000; // 60 seconds
 
@@ -89,8 +89,8 @@ export const MODEL_REGISTRY: ProviderModel[] = [
     modelId: "claude-sonnet-4-6",
     provider: "anthropic",
     capabilityTier: "standard",
-    inputPer1M: 3.0,
-    outputPer1M: 15.0,
+    inputPer1M: 3,
+    outputPer1M: 15,
     label: "Claude Sonnet 4.6"
   },
 
@@ -100,15 +100,15 @@ export const MODEL_REGISTRY: ProviderModel[] = [
     provider: "openai",
     capabilityTier: "light",
     inputPer1M: 0.15,
-    outputPer1M: 0.60,
+    outputPer1M: 0.6,
     label: "GPT-4o Mini"
   },
   {
     modelId: "gpt-4o",
     provider: "openai",
     capabilityTier: "standard",
-    inputPer1M: 2.50,
-    outputPer1M: 10.0,
+    inputPer1M: 2.5,
+    outputPer1M: 10,
     label: "GPT-4o"
   },
 
@@ -118,7 +118,7 @@ export const MODEL_REGISTRY: ProviderModel[] = [
     provider: "google",
     capabilityTier: "light",
     inputPer1M: 0.075,
-    outputPer1M: 0.30,
+    outputPer1M: 0.3,
     label: "Gemini 1.5 Flash"
   },
   {
@@ -126,7 +126,7 @@ export const MODEL_REGISTRY: ProviderModel[] = [
     provider: "google",
     capabilityTier: "standard",
     inputPer1M: 1.25,
-    outputPer1M: 5.0,
+    outputPer1M: 5,
     label: "Gemini 1.5 Pro"
   },
 
@@ -136,16 +136,46 @@ export const MODEL_REGISTRY: ProviderModel[] = [
     provider: "cohere",
     capabilityTier: "light",
     inputPer1M: 0.15,
-    outputPer1M: 0.60,
+    outputPer1M: 0.6,
     label: "Command R"
   },
   {
     modelId: "command-r-plus",
     provider: "cohere",
     capabilityTier: "standard",
-    inputPer1M: 2.50,
-    outputPer1M: 10.0,
+    inputPer1M: 2.5,
+    outputPer1M: 10,
     label: "Command R+"
+  },
+
+  // Anthropic — Claude Opus (advanced tier, opt-in via advanced_task_preference in policy)
+  {
+    modelId: "claude-opus-4-8",
+    provider: "anthropic",
+    capabilityTier: "advanced",
+    inputPer1M: 15,
+    outputPer1M: 75,
+    label: "Claude Opus 4.8"
+  },
+
+  // OpenAI — o1 (advanced tier)
+  {
+    modelId: "o1",
+    provider: "openai",
+    capabilityTier: "advanced",
+    inputPer1M: 15,
+    outputPer1M: 60,
+    label: "OpenAI o1"
+  },
+
+  // Google — Gemini 2.0 Flash (advanced tier)
+  {
+    modelId: "gemini-2.0-flash-thinking-exp",
+    provider: "google",
+    capabilityTier: "advanced",
+    inputPer1M: 0,
+    outputPer1M: 0,
+    label: "Gemini 2.0 Flash Thinking (experimental)"
   },
 
   // Local — Ollama (zero cost, requires Ollama at localhost:11434)
@@ -326,6 +356,12 @@ type SecurityPolicy = {
     max_total_cost_usd?: number;
     preferred_providers?: Provider[];
     fallback_on_budget_exceeded?: string;
+    /**
+     * Task types that should prefer the advanced capability tier (e.g. Opus 4.8) when
+     * a healthy advanced-tier model is available. Falls back to standard tier silently
+     * if no advanced model is configured or healthy — zero impact for users without Opus.
+     */
+    advanced_task_preference?: TaskType[];
   };
 };
 
@@ -387,6 +423,16 @@ async function loadPreferredProviders(): Promise<Provider[] | null> {
   }
 }
 
+async function loadAdvancedTaskPreferences(): Promise<TaskType[]> {
+  try {
+    const raw = await readFile(POLICY_FILE, "utf-8");
+    const policy = JSON.parse(raw) as SecurityPolicy;
+    return policy.model_budget?.advanced_task_preference ?? [];
+  } catch {
+    return [];
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Circuit breaker helpers
 // ---------------------------------------------------------------------------
@@ -424,16 +470,38 @@ function legacyTier(capTier: CapabilityTier): ModelTier {
  * Select the cheapest healthy model that meets the capability requirement for
  * the given task type. Respects preferred_providers policy and circuit breakers.
  *
- * @param requiredTier  Minimum capability tier for the task.
- * @param health        Current provider health store.
- * @param preferred     Optional ordered list of preferred providers.
- * @returns             [chosen model, failoverUsed]
+ * @param requiredTier    Minimum capability tier for the task.
+ * @param health          Current provider health store.
+ * @param preferred       Optional ordered list of preferred providers.
+ * @param preferAdvanced  If true, try advanced-tier models first, fall back to standard.
+ * @returns               [chosen model, failoverUsed]
  */
 function selectModel(
   requiredTier: CapabilityTier,
   health: ProviderHealthStore,
-  preferred: Provider[] | null
+  preferred: Provider[] | null,
+  preferAdvanced = false
 ): [ProviderModel, boolean] {
+  // If advanced is preferred, try advanced-tier models first. Fall back gracefully to
+  // standard if none are healthy or registered — zero impact for users without Opus/o1.
+  if (preferAdvanced) {
+    const advancedCandidates = MODEL_REGISTRY.filter((m) => m.capabilityTier === "advanced");
+    const healthyAdvanced = advancedCandidates.filter(
+      (m) => !isCircuitOpen(health.providers[m.provider])
+    );
+    if (healthyAdvanced.length > 0) {
+      const pool = preferred
+        ? [
+            ...healthyAdvanced.filter((m) => preferred.includes(m.provider)),
+            ...healthyAdvanced.filter((m) => !preferred.includes(m.provider))
+          ]
+        : healthyAdvanced;
+      pool.sort((a, b) => combinedCost(a) - combinedCost(b));
+      if (pool.length > 0) return [pool[0], false];
+    }
+    // No advanced model available — fall through to standard selection silently.
+  }
+
   // Candidates: all models meeting the capability floor.
   const candidates = MODEL_REGISTRY.filter((m) => meetsCapabilityFloor(m, requiredTier));
 
@@ -474,15 +542,17 @@ export async function getModelForTask(taskType: TaskType, _opts?: {
   agentName?: string;
   agentRunId?: string;
 }): Promise<ModelAssignment> {
-  const [store, health, maxBudget, preferred] = await Promise.all([
+  const [store, health, maxBudget, preferred, advancedPrefs] = await Promise.all([
     loadUsageStore(),
     loadHealthStore(),
     loadMaxBudget(),
-    loadPreferredProviders()
+    loadPreferredProviders(),
+    loadAdvancedTaskPreferences()
   ]);
 
   const requiredTier = TASK_CAPABILITY_MAP[taskType];
-  const [chosen, failoverUsed] = selectModel(requiredTier, health, preferred);
+  const preferAdvanced = advancedPrefs.includes(taskType);
+  const [chosen, failoverUsed] = selectModel(requiredTier, health, preferred, preferAdvanced);
 
   const spent = store.totalSpentUsd;
   const remaining = maxBudget - spent;
@@ -542,8 +612,8 @@ export async function trackUsage(usage: Omit<UsageRecord, "timestamp">): Promise
   const [store, health] = await Promise.all([loadUsageStore(), loadHealthStore()]);
 
   const model = MODEL_REGISTRY.find((m) => m.modelId === usage.model);
-  const inputRate = model?.inputPer1M ?? (usage.tier === "haiku" ? 0.25 : 3.0);
-  const outputRate = model?.outputPer1M ?? (usage.tier === "haiku" ? 1.25 : 15.0);
+  const inputRate = model?.inputPer1M ?? (usage.tier === "haiku" ? 0.25 : 3);
+  const outputRate = model?.outputPer1M ?? (usage.tier === "haiku" ? 1.25 : 15);
 
   const estimatedCost =
     (usage.inputTokens / 1_000_000) * inputRate +

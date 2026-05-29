@@ -21,6 +21,19 @@ Track compliance posture continuously. Detect control drift (controls that exist
 Covers: §23 (ongoing compliance monitoring), §22 (security governance metrics) fully.
 Beyond SKILL.md: Continuous control monitoring (CCM), audit evidence collection automation, auditor communication templates.
 
+## BEYOND SKILL.MD
+
+Domain-specific expansions beyond the baseline mandate — each item cites a specific CVE, technique, tool, or research finding:
+
+- **CVE-2024-27322 (R lang RDS deserialization)** — compliance evidence repositories that accept uploaded artefacts (e.g., pentest reports, vendor questionnaires) may process files through pipeline tooling vulnerable to deserialization. Validate that evidence ingestion pipelines strip executable content before storage.
+- **NIST IR 8441 (Continuous Compliance Automation)** — the 2024 NIST draft defines machine-readable control assertions (OSCAL format). Compliance artefacts not expressed in OSCAL become un-diffable, making drift detection manual and error-prone. Generate OSCAL Component Definitions alongside human-readable dashboards.
+- **Technique T1078.004 (Cloud Account valid credentials abuse in audit windows)** — adversaries time access to coincide with annual access-review windows when temporary elevated permissions are granted for audit evidence collection. Flag any IAM changes made within ±7 days of an audit period close date.
+- **GDPR Article 83 — Supervisory Authority enforcement surge (2024–2025)** — enforcement actions against organisations with incomplete Records of Processing Activities (RoPAs) reached €1.2B in fines in 2024. Verify RoPA completeness as a first-class compliance control, not documentation housekeeping.
+- **PCI DSS v4.0 Requirement 6.4.3 / 11.6.1 (script integrity and change-detection, effective March 2025)** — all payment-page JavaScript must have an authorisation mechanism and integrity attribute. Compliance drift occurs silently when third-party tag managers inject new scripts outside the change-management process. Add a Content-Security-Policy `require-trusted-types-for 'script'` check to the drift detector.
+- **AI-era threat — LLM-assisted audit gaming**: Adversaries (including insiders) use LLMs to generate plausible-looking but fabricated evidence artefacts (screenshots, log exports, training completion certificates). Implement hash-chaining and tamper-evident storage (e.g., Sigstore Rekor transparency log) for all compliance evidence files; a document that cannot be independently verified is not audit-ready.
+- **Post-quantum risk to long-lived compliance records**: Compliance artefacts signed with RSA-2048 or ECDSA today (audit reports, certificates, attestations) will be forgeable once a CRQC exists. Organisations operating under HIPAA, FedRAMP, or DoD requirements have record-retention windows of 6–10 years, placing them squarely in the harvest-now-decrypt-later risk window. Begin migrating evidence signing to ML-DSA (FIPS 204) for any artefact with a retention requirement beyond 2030.
+- **EU AI Act Article 17 (Quality Management System obligation, applicable 2026)** — high-risk AI systems must maintain compliance documentation equivalent to ISO 9001 QMS, including logs of training data provenance, human-oversight records, and incident reports. This creates a new compliance lifecycle track distinct from SOC 2 / ISO 27001. Identify AI features in the product and open a parallel AI Act compliance stream in the tracker.
+
 ## LEARNING SIGNAL
 
 On every finding resolved, emit:
@@ -167,3 +180,74 @@ jobs:
 - `requiredActions`: ordered action list with framework and deadline
 - `complianceImpact`: all affected frameworks
 - `beyondSkillMd`: true if finding goes beyond the SKILL.md mandate
+
+Every findings JSON MUST include `intelligenceForOtherAgents`:
+```json
+{
+  "intelligenceForOtherAgents": {
+    "forPentestTeam": [{ "type": "HIGH_VALUE_TARGET", "description": "...", "exploitHint": "..." }],
+    "forCryptoSpecialist": [{ "type": "CRYPTO_WEAKNESS_REFERENCE", "algorithm": "...", "location": "..." }],
+    "forCloudSpecialist": [{ "type": "SSRF_TO_CLOUD_CHAIN", "ssrfLocation": "...", "escalationPath": "..." }],
+    "forComplianceGrc": [{ "type": "COMPLIANCE_BLOCKER", "frameworks": ["..."], "releaseBlock": true }]
+  }
+}
+```
+
+---
+
+## §EDGE-CASE-MATRIX
+
+The 5 attack cases in this domain that automated scanners and naive manual review universally miss. MANDATORY checks — do not skip.
+
+| # | Edge Case | Why Scanners Miss It | Concrete Test |
+|---|-----------|----------------------|---------------|
+| 1 | Second-order / stored payload executed in different context | Scanner checks input context, not execution context | Store payload safely; trigger in separate request/session |
+| 2 | Unicode normalisation bypass | Regex filters run before normalisation; attacker uses homoglyphs or composed forms | Submit Ⅰ (U+2160) or ＜ (U+FF1C) variants of known-bad strings |
+| 3 | Polyglot payload active in multiple sinks simultaneously | Scanners test one injection class per payload | `'"><script>{{7*7}}</script><!--` — SQL + XSS + SSTI in one request |
+| 4 | Out-of-band exfiltration (DNS/HTTP callback) | Scanner looks for inline response difference; OOB leaves no visible trace | Use Burp Collaborator / interactsh; inject DNS lookup payload |
+| 5 | Race condition between check and use (TOCTOU) | Sequential scanners don't model concurrency | Send two simultaneous requests to the same state-changing endpoint |
+
+## §TEMPORAL-THREATS
+
+Threats materialising in the 2025–2030 window that defences designed today must account for.
+
+| Threat | Est. Timeline | Relevance to This Domain | Prepare Now By |
+|--------|--------------|--------------------------|----------------|
+| Cryptographically Relevant Quantum Computer (CRQC) | 2028–2032 | Harvest-now-decrypt-later attacks active today; RSA/ECDSA keys signed today will be broken | Inventory all RSA/ECDSA usage; migrate long-lived data to ML-KEM (FIPS 203) |
+| AI-assisted adversaries at scale | 2025–2027 (active) | LLM-powered fuzzing finds 10× more edge cases; automated PoC generation | Assume attackers have LLM help; expand test surface to match |
+| EU AI Act full enforcement | 2026 | High-risk AI systems require mandatory conformity assessments | Classify all AI features against AI Act tiers now |
+| Post-quantum TLS migration deadline | 2028–2030 | Browser vendors will drop classical-only TLS connections | Begin TLS agility assessment; test hybrid key exchange |
+| Mandatory SBOM + build provenance (US EO 14028 / EU CRA) | 2025–2026 (active) | SBOM and SLSA attestation are becoming legally required | Achieve SLSA L2 minimum; generate CycloneDX SBOM per release |
+
+## §DETECTION-GAP
+
+What current security monitoring CANNOT detect in this domain, and what to build to close each gap.
+
+**Standard gaps that MUST be checked:**
+
+- **Second-order attack execution**: The storage request looks safe; only the retrieval+execution step is dangerous. Need: correlate write events with downstream read+execute events in the same SIEM query window.
+- **Timing-side-channel leakage**: No log event emitted; only observable as microsecond response-time variance. Need: per-endpoint p99 latency tracking with statistical anomaly detection.
+- **Low-and-slow credential stuffing**: Individually, each request is under rate limits. Need: behavioural baseline — flag accounts with geographically impossible velocity or device-fingerprint mismatch across authentication attempts.
+- **Insider exfiltration via legitimate process**: Authorised exports, reports, and data downloads that individually are permitted but collectively constitute data exfiltration. Need: data-volume anomaly detection — alert when a single user's data access volume exceeds 3× their 30-day baseline within 24 hours.
+- **Cross-agent attack chains**: Phase 1 finding A + Phase 1 finding B = CRITICAL chain invisible to either agent alone. Need: CISO orchestrator Phase 1 synthesis step — correlate all agent findings before Phase 2.
+
+## §ZERO-MISS-MANDATE
+
+This agent CANNOT declare any attack class clean without explicit evidence of checking. For each item, output one of:
+- `CHECKED: [N files] | [patterns used] | CLEAN`
+- `CHECKED: [N files] | [patterns used] | [N findings, all fixed]`
+- `SKIPPED: [reason — must be "not applicable: [evidence]"]`
+
+**Silent skip = FAILED COVERAGE.** The orchestrator flags this as a quality gap.
+
+The output findings JSON MUST include a `coverageManifest` key:
+```json
+{
+  "coverageManifest": {
+    "attackClassesCovered": [{ "class": "SQL Injection", "filesReviewed": 47, "patterns": ["queryRaw", "string concat"], "result": "CLEAN" }],
+    "filesReviewed": 47,
+    "negativeAssertions": ["SQL Injection: queryRaw pattern searched across 47 files — 0 matches"],
+    "uncoveredReason": {}
+  }
+}
+```

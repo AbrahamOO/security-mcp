@@ -1,6 +1,6 @@
 {
-  "version": "1.3.0",
-  "updatedAt": "2026-04-05",
+  "version": "1.4.0",
+  "updatedAt": "2026-05-29",
   "baseUrl": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills",
   "skills": {
     "ciso-orchestrator": {
@@ -10,11 +10,29 @@
       "userInvocable": true,
       "phase": 0,
       "subAgents": [
-        "threat-modeler", "appsec-code-auditor", "cloud-infra-specialist",
-        "supply-chain-devsecops", "ai-llm-redteam", "mobile-security-specialist",
-        "crypto-pki-specialist", "pentest-team", "compliance-grc",
+        "threat-modeler",
+        "appsec-code-auditor",
+        "cloud-infra-specialist",
+        "supply-chain-devsecops",
+        "ai-llm-redteam",
+        "mobile-security-specialist",
+        "crypto-pki-specialist",
+        "pentest-team",
+        "compliance-grc",
         "senior-security-engineer"
-      ]
+      ],
+      "routingTriggers": [
+        "*"
+      ],
+      "detectionSignals": [
+        "full-spectrum"
+      ],
+      "edgeCaseDomains": [
+        "cross-domain attack chains",
+        "industry vertical APT matching",
+        "ghost agent escalation"
+      ],
+      "sha256": "c2517b61387d7a8a94352646e290ac788d64fc2fcc972fde98cc2bcc37f01063"
     },
     "threat-modeler": {
       "version": "1.0.0",
@@ -22,7 +40,26 @@
       "description": "Agent 1 lead. STRIDE/PASTA/ATT&CK/LINDDUN threat modeling across all surfaces.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": ["stride-pasta-analyst", "attack-navigator", "business-logic-attacker", "privacy-flow-analyst"]
+      "subAgents": [
+        "stride-pasta-analyst",
+        "attack-navigator",
+        "business-logic-attacker",
+        "privacy-flow-analyst"
+      ],
+      "routingTriggers": [
+        "*"
+      ],
+      "detectionSignals": [
+        "STRIDE threats",
+        "PASTA attack model",
+        "trust boundary violations"
+      ],
+      "edgeCaseDomains": [
+        "multi-service threat chains",
+        "temporal threat evolution",
+        "formal verification triggers"
+      ],
+      "sha256": "9272bb8e15f5ea803d65d315f68f89ff5e8caf3842c072328049b5009d9d5170"
     },
     "stride-pasta-analyst": {
       "version": "1.0.0",
@@ -30,7 +67,24 @@
       "description": "Sub-agent 1a. Full STRIDE matrix + PASTA stages 1-7 + LINDDUN + DREAD + TRIKE.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "*"
+      ],
+      "detectionSignals": [
+        "spoofing",
+        "tampering",
+        "repudiation",
+        "info disclosure",
+        "DoS",
+        "privilege escalation"
+      ],
+      "edgeCaseDomains": [
+        "API contract vs implementation mismatch",
+        "multi-party STRIDE",
+        "LINDDUN Pro privacy scoring"
+      ],
+      "sha256": "cebf176a40d29d6858b292e1d515e87cfa10d4f118da82b1f184e6dc1d6df348"
     },
     "attack-navigator": {
       "version": "1.0.0",
@@ -38,7 +92,21 @@
       "description": "Sub-agent 1b. MITRE ATT&CK Navigator layer builder with D3FEND countermeasure mapping.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "*"
+      ],
+      "detectionSignals": [
+        "MITRE ATT&CK technique mapping",
+        "D3FEND countermeasures",
+        "kill chain gaps"
+      ],
+      "edgeCaseDomains": [
+        "technique combinations invisible to single-technique analysis",
+        "detection gap mapping",
+        "post-quantum ATT&CK updates"
+      ],
+      "sha256": "1a0b22ff671396885ed841cf6ab34c36050d11ff93b09593ff15f36a86c69218"
     },
     "business-logic-attacker": {
       "version": "1.0.0",
@@ -46,7 +114,28 @@
       "description": "Sub-agent 1c. Attack trees for multi-step flows: TOCTOU, confused deputy, integer overflow, coupon abuse.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "stripe",
+        "checkout",
+        "payment",
+        "subscribe",
+        "cart",
+        "coupon",
+        "billing"
+      ],
+      "detectionSignals": [
+        "price manipulation",
+        "TOCTOU races",
+        "integer overflow",
+        "state machine violations"
+      ],
+      "edgeCaseDomains": [
+        "microservice distributed races",
+        "saga pattern compensation failures",
+        "event-driven idempotency gaps"
+      ],
+      "sha256": "f24632eeb145393872eff13c6ee0565b2f18ec573279c15fb27f771a98d7fcd4"
     },
     "privacy-flow-analyst": {
       "version": "1.0.0",
@@ -54,7 +143,28 @@
       "description": "Sub-agent 1d. LINDDUN privacy threat model, GDPR DPIA triggers, cross-border data transfer analysis.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "gdpr",
+        "hipaa",
+        "pii",
+        "personal.data",
+        "consent",
+        "email",
+        "phone"
+      ],
+      "detectionSignals": [
+        "LINDDUN privacy threats",
+        "GDPR DPIA triggers",
+        "cross-border data transfer risks"
+      ],
+      "edgeCaseDomains": [
+        "inference re-identification",
+        "PII in intermediate artifacts",
+        "third-party pixel tracking",
+        "AI model PII leakage"
+      ],
+      "sha256": "8aa8b1501e8e7948dd4fb6aa98ca874706a523d1024b7e8726c305a6932b5863"
     },
     "appsec-code-auditor": {
       "version": "1.0.0",
@@ -62,7 +172,28 @@
       "description": "Agent 2 lead. Application security auditor covering SKILL.md §12, §13, §17.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": ["injection-specialist", "auth-session-hacker", "logic-race-fuzzer", "serialization-memory-attacker"]
+      "subAgents": [
+        "injection-specialist",
+        "auth-session-hacker",
+        "logic-race-fuzzer",
+        "serialization-memory-attacker"
+      ],
+      "routingTriggers": [
+        "*"
+      ],
+      "detectionSignals": [
+        "injection",
+        "broken auth",
+        "insecure deserialization",
+        "XSS",
+        "CSRF"
+      ],
+      "edgeCaseDomains": [
+        "AI-generated code hallucinated security",
+        "compiler/transpiler attack surface",
+        "native binding memory safety"
+      ],
+      "sha256": "dede1cddaab439aabe186b947265443d872ea680096f732319e119194c0213f4"
     },
     "injection-specialist": {
       "version": "1.0.0",
@@ -70,7 +201,31 @@
       "description": "Sub-agent 2a. SQL/NoSQL/LDAP/OS command/SSTI/CRLF/log injection across all input surfaces.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "prisma",
+        "sequelize",
+        "knex",
+        "typeorm",
+        "mongoose",
+        "handlebars",
+        "pug",
+        "ejs",
+        "multer"
+      ],
+      "detectionSignals": [
+        "SQL injection",
+        "SSTI",
+        "OS command injection",
+        "CRLF injection",
+        "path traversal"
+      ],
+      "edgeCaseDomains": [
+        "second-order injection",
+        "HTTP request smuggling",
+        "prototype pollution to privilege escalation"
+      ],
+      "sha256": "dc1a485315324e1d78b89360edbe9fa7c66c45fb223ed56df8766426a2fc9303"
     },
     "auth-session-hacker": {
       "version": "1.0.0",
@@ -78,7 +233,29 @@
       "description": "Sub-agent 2b. JWT algorithm confusion, OAuth PKCE, SAML wrapping, session fixation, account lockout.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "passport",
+        "next-auth",
+        "jsonwebtoken",
+        "clerk",
+        "auth0",
+        "supabase",
+        "express-session"
+      ],
+      "detectionSignals": [
+        "JWT algorithm confusion",
+        "OAuth PKCE bypass",
+        "SAML wrapping",
+        "session fixation"
+      ],
+      "edgeCaseDomains": [
+        "JWT kid path injection",
+        "jku injection",
+        "OAuth code reuse",
+        "SAML namespace confusion"
+      ],
+      "sha256": "646ebb985daccc0f5d58e46ce43fe2a806f42a68cfb62559634ca168297c35d6"
     },
     "logic-race-fuzzer": {
       "version": "1.0.0",
@@ -86,7 +263,22 @@
       "description": "Sub-agent 2c. Race conditions, integer overflow, mass assignment, non-atomic rate limiting.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "*"
+      ],
+      "detectionSignals": [
+        "race conditions",
+        "TOCTOU",
+        "double-spend",
+        "inventory reservation"
+      ],
+      "edgeCaseDomains": [
+        "distributed microservice races",
+        "GraphQL subscription races",
+        "cache invalidation TOCTOU"
+      ],
+      "sha256": "c5587d34a5bd0c3cd45655f7f6eacf87562ac073244098588cceb2adc44b890f"
     },
     "serialization-memory-attacker": {
       "version": "1.0.0",
@@ -94,7 +286,25 @@
       "description": "Sub-agent 2d. Prototype pollution, insecure deserialization, ReDoS, zip slip, path traversal.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "node-serialize",
+        "yaml",
+        "pickle",
+        "java.io.serializable",
+        "marshal"
+      ],
+      "detectionSignals": [
+        "insecure deserialization",
+        "RCE via gadget chains",
+        "type confusion"
+      ],
+      "edgeCaseDomains": [
+        "YAML alias bombing",
+        "WASM memory safety",
+        "native binding buffer overflow"
+      ],
+      "sha256": "3884103a72245b9693c71f2fc872aece0b657424c9900f0d813f475ba23a1402"
     },
     "cloud-infra-specialist": {
       "version": "1.0.0",
@@ -102,7 +312,31 @@
       "description": "Agent 3 lead. Cloud/infra hardening covering SKILL.md §3, §4, §7.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": ["aws-penetration-tester", "gcp-penetration-tester", "azure-penetration-tester", "k8s-container-escaper"]
+      "subAgents": [
+        "aws-penetration-tester",
+        "gcp-penetration-tester",
+        "azure-penetration-tester",
+        "k8s-container-escaper"
+      ],
+      "routingTriggers": [
+        "terraform",
+        "*.tf",
+        "cloudformation",
+        "cdk",
+        "serverless.yml"
+      ],
+      "detectionSignals": [
+        "IAM misconfiguration",
+        "exposed S3",
+        "network egress",
+        "privilege escalation paths"
+      ],
+      "edgeCaseDomains": [
+        "cost-based DoS",
+        "cross-account trust chains",
+        "Terraform state exposure"
+      ],
+      "sha256": "d33f23bd4856d3c152042cbae24751fc440f364c28305918446369618284f104"
     },
     "aws-penetration-tester": {
       "version": "1.0.0",
@@ -110,7 +344,27 @@
       "description": "Sub-agent 3a. AWS IAM privilege escalation, IMDSv1, S3 ACL, GuardDuty, CloudTrail, SCPs.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "aws-sdk",
+        "@aws-sdk",
+        "terraform aws_",
+        "serverless.yml",
+        "cdk"
+      ],
+      "detectionSignals": [
+        "IAM privilege escalation",
+        "S3 misconfiguration",
+        "Lambda secrets",
+        "IMDSv1",
+        "GuardDuty gaps"
+      ],
+      "edgeCaseDomains": [
+        "cross-account assume-role without ExternalId",
+        "CloudTrail blind spots",
+        "cost-based DoS via Lambda amplification"
+      ],
+      "sha256": "e9a7550552812f4b2252d6097dfd756deb6facfed8157ffcc628093610623918"
     },
     "gcp-penetration-tester": {
       "version": "1.0.0",
@@ -118,7 +372,24 @@
       "description": "Sub-agent 3b. GCP default SA, VPC Service Controls, Workload Identity, Binary Authorization.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "@google-cloud",
+        "google-cloud",
+        "firebase-admin",
+        "googleapis"
+      ],
+      "detectionSignals": [
+        "GCP IAM misconfiguration",
+        "Pub/Sub exfiltration",
+        "Vertex AI attack surface"
+      ],
+      "edgeCaseDomains": [
+        "org policy constraint bypass",
+        "BigQuery data exfiltration via authorized view",
+        "GCP cost-based DoS"
+      ],
+      "sha256": "323aa8edff1956ae1ce307f9dee7046f59942cd5bf37100b9ed24f3ea8ff599d"
     },
     "azure-penetration-tester": {
       "version": "1.0.0",
@@ -126,7 +397,25 @@
       "description": "Sub-agent 3c. Azure Managed Identity, Private Endpoints, Defender for Cloud, DDoS Standard.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "@azure",
+        "azure-sdk",
+        "msal",
+        "bicep",
+        "azurerm"
+      ],
+      "detectionSignals": [
+        "Entra ID misconfiguration",
+        "APIM bypass",
+        "Service Bus exfiltration"
+      ],
+      "edgeCaseDomains": [
+        "managed identity contributor scope",
+        "Power Automate overprivileged connectors",
+        "Teams webhook C2 channel"
+      ],
+      "sha256": "d100abd5400052348936f4f66b1e8ca878f7f8aad6265784a7fe8c4a011b4374"
     },
     "k8s-container-escaper": {
       "version": "1.0.0",
@@ -134,7 +423,27 @@
       "description": "Sub-agent 3d. Kubernetes Pod Security Standards, RBAC, Network Policies, container escape paths.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "kubernetes",
+        "kubectl",
+        "helm",
+        "docker",
+        "dockerfile",
+        "docker-compose"
+      ],
+      "detectionSignals": [
+        "privileged container escape",
+        "RBAC escalation",
+        "hostPath abuse",
+        "service account token theft"
+      ],
+      "edgeCaseDomains": [
+        "ephemeral container bypass",
+        "CSI driver privilege",
+        "eBPF attack surface from observability tools"
+      ],
+      "sha256": "705fb7e2528cdf8b9dadca78d02b98bffc23374479e828ef5759118e3c622cc8"
     },
     "supply-chain-devsecops": {
       "version": "1.0.0",
@@ -142,7 +451,29 @@
       "description": "Agent 4 lead. Supply chain and DevSecOps covering SKILL.md §5, §6, §18, §21.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": ["dependency-confusion-attacker", "cicd-pipeline-hijacker", "artifact-integrity-analyst"]
+      "subAgents": [
+        "dependency-confusion-attacker",
+        "cicd-pipeline-hijacker",
+        "artifact-integrity-analyst"
+      ],
+      "routingTriggers": [
+        "package.json",
+        "requirements.txt",
+        ".github/workflows",
+        "Dockerfile"
+      ],
+      "detectionSignals": [
+        "dependency confusion",
+        "typosquatting",
+        "CICD injection",
+        "artifact tampering"
+      ],
+      "edgeCaseDomains": [
+        "build cache poisoning in SLSA L3",
+        "postinstall script audit",
+        "GitHub org-level control gaps"
+      ],
+      "sha256": "2dcbe52c3eb9a7e31186f8d9aa8f931ed17ddee4d573b93df05de673e7e0ebc5"
     },
     "dependency-confusion-attacker": {
       "version": "1.0.0",
@@ -150,7 +481,25 @@
       "description": "Sub-agent 4a. Dependency confusion, typosquatting, CISA KEV matching, abandoned packages.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "package.json",
+        "requirements.txt",
+        "go.mod",
+        ".npmrc",
+        "pip.conf"
+      ],
+      "detectionSignals": [
+        "internal package name exposure",
+        "registry confusion",
+        "typosquatting"
+      ],
+      "edgeCaseDomains": [
+        "workspace hoisting confusion",
+        "scoped package namespace squatting",
+        "private registry fallback to public"
+      ],
+      "sha256": "559e6444c346bba1a4e7de04f302dda71d683d441b74c38138406f99efc260d5"
     },
     "cicd-pipeline-hijacker": {
       "version": "1.0.0",
@@ -158,7 +507,25 @@
       "description": "Sub-agent 4b. CI/CD pipeline injection, pull_request_target, pinned Actions, secrets in logs.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        ".github/workflows",
+        ".gitlab-ci.yml",
+        "Jenkinsfile",
+        "bitbucket-pipelines.yml"
+      ],
+      "detectionSignals": [
+        "pipeline injection",
+        "secrets exfiltration",
+        "artifact substitution",
+        "self-hosted runner persistence"
+      ],
+      "edgeCaseDomains": [
+        "pull_request_target + untrusted head checkout",
+        "cache poisoning with shared cache keys",
+        "deployment gate bypass"
+      ],
+      "sha256": "c3a948c5bd40abcdb556110af5863009e94b4786e1d5508e34d5044594a028a8"
     },
     "artifact-integrity-analyst": {
       "version": "1.0.0",
@@ -166,7 +533,27 @@
       "description": "Sub-agent 4c. SBOM completeness, SLSA L3, Cosign signatures, build provenance.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "slsa",
+        "sigstore",
+        "cosign",
+        "in-toto",
+        "sbom",
+        "cyclonedx"
+      ],
+      "detectionSignals": [
+        "unsigned artifacts",
+        "SLSA level gaps",
+        "SBOM inaccuracy",
+        "transparency log absence"
+      ],
+      "edgeCaseDomains": [
+        "multi-arch SBOM completeness",
+        "build cache poisoning vs SLSA L3",
+        "dependency lifecycle takeover post-pinning"
+      ],
+      "sha256": "22f85e57cec1d762d5b49bd389ca42d659a2ea927cbb9ab6ca3c7f3dd73449de"
     },
     "ai-llm-redteam": {
       "version": "1.0.0",
@@ -174,7 +561,33 @@
       "description": "Agent 5 lead. AI/LLM security covering SKILL.md §15 fully including all MITRE ATLAS threats.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": ["prompt-injection-specialist", "model-extraction-attacker", "rag-poisoning-specialist", "agentic-loop-exploiter"]
+      "subAgents": [
+        "prompt-injection-specialist",
+        "model-extraction-attacker",
+        "rag-poisoning-specialist",
+        "agentic-loop-exploiter"
+      ],
+      "routingTriggers": [
+        "openai",
+        "anthropic",
+        "langchain",
+        "llamaindex",
+        "huggingface",
+        "transformers",
+        "crewai"
+      ],
+      "detectionSignals": [
+        "prompt injection",
+        "model extraction",
+        "RAG poisoning",
+        "agentic loop exploitation"
+      ],
+      "edgeCaseDomains": [
+        "many-turn patience attacks",
+        "cross-language injection",
+        "tool output second-order injection"
+      ],
+      "sha256": "2fd2d8755d18727c17b03a58ef0509637c8d9faa4058011515c9b15a74fab61d"
     },
     "prompt-injection-specialist": {
       "version": "1.0.0",
@@ -182,7 +595,26 @@
       "description": "Sub-agent 5a. Structural/semantic prompt injection, jailbreaks, token smuggling, indirect injection.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "openai",
+        "anthropic",
+        "messages.create",
+        "chat.completions",
+        "langchain"
+      ],
+      "detectionSignals": [
+        "direct prompt injection",
+        "indirect injection via RAG",
+        "system prompt override",
+        "tool injection"
+      ],
+      "edgeCaseDomains": [
+        "10-turn patience attack chain",
+        "Base64 encoding bypass",
+        "multi-turn context poisoning"
+      ],
+      "sha256": "eba3dbf7cffdb03576b917bd156ef2f878bbd4889cfe092608773b89f9e15202"
     },
     "model-extraction-attacker": {
       "version": "1.0.0",
@@ -190,7 +622,26 @@
       "description": "Sub-agent 5b. Model extraction, membership inference, system prompt leakage, batch API abuse.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "openai",
+        "anthropic",
+        "huggingface",
+        "vertex",
+        "bedrock"
+      ],
+      "detectionSignals": [
+        "model inversion",
+        "membership inference",
+        "capability extraction",
+        "training data leakage"
+      ],
+      "edgeCaseDomains": [
+        "differential privacy budget depletion",
+        "model fingerprinting for IP theft",
+        "vision model extraction"
+      ],
+      "sha256": "1807a8fbdafbf32c52920f2ff2adc74144e047cdbe456b45ed82c063aa81f97d"
     },
     "rag-poisoning-specialist": {
       "version": "1.0.0",
@@ -198,7 +649,27 @@
       "description": "Sub-agent 5c. RAG document poisoning, cross-tenant vector store access, embedding inversion.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "pinecone",
+        "weaviate",
+        "chroma",
+        "qdrant",
+        "pgvector",
+        "llamaindex",
+        "langchain"
+      ],
+      "detectionSignals": [
+        "document injection",
+        "vector store poisoning",
+        "cross-tenant embedding leakage"
+      ],
+      "edgeCaseDomains": [
+        "adversarial embedding for universal retrieval",
+        "chunking-dependent injection",
+        "deferred poisoning triggered by specific queries"
+      ],
+      "sha256": "13b1c10cc0f734e7765fa92531974bae89f7e5db6560b359daabdfd06574fe78"
     },
     "agentic-loop-exploiter": {
       "version": "1.0.0",
@@ -206,7 +677,26 @@
       "description": "Sub-agent 5d. Tool allowlist bypass, agentic loop amplification, persistent context injection.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "langchain.*agent",
+        "crewai",
+        "autogen",
+        "semantic-kernel",
+        "tool_calls"
+      ],
+      "detectionSignals": [
+        "unbounded loop exploitation",
+        "tool definition injection",
+        "memory poisoning",
+        "goal hijacking"
+      ],
+      "edgeCaseDomains": [
+        "agent-to-agent trust escalation",
+        "human-in-the-loop UI spoofing",
+        "billing DoS via slow infinite loop"
+      ],
+      "sha256": "01ae5a99fdfebb10bba16de29c0fc4aa5442b0e317b2f546bea7ef7d7b1882d3"
     },
     "mobile-security-specialist": {
       "version": "1.0.0",
@@ -214,7 +704,30 @@
       "description": "Agent 6 lead. Mobile security covering OWASP MASVS Level 2 for iOS and Android.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": ["ios-security-auditor", "android-penetration-tester", "mobile-api-network-attacker"]
+      "subAgents": [
+        "ios-security-auditor",
+        "android-penetration-tester",
+        "mobile-api-network-attacker"
+      ],
+      "routingTriggers": [
+        "*.xcodeproj",
+        "AndroidManifest.xml",
+        "react-native",
+        "expo",
+        "flutter"
+      ],
+      "detectionSignals": [
+        "MASVS violations",
+        "insecure storage",
+        "cert pinning bypass",
+        "deep link hijacking"
+      ],
+      "edgeCaseDomains": [
+        "OTA update signature bypass",
+        "backgrounded app screenshot",
+        "WebView cookie store inheritance"
+      ],
+      "sha256": "c5a503fb8af84562993b4c8b311fa056faa8708cdac90808b1af0fd388aefe5a"
     },
     "ios-security-auditor": {
       "version": "1.0.0",
@@ -222,7 +735,25 @@
       "description": "Sub-agent 6a. iOS ATS, Keychain, Secure Enclave, Universal Links, screenshot protection.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "*.xcodeproj",
+        "*.swift",
+        "Info.plist",
+        "*.xcworkspace"
+      ],
+      "detectionSignals": [
+        "Keychain weak access",
+        "ATS misconfiguration",
+        "biometric bypass",
+        "jailbreak detection gap"
+      ],
+      "edgeCaseDomains": [
+        "backup extraction on non-rooted device via adb",
+        "SecureEnclave attestation gaps",
+        "Universal Link OAuth token theft"
+      ],
+      "sha256": "1878777e1fe3c0b19979d0c0d8de5b59b7fde302ae3ce4031e5a2b988764c7e0"
     },
     "android-penetration-tester": {
       "version": "1.0.0",
@@ -230,7 +761,25 @@
       "description": "Sub-agent 6b. Android manifest hardening, NSC, exported components, tapjacking, fragment injection.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "AndroidManifest.xml",
+        "*.kt",
+        "*.java",
+        "build.gradle"
+      ],
+      "detectionSignals": [
+        "exported components",
+        "WebView JS bridge",
+        "tapjacking",
+        "cleartext traffic"
+      ],
+      "edgeCaseDomains": [
+        "PendingIntent mutable flag intent spoofing",
+        "content provider path traversal",
+        "in-app purchase client-side validation"
+      ],
+      "sha256": "691b4501a432d642b7b524c7e82a652e056504a833022adbc4a962ac1b3447c2"
     },
     "mobile-api-network-attacker": {
       "version": "1.0.0",
@@ -238,7 +787,24 @@
       "description": "Sub-agent 6c. Certificate pinning bypass, API key extraction from binary, token storage audit.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "*.xcodeproj",
+        "AndroidManifest.xml",
+        "react-native",
+        "expo"
+      ],
+      "detectionSignals": [
+        "API authentication bypass",
+        "cert pinning bypass",
+        "insecure direct object reference via API"
+      ],
+      "edgeCaseDomains": [
+        "API version downgrade attack",
+        "GraphQL batching DoS from mobile",
+        "JWT audience confusion in mobile API context"
+      ],
+      "sha256": "fa26a739820c3786ffacfbd2872f30c8a669825009adc258c7d830adf4a65c7a"
     },
     "crypto-pki-specialist": {
       "version": "1.0.0",
@@ -246,7 +812,27 @@
       "description": "Agent 9 lead. Cryptography and PKI covering SKILL.md §10 — TLS, algorithms, key management.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": ["tls-certificate-auditor", "algorithm-implementation-reviewer", "key-management-lifecycle-analyst"]
+      "subAgents": [
+        "tls-certificate-auditor",
+        "algorithm-implementation-reviewer",
+        "key-management-lifecycle-analyst"
+      ],
+      "routingTriggers": [
+        "*"
+      ],
+      "detectionSignals": [
+        "weak algorithms",
+        "key management gaps",
+        "PKI misconfiguration",
+        "quantum vulnerability"
+      ],
+      "edgeCaseDomains": [
+        "hybrid encryption authentication gap",
+        "KDF salt reuse",
+        "JWKS cache race condition",
+        "PRNG state after fork()"
+      ],
+      "sha256": "710b2df75afc2adca68a4341a912e474495f340dff23155e6df3790ed7c0c277"
     },
     "tls-certificate-auditor": {
       "version": "1.0.0",
@@ -254,7 +840,22 @@
       "description": "Sub-agent 9a. TLS version enforcement, cipher suites, HSTS, OCSP stapling, CT logging, mTLS.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "*"
+      ],
+      "detectionSignals": [
+        "weak TLS configuration",
+        "expired certificates",
+        "missing HSTS",
+        "cert pinning gaps"
+      ],
+      "edgeCaseDomains": [
+        "certificate chain validation stops at intermediate",
+        "CT log monitoring absence",
+        "wildcard certificate scope abuse"
+      ],
+      "sha256": "b4bd51d23b08a4d7246d877f224c30f39dcfbf961b775322dcfb48b55cddf79d"
     },
     "algorithm-implementation-reviewer": {
       "version": "1.0.0",
@@ -262,7 +863,29 @@
       "description": "Sub-agent 9b. Banned algorithms (MD5/SHA-1/DES/RC4), Argon2id, AES-256-GCM, Ed25519, crypto.randomBytes.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "crypto",
+        "bcrypt",
+        "argon2",
+        "md5",
+        "sha1",
+        "des",
+        "rc4",
+        "aes"
+      ],
+      "detectionSignals": [
+        "banned hash algorithms",
+        "weak key sizes",
+        "ECB mode usage",
+        "non-cryptographic PRNG"
+      ],
+      "edgeCaseDomains": [
+        "constant-time comparison bypass",
+        "algorithm agility downgrade attack",
+        "FIPS boundary crypto leakage"
+      ],
+      "sha256": "0abffc6086e90939c2d136a2396466aa34bc70944205fd3536c713f50836a341"
     },
     "key-management-lifecycle-analyst": {
       "version": "1.0.0",
@@ -270,7 +893,27 @@
       "description": "Sub-agent 9c. Key rotation, HKDF hierarchy, HSM/secrets manager enforcement, post-quantum readiness.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "aws-kms",
+        "gcp-kms",
+        "azure-keyvault",
+        "vault",
+        "hsm",
+        "secrets-manager"
+      ],
+      "detectionSignals": [
+        "key rotation gaps",
+        "key escrow risks",
+        "insecure key storage",
+        "post-quantum migration gaps"
+      ],
+      "edgeCaseDomains": [
+        "key derivation chain breaks on rotation",
+        "split knowledge control bypass",
+        "HSM attestation spoofing"
+      ],
+      "sha256": "b5899995c394d7646ab56f96c3ad2da77d767db9794d3b217a6d01524e6a6572"
     },
     "pentest-team": {
       "version": "1.0.0",
@@ -278,7 +921,26 @@
       "description": "Agent 7 lead. Penetration testing team — reads threat model, assigns scope to sub-agents.",
       "userInvocable": false,
       "phase": 2,
-      "subAgents": ["pentest-web-api", "pentest-infra", "pentest-social"]
+      "subAgents": [
+        "pentest-web-api",
+        "pentest-infra",
+        "pentest-social"
+      ],
+      "routingTriggers": [
+        "*"
+      ],
+      "detectionSignals": [
+        "full kill chain",
+        "chained attacks",
+        "post-exploitation",
+        "lateral movement"
+      ],
+      "edgeCaseDomains": [
+        "living-off-the-land techniques",
+        "persistent access across deployments",
+        "covert exfiltration channels"
+      ],
+      "sha256": "ffd484157af7284bc7e0a58c73fa0dce7ba58e501a32e328d0764b6f4f535579"
     },
     "pentest-web-api": {
       "version": "1.0.0",
@@ -286,7 +948,22 @@
       "description": "Sub-agent 7a. Web/API penetration testing — OWASP Testing Guide, IDOR chains, auth bypass, business logic.",
       "userInvocable": false,
       "phase": 2,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "*"
+      ],
+      "detectionSignals": [
+        "API authentication bypass",
+        "BOLA/IDOR",
+        "mass assignment",
+        "GraphQL injection"
+      ],
+      "edgeCaseDomains": [
+        "parameter pollution",
+        "API gateway bypass via direct backend",
+        "webhook SSRF"
+      ],
+      "sha256": "68d2c28310a510c413b264b1ddb2698e70d31a009ec9be618cff551737fdffa1"
     },
     "pentest-infra": {
       "version": "1.0.0",
@@ -294,7 +971,25 @@
       "description": "Sub-agent 7b. Infrastructure pen testing — IAM escalation graph, lateral movement, network segmentation.",
       "userInvocable": false,
       "phase": 2,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "terraform",
+        "kubernetes",
+        ".github/workflows",
+        "Dockerfile"
+      ],
+      "detectionSignals": [
+        "network misconfiguration",
+        "exposed services",
+        "lateral movement paths",
+        "privilege escalation"
+      ],
+      "edgeCaseDomains": [
+        "cloud metadata SSRF chains",
+        "internal DNS rebinding",
+        "container network policy bypass"
+      ],
+      "sha256": "9bbc6321f89ebdcfde47cea5065991ee300341342b4be49821f5876a46d46ed2"
     },
     "pentest-social": {
       "version": "1.0.0",
@@ -302,7 +997,22 @@
       "description": "Sub-agent 7c. Social engineering and insider threat simulation — phishing scenarios, blast radius.",
       "userInvocable": false,
       "phase": 2,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "*"
+      ],
+      "detectionSignals": [
+        "social engineering surfaces",
+        "insider threat paths",
+        "OSINT exposure"
+      ],
+      "edgeCaseDomains": [
+        "AI deepfake voice phishing",
+        "supply chain social engineering",
+        "BEC from repo data",
+        "hybrid social+technical chains"
+      ],
+      "sha256": "e28385640c453f2278126f9bcce85ea95aca7f6c21635270ddb57fcaaf8c87db"
     },
     "compliance-grc": {
       "version": "1.0.0",
@@ -310,7 +1020,25 @@
       "description": "Agent 8 lead. Compliance and GRC synthesizer covering SKILL.md §14, §16, §19-24.",
       "userInvocable": false,
       "phase": 2,
-      "subAgents": ["evidence-collector", "compliance-gap-analyst"]
+      "subAgents": [
+        "evidence-collector",
+        "compliance-gap-analyst"
+      ],
+      "routingTriggers": [
+        "*"
+      ],
+      "detectionSignals": [
+        "PCI DSS gaps",
+        "SOC 2 control failures",
+        "ISO 27001 gaps",
+        "HIPAA violations"
+      ],
+      "edgeCaseDomains": [
+        "cross-framework control consolidation gaps",
+        "evidence artifact staleness",
+        "cascading compliance implications"
+      ],
+      "sha256": "1242bca63d9590e190f1167c012673077b6267f5b3f309a473e4bcc0233f348d"
     },
     "evidence-collector": {
       "version": "1.0.0",
@@ -318,7 +1046,27 @@
       "description": "Sub-agent 8a. Audit trail completeness, SIEM coverage, SOC 2 evidence freshness.",
       "userInvocable": false,
       "phase": 2,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "splunk",
+        "datadog",
+        "cloudwatch",
+        "siem",
+        "soc2",
+        "audit"
+      ],
+      "detectionSignals": [
+        "audit log gaps",
+        "SIEM coverage holes",
+        "evidence staleness",
+        "log retention violations"
+      ],
+      "edgeCaseDomains": [
+        "log forwarding integrity without tamper evidence",
+        "SIEM correlation rule blind spots",
+        "evidence chain-of-custody gaps"
+      ],
+      "sha256": "e71e4a2423dfa55918469b5fb8aa8a8a41309b35ba04ab7e9216f6606acaa917"
     },
     "compliance-gap-analyst": {
       "version": "1.0.0",
@@ -326,7 +1074,21 @@
       "description": "Sub-agent 8b. PCI/SOC2/ISO/NIST mapping, SLA enforcement, residual risk register with CVSS v4 + EPSS.",
       "userInvocable": false,
       "phase": 2,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "*"
+      ],
+      "detectionSignals": [
+        "uncovered SKILL.md sections",
+        "missing controls",
+        "compliance framework gaps"
+      ],
+      "edgeCaseDomains": [
+        "scope creep via data flow",
+        "compensating control documentation gap",
+        "retroactive scope change"
+      ],
+      "sha256": "936b477a07b508b7f1b06e391593a0428c01b9f981b5aa737168e93d20998661"
     },
     "senior-security-engineer": {
       "version": "1.0.0",
@@ -334,7 +1096,22 @@
       "description": "Active fortification engineer. 90% fixing, 10% advisory. Hardens code, APIs, mobile, cloud, and AI/LLMs. Delegates to ciso-orchestrator for full parallel review.",
       "userInvocable": true,
       "phase": 0,
-      "subAgents": ["ciso-orchestrator"]
+      "subAgents": [
+        "ciso-orchestrator"
+      ],
+      "routingTriggers": [
+        "*"
+      ],
+      "detectionSignals": [
+        "full security posture",
+        "all vulnerability classes"
+      ],
+      "edgeCaseDomains": [
+        "cross-domain attack chains",
+        "post-quantum readiness",
+        "AI-assisted adversary simulation"
+      ],
+      "sha256": "cfee2ad89588ef7240b97c73c1a28b73ae8b0d6ab27e1be64caa19f656c54bbb"
     },
     "linddun-privacy-analyst": {
       "version": "1.0.0",
@@ -342,7 +1119,27 @@
       "description": "LINDDUN privacy threat modeling — data flows, PII exposure, GDPR/CCPA/HIPAA privacy threats.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "gdpr",
+        "ccpa",
+        "hipaa",
+        "pii",
+        "personal.data",
+        "consent",
+        "dpa"
+      ],
+      "detectionSignals": [
+        "LINDDUN threat categories",
+        "privacy requirement gaps",
+        "PII data flow exposure"
+      ],
+      "edgeCaseDomains": [
+        "linkability across anonymized datasets",
+        "non-obvious PII in aggregate analytics",
+        "data minimization violations in third-party SDK calls"
+      ],
+      "sha256": "d0ccb13899661c9b47a98797237c8909f56166f92dda9945d02bd34b6b898b40"
     },
     "dread-scorer": {
       "version": "1.0.0",
@@ -350,7 +1147,21 @@
       "description": "DREAD risk scoring (Damage, Reproducibility, Exploitability, Affected users, Discoverability) for all findings.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "*"
+      ],
+      "detectionSignals": [
+        "DREAD score outliers",
+        "high-damage low-discoverability blind spots",
+        "exploitability rating gaps"
+      ],
+      "edgeCaseDomains": [
+        "DREAD vs CVSS divergence on business-logic bugs",
+        "reproducibility underestimation for scripted attacks",
+        "affected-user scope miscalculation for B2B tenants"
+      ],
+      "sha256": "180cfcf081be8f6ff381475888c066ffc43a98775a391abd0f6b2d51976ccdef"
     },
     "trike-risk-modeler": {
       "version": "1.0.0",
@@ -358,7 +1169,21 @@
       "description": "Trike asset-centric threat modeling — actor/action/asset matrices with quantified risk scores.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "*"
+      ],
+      "detectionSignals": [
+        "actor-asset permission mismatches",
+        "unauthorized action paths",
+        "risk threshold violations"
+      ],
+      "edgeCaseDomains": [
+        "actor role explosion in RBAC-heavy systems",
+        "indirect asset access via delegation chains",
+        "risk score drift when asset criticality changes"
+      ],
+      "sha256": "1d18b6681bd38e00253482db2e7e7e9fc9289422d19928c77f7c9bec89f532ac"
     },
     "capec-code-mapper": {
       "version": "1.0.0",
@@ -366,7 +1191,21 @@
       "description": "Maps codebase patterns to CAPEC attack patterns with MITRE ATT&CK cross-references.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "*"
+      ],
+      "detectionSignals": [
+        "CAPEC pattern matches in code",
+        "unmapped attack surfaces",
+        "CWE-to-CAPEC coverage gaps"
+      ],
+      "edgeCaseDomains": [
+        "composite attack pattern chaining not visible in single-CAPEC analysis",
+        "framework-specific CAPEC variants",
+        "CAPEC patterns emerging from third-party library behavior"
+      ],
+      "sha256": "d7a7d2fe06cc4bd481a9eb33e989718f57583853a76ef16347590b15ef427d68"
     },
     "samm-assessor": {
       "version": "1.0.0",
@@ -374,7 +1213,21 @@
       "description": "OWASP SAMM 2.0 maturity assessment across 15 security practices with phased improvement roadmap.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "*"
+      ],
+      "detectionSignals": [
+        "SAMM maturity level gaps",
+        "security practice regressions",
+        "roadmap milestone drift"
+      ],
+      "edgeCaseDomains": [
+        "SAMM score inflation from undocumented informal practices",
+        "maturity gaps specific to ML/AI pipelines",
+        "cross-practice dependency failures blocking level advancement"
+      ],
+      "sha256": "9cec9007037326193ed5d909a720be2f1397c084684eda02ac40a45fec514db3"
     },
     "csa-ccm-mapper": {
       "version": "1.0.0",
@@ -382,7 +1235,28 @@
       "description": "Maps cloud security controls to CSA Cloud Controls Matrix v4 — 197 control gap analysis.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "terraform",
+        "*.tf",
+        "cloudformation",
+        "cdk",
+        "kubernetes",
+        "@google-cloud",
+        "aws-sdk",
+        "@azure"
+      ],
+      "detectionSignals": [
+        "CSA CCM control gaps",
+        "cloud shared responsibility misalignments",
+        "multi-cloud control inconsistencies"
+      ],
+      "edgeCaseDomains": [
+        "CSA CCM gaps in serverless/FaaS architectures",
+        "SaaS-layer controls beyond IaaS CCM scope",
+        "CCM control inheritance confusion in multi-tenant cloud"
+      ],
+      "sha256": "cd30d72ea3cf98b79da2a6e3a669bf2e3be50638bcda4f5dadf3325c10dd6a0b"
     },
     "csf2-governance-mapper": {
       "version": "1.0.0",
@@ -390,7 +1264,21 @@
       "description": "Maps controls and findings to NIST CSF 2.0 functions/categories with governance gap analysis.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "*"
+      ],
+      "detectionSignals": [
+        "NIST CSF 2.0 function gaps",
+        "Govern function control absence",
+        "Recover function immaturity"
+      ],
+      "edgeCaseDomains": [
+        "CSF 2.0 Govern function gaps unique to AI/ML operations",
+        "cross-function dependencies missed by point-in-time assessments",
+        "supply chain risk management gaps in CSF Identify tier"
+      ],
+      "sha256": "bcf96cd2fd0bfa155c543c5f305358474f037aa92a8a59e00025aba1b6600332"
     },
     "compliance-lifecycle-tracker": {
       "version": "1.0.0",
@@ -398,7 +1286,22 @@
       "description": "Tracks compliance posture over time — evidence freshness, control decay, audit deadlines, drift detection.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "*"
+      ],
+      "detectionSignals": [
+        "stale evidence",
+        "control decay",
+        "audit deadline risk",
+        "configuration drift"
+      ],
+      "edgeCaseDomains": [
+        "silent control decay between annual audits",
+        "evidence freshness invalidation from infrastructure changes",
+        "cascading compliance drift from third-party vendor updates"
+      ],
+      "sha256": "81f190d9d5a8b7bd95ef24c1aaebb9ccd7831bf85c73fef7c2a9c222daa98b1d"
     },
     "quantum-migration-planner": {
       "version": "1.0.0",
@@ -406,7 +1309,28 @@
       "description": "Plans migration from quantum-vulnerable crypto (RSA/ECDSA/DH) to post-quantum algorithms (NIST FIPS 203/204/205).",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "rsa",
+        "ecdsa",
+        "diffie-hellman",
+        "tls",
+        "pki",
+        "x509",
+        "jwt",
+        "crypto"
+      ],
+      "detectionSignals": [
+        "quantum-vulnerable key exchange",
+        "RSA/ECC usage",
+        "long-lived certificate quantum risk"
+      ],
+      "edgeCaseDomains": [
+        "harvest-now-decrypt-later attack window estimation",
+        "hybrid PQC/classical negotiation downgrade",
+        "FIPS 140-3 module certification lag for PQC algorithms"
+      ],
+      "sha256": "65e2ed17eb0c6a6fd63564bcc844a7b3b28f8d9465bfd5fad0e7dc3b8f1e74e1"
     },
     "iam-privesc-graph-builder": {
       "version": "1.0.0",
@@ -414,7 +1338,27 @@
       "description": "Builds IAM privilege escalation graph — lateral movement paths, least-privilege violations in AWS/GCP/Azure.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "terraform",
+        "aws-sdk",
+        "@google-cloud",
+        "@azure",
+        "iam",
+        "rbac",
+        "role"
+      ],
+      "detectionSignals": [
+        "IAM privilege escalation paths",
+        "over-permissioned roles",
+        "cross-service escalation chains"
+      ],
+      "edgeCaseDomains": [
+        "multi-hop escalation through service account impersonation",
+        "time-limited permission grants creating persistent escalation windows",
+        "Terraform module inheritance granting unintended permissions"
+      ],
+      "sha256": "c4041d924274a15d04a9ebe5261cf787707b8c014210456f40beeb88064361ea"
     },
     "git-history-secret-scanner": {
       "version": "1.0.0",
@@ -422,7 +1366,26 @@
       "description": "Scans full git history for committed-then-deleted secrets using gitleaks and trufflehog.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        ".git",
+        "package.json",
+        ".env",
+        "*.env",
+        "*.pem",
+        "*.key"
+      ],
+      "detectionSignals": [
+        "secrets in git history",
+        "API keys in commits",
+        "credentials in deleted files"
+      ],
+      "edgeCaseDomains": [
+        "secrets in git notes and stash refs",
+        "secrets introduced in squash-merge commits",
+        "partial secret exposure across multiple historical commits"
+      ],
+      "sha256": "a3f28b5d0646a485697ffbbfd92b217cbd1fb256c774357f9225c93d3c067a55"
     },
     "device-integrity-aggregator": {
       "version": "1.0.0",
@@ -430,7 +1393,25 @@
       "description": "Audits device integrity controls — cert pinning, Play Integrity/DeviceCheck, RASP, jailbreak detection.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "*.xcodeproj",
+        "AndroidManifest.xml",
+        "react-native",
+        "expo",
+        "flutter"
+      ],
+      "detectionSignals": [
+        "jailbreak/root detection bypass",
+        "emulator detection gaps",
+        "Play Integrity API misconfiguration"
+      ],
+      "edgeCaseDomains": [
+        "Magisk Hide defeating root detection",
+        "integrity check bypass via Frida hooking",
+        "server-side trust of client integrity attestation without nonce binding"
+      ],
+      "sha256": "adf5067d712e4bc7434dfce5e381aa160ebc0a4e0eea96e1c1ef66b82aa017fe"
     },
     "kill-switch-engineer": {
       "version": "1.0.0",
@@ -438,7 +1419,21 @@
       "description": "Designs runtime kill switches, circuit breakers, and graceful-degradation controls for emergency containment.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "*"
+      ],
+      "detectionSignals": [
+        "missing circuit breakers",
+        "no kill switch controls",
+        "uncontrolled blast radius on failure"
+      ],
+      "edgeCaseDomains": [
+        "kill switch bypass via cached feature flags",
+        "circuit breaker state race during cascading failure",
+        "kill switch gap in async worker queues not reading flag"
+      ],
+      "sha256": "e8c30d3217b23e37068d6c827434cb319e7174c6b7ed79f534df35e123809904"
     },
     "incident-responder": {
       "version": "1.0.0",
@@ -446,7 +1441,21 @@
       "description": "Structured incident response — detection, containment, eradication, recovery, post-incident review playbooks.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "*"
+      ],
+      "detectionSignals": [
+        "incident detection gaps",
+        "containment procedure absence",
+        "recovery time objective violations"
+      ],
+      "edgeCaseDomains": [
+        "attacker persistence surviving eradication via supply chain re-infection",
+        "containment actions triggering compliance notification deadlines",
+        "forensic evidence destruction during rushed containment"
+      ],
+      "sha256": "4ab40a1cc72e45038d034f6a65bae7fa30d8d9f81675b7c0539234c85efe2bcc"
     },
     "rotation-validation-agent": {
       "version": "1.0.0",
@@ -454,7 +1463,26 @@
       "description": "Validates credential and secret rotation — API keys, DB passwords, TLS certs, JWT signing keys, OAuth secrets.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "secrets-manager",
+        "vault",
+        "aws-kms",
+        "*.env",
+        "doppler",
+        "infisical"
+      ],
+      "detectionSignals": [
+        "stale credentials",
+        "rotation schedule gaps",
+        "hardcoded non-rotating secrets"
+      ],
+      "edgeCaseDomains": [
+        "zero-downtime rotation race between old and new credential acceptance",
+        "rotation failure leaving system in degraded-auth state",
+        "JWT signing key rotation without JWK cache invalidation"
+      ],
+      "sha256": "b8d94660c5d82d5cdb4c3f95945004806af1da694a75d651cf09caafbd16b14f"
     },
     "registry-mirror-enforcer": {
       "version": "1.0.0",
@@ -462,7 +1490,25 @@
       "description": "Audits container registry usage — public pull policies, registry mirrors, pull-through caches, image provenance.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "Dockerfile",
+        "docker-compose",
+        "kubernetes",
+        "helm",
+        ".github/workflows"
+      ],
+      "detectionSignals": [
+        "unauthenticated public registry pulls",
+        "unsigned base images",
+        "missing registry mirror policy"
+      ],
+      "edgeCaseDomains": [
+        "pull-through cache serving stale vulnerable images",
+        "registry mirror trust chain validation absence",
+        "image tag mutability enabling silent replacement attacks"
+      ],
+      "sha256": "98ce5f944ce823fb771c1de2e0fcea15ecc7e2d1508b7084f02484ca6a97f1d5"
     },
     "slsa-level3-enforcer": {
       "version": "1.0.0",
@@ -470,7 +1516,25 @@
       "description": "Advances build pipelines to SLSA Level 3 — hardened build platforms, non-forgeable provenance, two-party review.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        ".github/workflows",
+        ".gitlab-ci.yml",
+        "Dockerfile",
+        "package.json",
+        "Makefile"
+      ],
+      "detectionSignals": [
+        "SLSA L3 requirement gaps",
+        "forgeable provenance",
+        "single-party build approval"
+      ],
+      "edgeCaseDomains": [
+        "SLSA L3 gaps when using ephemeral GitHub-hosted runners with custom images",
+        "provenance attestation gaps for matrix build jobs",
+        "two-party review bypass via force-push to protected branch"
+      ],
+      "sha256": "98d1f70f28dd2c699d5e02755aa4cb76149edd299efe0bda2a869b67601e1e92"
     },
     "slsa-provenance-enforcer": {
       "version": "1.0.0",
@@ -478,7 +1542,25 @@
       "description": "Enforces SLSA provenance requirements — hermetic/reproducible builds, artifact signing, build provenance.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        ".github/workflows",
+        ".gitlab-ci.yml",
+        "cosign",
+        "sigstore",
+        "slsa"
+      ],
+      "detectionSignals": [
+        "missing provenance attestation",
+        "non-hermetic builds",
+        "unsigned artifacts"
+      ],
+      "edgeCaseDomains": [
+        "network access during hermetic build leaking environment info",
+        "provenance metadata spoofing via workflow injection",
+        "reproducibility breakage from timestamp-sensitive build steps"
+      ],
+      "sha256": "154ad8ebcebaea60b8e8b76713bcfb3e3d5932edeccf3c531d08299905d5ef5b"
     },
     "threat-infrastructure-analyst": {
       "version": "1.0.0",
@@ -486,7 +1568,21 @@
       "description": "Analyzes threat actor infrastructure — correlates incident indicators with threat intel, maps to MITRE ATT&CK.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "*"
+      ],
+      "detectionSignals": [
+        "IOC matches in network logs",
+        "C2 infrastructure patterns",
+        "threat actor TTPs"
+      ],
+      "edgeCaseDomains": [
+        "fast-flux DNS infrastructure masking C2",
+        "legitimate cloud services used as C2 relay",
+        "threat actor infrastructure reuse across campaigns enabling false attribution"
+      ],
+      "sha256": "08cc36251d9c9392679478804462b38448ff3f42ff69b26d5d4ba42ecd6ea82e"
     },
     "zero-trust-architect": {
       "version": "1.0.0",
@@ -494,7 +1590,27 @@
       "description": "Designs and audits Zero Trust Architecture — identity verification, microsegmentation, continuous validation.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "kubernetes",
+        "terraform",
+        "istio",
+        "envoy",
+        "nginx",
+        "cloudflare",
+        "tailscale"
+      ],
+      "detectionSignals": [
+        "implicit trust zones",
+        "over-broad network segments",
+        "missing continuous validation"
+      ],
+      "edgeCaseDomains": [
+        "ZTA breakdowns at legacy system integration boundaries",
+        "service mesh mTLS exemption scope creep",
+        "device trust signal freshness gaps during long-lived sessions"
+      ],
+      "sha256": "e166df93256c064487b9e55fedb911fd55e3cc931ad8c777bba7c7864a41aa85"
     },
     "egress-policy-enforcer": {
       "version": "1.0.0",
@@ -502,7 +1618,26 @@
       "description": "Audits outbound egress controls — allowlists, DNS exfiltration, SSRF-to-exfiltration chains, cloud egress.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "kubernetes",
+        "terraform",
+        "docker",
+        "nginx",
+        "cloudflare",
+        "vpc"
+      ],
+      "detectionSignals": [
+        "missing egress allowlists",
+        "DNS exfiltration paths",
+        "unrestricted outbound traffic"
+      ],
+      "edgeCaseDomains": [
+        "egress filtering bypass via IPv6 when only IPv4 rules applied",
+        "DNS-over-HTTPS tunneling bypassing DNS egress controls",
+        "SSRF to cloud metadata triggering credential exfiltration chain"
+      ],
+      "sha256": "f0aba91d868c818aebb96a9ea3315d9cb324c19006932bf3c187c76297c24edf"
     },
     "binary-auth-validator": {
       "version": "1.0.0",
@@ -510,7 +1645,25 @@
       "description": "Validates binary authorization policies — container image signing, admission controllers, OPA Gatekeeper, K8s BinAuthZ.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "kubernetes",
+        "helm",
+        "Dockerfile",
+        "cosign",
+        "gcp-binary-authorization"
+      ],
+      "detectionSignals": [
+        "unsigned container images in production",
+        "admission controller bypass",
+        "OPA policy gaps"
+      ],
+      "edgeCaseDomains": [
+        "admission controller bypass via init container image",
+        "BinAuthZ allowlist drift from image digest mutation",
+        "OPA policy conflict resolution allowing unexpected admission"
+      ],
+      "sha256": "d24b9bd82255ea3772d3ff5796da3cde868cf95991556729ddb6cb5799abc835"
     },
     "ai-model-supply-chain-agent": {
       "version": "1.0.0",
@@ -518,7 +1671,27 @@
       "description": "Audits AI/ML model supply chain — weight provenance, ONNX/safetensors integrity, Hugging Face security, backdoor risk.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "huggingface",
+        "transformers",
+        "torch",
+        "tensorflow",
+        "onnx",
+        "safetensors",
+        "mlflow"
+      ],
+      "detectionSignals": [
+        "unverified model weights",
+        "pickle-format model loading RCE",
+        "model backdoor indicators"
+      ],
+      "edgeCaseDomains": [
+        "sleeper backdoor triggered by specific input distributions",
+        "model weight watermark detection for IP theft",
+        "fine-tuning data poisoning surviving safety alignment"
+      ],
+      "sha256": "efe35217a65fb6a155632ab6670db61c5eb1670dfd6fb3e20c262783ad947171"
     },
     "cert-pin-rotation-specialist": {
       "version": "1.0.0",
@@ -526,7 +1699,26 @@
       "description": "Manages certificate pinning rotation lifecycle — pin backup, rotation schedule, emergency rotation, OTA pin updates.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "*.xcodeproj",
+        "AndroidManifest.xml",
+        "react-native",
+        "expo",
+        "okhttp",
+        "nsurlsession"
+      ],
+      "detectionSignals": [
+        "pin rotation gaps",
+        "missing backup pins",
+        "pin-only-leaf certificate risk"
+      ],
+      "edgeCaseDomains": [
+        "app store review delay blocking emergency pin rotation",
+        "multi-certificate CA rollover creating pin mismatch window",
+        "OTA config delivery failing silently when network is restricted"
+      ],
+      "sha256": "ec1a62fc9b5b38cf83ed21dfd81d236b4cc5b0dab90486186627e0f0fd36b27b"
     },
     "bot-detection-specialist": {
       "version": "1.0.0",
@@ -534,7 +1726,27 @@
       "description": "Audits and implements bot detection — behavioral biometrics, device fingerprinting, CAPTCHA, headless browser detection.",
       "userInvocable": false,
       "phase": 1,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "recaptcha",
+        "hcaptcha",
+        "arkose",
+        "cloudflare",
+        "express-rate-limit",
+        "nginx"
+      ],
+      "detectionSignals": [
+        "automated request patterns",
+        "CAPTCHA bypass",
+        "headless browser fingerprints",
+        "credential stuffing bot signatures"
+      ],
+      "edgeCaseDomains": [
+        "CAPTCHA farm bypass using human solvers",
+        "bot fingerprint evasion via residential proxy rotation",
+        "behavioral biometric spoofing using ML-generated mouse movement"
+      ],
+      "sha256": "dfa721e6cf2ed749cf5ceb45c127da7444a47759999eee0f912db6071d806ee3"
     },
     "advanced-dos-tester": {
       "version": "1.0.0",
@@ -542,7 +1754,26 @@
       "description": "Tests advanced DoS attacks — HTTP/2 rapid reset, QUIC amplification, TCP SYN flood, cost-amplification attacks.",
       "userInvocable": false,
       "phase": 2,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "nginx",
+        "cloudflare",
+        "aws-shield",
+        "express",
+        "fastify",
+        "kubernetes"
+      ],
+      "detectionSignals": [
+        "HTTP/2 rapid reset vulnerability",
+        "QUIC amplification factor",
+        "cost-amplification paths"
+      ],
+      "edgeCaseDomains": [
+        "HTTP/2 rapid reset bypass through connection multiplexing limits",
+        "Lambda/cloud function cost DoS via request amplification",
+        "QUIC amplification via Initial packet flooding"
+      ],
+      "sha256": "e17bed524622f28acb075986535a1bf28b09a48802477d594b4b46e893e22c53"
     },
     "dos-resilience-tester": {
       "version": "1.0.0",
@@ -550,7 +1781,26 @@
       "description": "Tests DoS/DDoS resilience — HTTP flood, slow loris, resource exhaustion, algorithmic complexity attacks.",
       "userInvocable": false,
       "phase": 2,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "nginx",
+        "express",
+        "fastify",
+        "kubernetes",
+        "cloudflare",
+        "aws-shield"
+      ],
+      "detectionSignals": [
+        "slow loris vulnerability",
+        "resource exhaustion under load",
+        "algorithmic complexity DoS"
+      ],
+      "edgeCaseDomains": [
+        "slow loris bypass through keep-alive timeout misconfiguration",
+        "ReDoS in user-supplied regex patterns",
+        "WebSocket connection exhaustion bypassing HTTP rate limits"
+      ],
+      "sha256": "9b7ad2624e5f22f530bad3f03a372209157e94a75c7721744676a33e9832541f"
     },
     "anti-replay-tester": {
       "version": "1.0.0",
@@ -558,7 +1808,26 @@
       "description": "Tests for replay attack vulnerabilities — nonce reuse, JWT replay, OAuth token replay, webhook signature replay.",
       "userInvocable": false,
       "phase": 2,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "jsonwebtoken",
+        "passport",
+        "stripe",
+        "webhook",
+        "hmac",
+        "oauth"
+      ],
+      "detectionSignals": [
+        "missing nonce validation",
+        "JWT without jti tracking",
+        "webhook signature without timestamp"
+      ],
+      "edgeCaseDomains": [
+        "replay window too large enabling bulk replay attacks",
+        "nonce store not replicated across nodes allowing cross-node replay",
+        "signed URL replay after path-normalization differences"
+      ],
+      "sha256": "f4aede47572c09f2169110cb477f6dc3cf50b80aaaf58e0e33ad26da159627e2"
     },
     "file-upload-attacker": {
       "version": "1.0.0",
@@ -566,7 +1835,27 @@
       "description": "Attacks file upload endpoints — MIME sniffing bypass, path traversal via filename, ZIP slip, polyglot files, SVG XSS.",
       "userInvocable": false,
       "phase": 2,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "multer",
+        "busboy",
+        "formidable",
+        "multipart",
+        "s3.upload",
+        "file-upload"
+      ],
+      "detectionSignals": [
+        "MIME type bypass",
+        "path traversal via filename",
+        "ZIP slip",
+        "polyglot file execution"
+      ],
+      "edgeCaseDomains": [
+        "MIME sniffing bypass in IE/legacy browser contexts surviving CDN",
+        "ZIP slip in server-side extraction of user-uploaded archives",
+        "SVG XSS surviving sanitization via foreignObject element"
+      ],
+      "sha256": "37d7ecaed9dd68db01ad0dfd192ba102381e423baedd96d6f8553235d5e51808"
     },
     "credential-stuffing-specialist": {
       "version": "1.0.0",
@@ -574,7 +1863,27 @@
       "description": "Tests authentication against credential stuffing, password spray, and breach replay attacks.",
       "userInvocable": false,
       "phase": 2,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "passport",
+        "next-auth",
+        "clerk",
+        "auth0",
+        "supabase",
+        "express-session",
+        "login"
+      ],
+      "detectionSignals": [
+        "credential stuffing susceptibility",
+        "password spray vulnerability",
+        "breach credential reuse paths"
+      ],
+      "edgeCaseDomains": [
+        "distributed low-rate stuffing evading per-IP rate limits",
+        "account enumeration via timing differences in login response",
+        "credential stuffing via OAuth password grant surviving MFA bypass"
+      ],
+      "sha256": "2d21d464849386a61ea4e10ab9363dedcd72e4af29db631e6ef93f314163839b"
     },
     "deep-link-fuzzer": {
       "version": "1.0.0",
@@ -582,7 +1891,26 @@
       "description": "Fuzzes mobile deep links and Universal Links for URL scheme hijacking, intent injection, open redirect, auth bypass.",
       "userInvocable": false,
       "phase": 2,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "*.xcodeproj",
+        "AndroidManifest.xml",
+        "react-native",
+        "expo",
+        "flutter"
+      ],
+      "detectionSignals": [
+        "URL scheme hijacking",
+        "Universal Link validation gaps",
+        "intent injection",
+        "open redirect via deep link"
+      ],
+      "edgeCaseDomains": [
+        "deep link OAuth token interception via scheme collision on shared device",
+        "Universal Link AASA file validation bypass on old iOS",
+        "intent redirection via nested deep link in push notification"
+      ],
+      "sha256": "23e974ff86e9e47ea5e8bb8618670171451bdae14d4a5391a9d0e4347f9c5ddd"
     },
     "json-ambiguity-tester": {
       "version": "1.0.0",
@@ -590,7 +1918,27 @@
       "description": "Tests JSON parsing for differential attacks — duplicate key confusion, number precision, Unicode bypass, prototype pollution.",
       "userInvocable": false,
       "phase": 2,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "express",
+        "fastify",
+        "body-parser",
+        "JSON.parse",
+        "ajv",
+        "zod"
+      ],
+      "detectionSignals": [
+        "duplicate key parser differential",
+        "number precision loss",
+        "Unicode normalization bypass",
+        "prototype pollution"
+      ],
+      "edgeCaseDomains": [
+        "duplicate key confusion between gateway and service using different JSON libraries",
+        "number precision loss enabling price rounding exploit",
+        "prototype pollution via JSON merge patch operations"
+      ],
+      "sha256": "c68638bfe1d6960598e523d34305deb77afcb15a327d8178c90c18f9dcc48813"
     },
     "multipart-abuse-tester": {
       "version": "1.0.0",
@@ -598,7 +1946,25 @@
       "description": "Tests multipart/form-data parsing — boundary injection, header smuggling, field limit bypass, parser differentials.",
       "userInvocable": false,
       "phase": 2,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "multer",
+        "busboy",
+        "formidable",
+        "multipart",
+        "content-type"
+      ],
+      "detectionSignals": [
+        "boundary injection",
+        "field limit bypass",
+        "parser differential between gateway and service"
+      ],
+      "edgeCaseDomains": [
+        "boundary smuggling through reverse proxy normalization",
+        "field count limit bypass via multipart re-packing",
+        "nested multipart content-type confusion enabling WAF bypass"
+      ],
+      "sha256": "e958df1395755ecccd437dfba8bcc407fc1bec7880adcb5a01d71ac94b54050e"
     },
     "oauth-pkce-specialist": {
       "version": "1.0.0",
@@ -606,7 +1972,28 @@
       "description": "Audits OAuth 2.0/OIDC for PKCE compliance, state misuse, implicit flow vulnerabilities, token leakage, scope misconfiguration.",
       "userInvocable": false,
       "phase": 2,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "passport",
+        "next-auth",
+        "auth0",
+        "clerk",
+        "oauth",
+        "oidc",
+        "openid-client"
+      ],
+      "detectionSignals": [
+        "missing PKCE",
+        "state parameter misuse",
+        "implicit flow token leakage",
+        "scope over-provisioning"
+      ],
+      "edgeCaseDomains": [
+        "PKCE downgrade via code_challenge_method=plain acceptance",
+        "state parameter CSRF bypass via fragment identifier",
+        "refresh token scope elevation across OAuth server versions"
+      ],
+      "sha256": "5d02afde66a899641ef519837454b4626ee3895c2726580ebd3e2a5be3c43eb2"
     },
     "parser-exhaustion-tester": {
       "version": "1.0.0",
@@ -614,7 +2001,27 @@
       "description": "Tests parsers for algorithmic complexity attacks — XML bombs, nested JSON, YAML bombs, ReDoS.",
       "userInvocable": false,
       "phase": 2,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "xml2js",
+        "fast-xml-parser",
+        "yaml",
+        "ajv",
+        "zod",
+        "libxmljs"
+      ],
+      "detectionSignals": [
+        "XML bomb vulnerability",
+        "YAML alias bombing",
+        "ReDoS in regex patterns",
+        "nested object depth exhaustion"
+      ],
+      "edgeCaseDomains": [
+        "ReDoS in user-configurable validation patterns",
+        "XML bomb surviving SAX streaming parser limits",
+        "YAML alias bomb in CI configuration files"
+      ],
+      "sha256": "70b62feb7819bc31430dbc40882fc6ee315d314287388957363df93000b837d2"
     },
     "secrets-mask-bypass-tester": {
       "version": "1.0.0",
@@ -622,7 +2029,26 @@
       "description": "Tests log masking bypass — encoding variants, case variants, split-across-lines, JSON-embedded secrets escaping.",
       "userInvocable": false,
       "phase": 2,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "winston",
+        "pino",
+        "morgan",
+        "datadog",
+        "splunk",
+        "cloudwatch"
+      ],
+      "detectionSignals": [
+        "log masking bypass",
+        "encoded secret leakage",
+        "split-line secret exposure"
+      ],
+      "edgeCaseDomains": [
+        "Base64-encoded secrets bypassing plaintext regex masking",
+        "secrets split across structured log fields evading pattern match",
+        "error stack traces exposing environment variables bypassing mask"
+      ],
+      "sha256": "00a643e6ca97999a3757d1b3d855790f472a5bebf502746cadf9e2f0580198d4"
     },
     "session-timeout-tester": {
       "version": "1.0.0",
@@ -630,7 +2056,26 @@
       "description": "Audits session lifetime policies — absolute timeout, idle timeout, concurrent session limits, forced re-auth schedules.",
       "userInvocable": false,
       "phase": 2,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "express-session",
+        "next-auth",
+        "passport",
+        "cookie",
+        "jwt",
+        "redis"
+      ],
+      "detectionSignals": [
+        "missing absolute session timeout",
+        "infinite idle session",
+        "no concurrent session limit"
+      ],
+      "edgeCaseDomains": [
+        "JWT absolute expiry bypass via clock skew exploitation",
+        "session sliding window reset via background API calls",
+        "concurrent session limit bypass via parallel login race"
+      ],
+      "sha256": "41f06e08736a7863a51cf5a41e12a7f3ea641c68aef4da903248774714fbba98"
     },
     "ssrf-detection-validator": {
       "version": "1.0.0",
@@ -638,7 +2083,29 @@
       "description": "Tests SSRF detection — cloud metadata endpoint access, DNS rebinding bypass, redirect following, blind SSRF.",
       "userInvocable": false,
       "phase": 2,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "axios",
+        "node-fetch",
+        "got",
+        "superagent",
+        "http",
+        "https",
+        "url",
+        "webhook"
+      ],
+      "detectionSignals": [
+        "SSRF to cloud metadata",
+        "DNS rebinding bypass",
+        "blind SSRF via redirect",
+        "internal service SSRF"
+      ],
+      "edgeCaseDomains": [
+        "SSRF via IPv6 mapped IPv4 address bypassing IPv4-only allowlist",
+        "DNS rebinding SSRF surviving URL validation at bind time",
+        "blind SSRF exfiltration via DNS lookup timing"
+      ],
+      "sha256": "5f721eab172d82d8d82e1910be56c3fd09319eeea4622b65dcc2982a08a605a0"
     },
     "step-up-auth-enforcer": {
       "version": "1.0.0",
@@ -646,7 +2113,27 @@
       "description": "Identifies high-risk operations requiring step-up auth and implements re-auth challenges, MFA prompts, privilege timeouts.",
       "userInvocable": false,
       "phase": 2,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "stripe",
+        "checkout",
+        "payment",
+        "delete",
+        "admin",
+        "transfer",
+        "withdraw"
+      ],
+      "detectionSignals": [
+        "missing step-up auth on sensitive operations",
+        "privilege timeout gaps",
+        "MFA bypass on high-risk actions"
+      ],
+      "edgeCaseDomains": [
+        "step-up bypass via API version without enforcement",
+        "step-up challenge replay within validity window",
+        "MFA fatigue attack on step-up prompts for bulk operations"
+      ],
+      "sha256": "6e93c14304a3dbc7155ed2261e3b667d0f998ad1c3a7b0f24d648e454479f2ae"
     },
     "token-reuse-detector": {
       "version": "1.0.0",
@@ -654,7 +2141,26 @@
       "description": "Detects refresh token reuse attacks, API key reuse across environments. Implements token family invalidation.",
       "userInvocable": false,
       "phase": 2,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "jsonwebtoken",
+        "next-auth",
+        "passport",
+        "oauth",
+        "refresh_token",
+        "api_key"
+      ],
+      "detectionSignals": [
+        "refresh token reuse without rotation",
+        "token family invalidation absence",
+        "API key environment cross-contamination"
+      ],
+      "edgeCaseDomains": [
+        "refresh token reuse race when two clients refresh simultaneously",
+        "token family invalidation missing from federated identity provider",
+        "API key reuse detection gap when key shared across microservices"
+      ],
+      "sha256": "4078a2cc3ff33be2a4d9499ade9c2ec178b2aea1cb4667fe785576cf1c991525"
     },
     "unicode-homograph-tester": {
       "version": "1.0.0",
@@ -662,7 +2168,21 @@
       "description": "Tests input validation for Unicode homograph attacks, bidirectional text injection, normalization bypasses.",
       "userInvocable": false,
       "phase": 2,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "*"
+      ],
+      "detectionSignals": [
+        "Unicode homograph in identifiers",
+        "bidirectional text injection",
+        "normalization bypass"
+      ],
+      "edgeCaseDomains": [
+        "homograph domain names in email validation bypassing allowlist",
+        "BiDi text injection in audit logs creating misleading trail",
+        "normalization form mismatch between validation and storage enabling bypass"
+      ],
+      "sha256": "3c6b981f4de672c4bd8f0f5b16a2fbd930fd5f194a7724b69dde58d2e722804c"
     },
     "waf-rule-lifecycle-agent": {
       "version": "1.0.0",
@@ -670,7 +2190,26 @@
       "description": "Full WAF rule lifecycle — audit rules, detect bypass opportunities, generate ModSecurity/Cloudflare/AWS WAF rules.",
       "userInvocable": false,
       "phase": 2,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "cloudflare",
+        "aws-waf",
+        "modsecurity",
+        "nginx",
+        "kong",
+        "api-gateway"
+      ],
+      "detectionSignals": [
+        "WAF rule bypass paths",
+        "false negative patterns",
+        "rule coverage gaps"
+      ],
+      "edgeCaseDomains": [
+        "WAF bypass via chunked transfer encoding",
+        "rule bypass using HTTP parameter pollution",
+        "WAF evasion via content-type switching to non-monitored format"
+      ],
+      "sha256": "29fb4409e9713c64007eb5ca7981a7f8702e3258e9532082507f58ffad6e9cf6"
     },
     "webhook-security-tester": {
       "version": "1.0.0",
@@ -678,7 +2217,26 @@
       "description": "Tests webhook security — signature validation, SSRF via webhook URL, payload injection, replay attacks.",
       "userInvocable": false,
       "phase": 2,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "stripe",
+        "github.webhook",
+        "svix",
+        "webhook",
+        "hmac",
+        "express"
+      ],
+      "detectionSignals": [
+        "webhook signature bypass",
+        "SSRF via webhook delivery URL",
+        "webhook replay attack"
+      ],
+      "edgeCaseDomains": [
+        "webhook SSRF to internal services via URL redirect",
+        "signature timing attack via non-constant-time comparison",
+        "webhook delivery retry storm enabling DoS amplification"
+      ],
+      "sha256": "8317e88b06b154bde8ee8197c778e5eab00faa388d754cd71c828ac08b9ccac6"
     },
     "mobile-binary-hardener": {
       "version": "1.0.0",
@@ -686,7 +2244,26 @@
       "description": "Audits mobile binary security — ProGuard/R8 obfuscation, anti-tamper, PIE/ASLR, stack canaries, binary stripping.",
       "userInvocable": false,
       "phase": 2,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "*.xcodeproj",
+        "AndroidManifest.xml",
+        "build.gradle",
+        "proguard-rules.pro",
+        "flutter"
+      ],
+      "detectionSignals": [
+        "missing PIE/ASLR",
+        "disabled stack canaries",
+        "insufficient obfuscation",
+        "debug symbols in release build"
+      ],
+      "edgeCaseDomains": [
+        "ProGuard rule exceptions inadvertently exposing sensitive class names",
+        "ASLR entropy reduction on 32-bit Android enabling brute-force",
+        "anti-tamper check bypassed via binary patching without checksum validation"
+      ],
+      "sha256": "f62051bab8ab526e202e8964c4b1b009a2cc8a83c168c1d5642e2ca32d959e3b"
     },
     "mobile-webview-auditor": {
       "version": "1.0.0",
@@ -694,7 +2271,26 @@
       "description": "Audits WebView security — JS bridge exposure, file:// access, mixed content, navigation policy, intent injection.",
       "userInvocable": false,
       "phase": 2,
-      "subAgents": []
+      "subAgents": [],
+      "routingTriggers": [
+        "WebView",
+        "WKWebView",
+        "UIWebView",
+        "react-native-webview",
+        "expo-web-browser"
+      ],
+      "detectionSignals": [
+        "JS bridge over-exposure",
+        "file:// access enabled",
+        "mixed content loading",
+        "unrestricted navigation policy"
+      ],
+      "edgeCaseDomains": [
+        "JS bridge method exposure surviving shouldOverrideUrlLoading checks",
+        "file:// access enabling local file theft via XSS in loaded content",
+        "WebView cookie store inheritance leaking auth cookies to third-party content"
+      ],
+      "sha256": "029acff583aef884f627cdc56a756fb91fb8edb830c5fd698b9f9fd2abb858ad"
     }
   }
 }
