@@ -18,3 +18,4 @@ HANDOFF.md
 .mcp/scanners/
 .mcp/mappings/
 .mcp/policies/
+.mcp/agent-runs/
