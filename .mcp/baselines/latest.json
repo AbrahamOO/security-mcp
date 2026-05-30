@@ -1,11 +1,11 @@
 {
-  "runId": "711da82f-e157-458a-8f19-45ad5f23383a",
-  "commitHash": "9d28acbb2b77e7fac13205140352c5044b8ad38a",
-  "savedAt": "2026-04-24T23:04:30.615Z",
+  "runId": "a241402b-8cc3-4a1f-9f21-c9d7af7949e7",
+  "commitHash": "c7503e02ae6252a0774282bac67f0b66225e379f",
+  "savedAt": "2026-05-29T21:43:18.210Z",
   "result": {
     "status": "FAIL",
     "policyVersion": "1.0.0",
-    "evaluatedAt": "2026-04-24T23:04:30.615Z",
+    "evaluatedAt": "2026-05-29T21:43:18.210Z",
     "scope": {
       "mode": "folder_by_folder",
       "targets": [
@@ -25,6 +25,40 @@
     },
     "findings": [
       {
+        "id": "ARTIFACTS_NO_THREAT_MODEL",
+        "title": "No threat model file found in .mcp/, docs/, or security/",
+        "severity": "HIGH",
+        "evidence": [
+          "Searched for: threat-model.json, threat-model.md under .mcp/, docs/, security/",
+          "No match found."
+        ],
+        "requiredActions": [
+          "Create a threat model document (threat-model.json or threat-model.md) in .mcp/, docs/, or security/.",
+          "Include STRIDE analysis, OWASP Top-10 mapping, MITRE ATT&CK mapping, trust boundaries, and data flow diagrams.",
+          "Reference the threat model from your PR description and link it to changed components."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
+      },
+      {
+        "id": "ARTIFACTS_NO_SBOM",
+        "title": "No SBOM (Software Bill of Materials) found in repository",
+        "severity": "HIGH",
+        "evidence": [
+          "Searched for CycloneDX (.cdx.json, bom.json, bom.xml) and SPDX (.spdx, .spdx.json) files.",
+          "No match found."
+        ],
+        "requiredActions": [
+          "Generate an SBOM in CycloneDX or SPDX format and commit it to the repository.",
+          "For Node.js: `npx @cyclonedx/cyclonedx-npm --output-file sbom.json`.",
+          "For Python: `cyclonedx-bom -o sbom.json`.",
+          "Automate SBOM generation in CI so it stays current with every dependency change.",
+          "Ensure the SBOM is included in any artifact upload to your registry (SLSA Level 2+)."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
+      },
+      {
         "id": "PACKAGE_JSON_EMPTY",
         "title": "package.json has no dependencies/devDependencies",
         "severity": "LOW",
@@ -32,7 +66,7 @@
           "Verify this is intentional. If not, add dependencies with pinned ranges."
         ],
         "sla": "90d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -47,7 +81,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -62,7 +96,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -77,7 +111,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -92,7 +126,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -107,7 +141,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -122,7 +156,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -137,7 +171,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -151,7 +185,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -165,7 +199,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -180,7 +214,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -195,7 +229,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -210,7 +244,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -225,7 +259,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -240,7 +274,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -255,7 +289,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -271,7 +305,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -287,7 +321,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -303,7 +337,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -319,7 +353,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -334,7 +368,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -349,7 +383,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -364,7 +398,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -379,7 +413,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -393,7 +427,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -408,7 +442,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -423,7 +457,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -438,7 +472,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -452,7 +486,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -466,7 +500,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -481,7 +515,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -496,7 +530,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -511,7 +545,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -526,7 +560,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -541,7 +575,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -556,7 +590,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -571,7 +605,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -585,7 +619,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -599,7 +633,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -613,7 +647,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -627,7 +661,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -641,7 +675,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -655,7 +689,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -669,7 +703,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -683,7 +717,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "AI_OUTPUT_BOUNDS_MISSING",
@@ -697,7 +731,7 @@
           "Add prompt-injection defenses: input sanitization, tool allowlists, deny-by-default tool router, and sensitive data redaction."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "AI_INJECTION_CUES",
@@ -711,7 +745,7 @@
           "Add a red-team test harness with injection payloads and exfil attempts."
         ],
         "sla": "30d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "SBOM_MISSING",
@@ -725,7 +759,7 @@
           "Or set SECURITY_AUTO_SBOM=true to auto-generate on each gate run."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "PROVENANCE_MISSING",
@@ -740,7 +774,7 @@
           "Store provenance in .mcp/attestations/"
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "IR_PLAYBOOK_MISSING",
@@ -755,7 +789,7 @@
           "Include all required sections: detection criteria, escalation path, containment, eradication, recovery, communication, post-incident review, and MTTD/MTTR targets."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "IR_PLAYBOOK_MISSING",
@@ -770,7 +804,7 @@
           "Include all required sections: detection criteria, escalation path, containment, eradication, recovery, communication, post-incident review, and MTTD/MTTR targets."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       },
       {
         "id": "AI_EXCESSIVE_AGENCY",
@@ -785,7 +819,7 @@
           "Apply principle of least privilege to all agentic capabilities."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+        "slaAssignedAt": "2026-05-29T21:43:18.209Z"
       }
     ],
     "suppressedFindings": [],
@@ -1512,7 +1546,7 @@
             "Add prompt-injection defenses: input sanitization, tool allowlists, deny-by-default tool router, and sensitive data redaction."
           ],
           "sla": "7d",
-          "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+          "slaAssignedAt": "2026-05-29T21:43:18.209Z"
         },
         {
           "id": "AI_INJECTION_CUES",
@@ -1526,7 +1560,7 @@
             "Add a red-team test harness with injection payloads and exfil attempts."
           ],
           "sla": "30d",
-          "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+          "slaAssignedAt": "2026-05-29T21:43:18.209Z"
         },
         {
           "id": "AI_EXCESSIVE_AGENCY",
@@ -1541,7 +1575,7 @@
             "Apply principle of least privilege to all agentic capabilities."
           ],
           "sla": "7d",
-          "slaAssignedAt": "2026-04-24T23:04:30.614Z"
+          "slaAssignedAt": "2026-05-29T21:43:18.209Z"
         }
       ],
       "resolvedFindings": [
@@ -1554,7 +1588,7 @@
             "Enforce secure cookies: HttpOnly, Secure, SameSite, short-lived tokens."
           ],
           "sla": "7d",
-          "slaAssignedAt": "2026-04-24T23:04:30.027Z"
+          "slaAssignedAt": "2026-05-29T21:43:17.537Z"
         },
         {
           "id": "DANGEROUSLY_SET_INNER_HTML",
@@ -1568,7 +1602,7 @@
             "If unavoidable: sanitize with a proven HTML sanitizer and add unit tests with XSS payloads."
           ],
           "sla": "7d",
-          "slaAssignedAt": "2026-04-24T23:04:30.027Z"
+          "slaAssignedAt": "2026-05-29T21:43:17.537Z"
         },
         {
           "id": "SSRF_GUARD_REQUIRED",
@@ -1582,7 +1616,7 @@
             "Require URL allowlists for outbound calls. Add tests for 127.0.0.1, 10/8, 172.16/12, 192.168/16, 169.254.169.254, metadata.google.internal."
           ],
           "sla": "7d",
-          "slaAssignedAt": "2026-04-24T23:04:30.027Z"
+          "slaAssignedAt": "2026-05-29T21:43:17.537Z"
         }
       ],
       "coverageChange": 1

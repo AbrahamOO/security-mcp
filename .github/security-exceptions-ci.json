@@ -57,9 +57,10 @@
         "GRAPHQL_INTROSPECTION_ENABLED", "GRAPHQL_NO_DEPTH_LIMIT", "GRAPHQL_NO_BATCH_LIMIT", "GRAPHQL_NO_DATALOADER",
         "DB_TLS_DISABLED", "DB_SQL_INJECTION_RISK", "DB_ADMIN_CREDENTIALS", "DB_HARDCODED_PASSWORD",
         "CRYPTO_WEAK_HASH", "CRYPTO_WEAK_CIPHER", "CRYPTO_INSECURE_RANDOM", "CRYPTO_WEAK_JWT_ALGO",
-        "DLP_REQUEST_BODY_LOGGED", "DLP_STACK_TRACE_IN_RESPONSE", "DLP_SERVER_HEADER_DISCLOSURE"
+        "DLP_REQUEST_BODY_LOGGED", "DLP_STACK_TRACE_IN_RESPONSE", "DLP_SERVER_HEADER_DISCLOSURE",
+        "WEB_IDOR_RISK", "WEB_LOG_PII", "WEB_SESSION_WEAK_CONFIG"
       ],
-      "justification": "These findings come from the REMEDIATION_MAP in src/mcp/server.ts, which contains intentional 'before' example code patterns (e.g., sslmode=disable, md5 hashing, console.log(req.body)) used to show developers how to fix vulnerabilities. The patterns appear in string literals as educational examples, not as actual application code. This is a known false-positive class for security tools that document their own remediation guidance. Also covers GraphQL patterns found only in documentation and checklists (README.md, SKILL.md), not in a real GraphQL server.",
+      "justification": "These findings come from the REMEDIATION_MAP in src/mcp/server.ts, which contains intentional 'before' example code patterns (e.g., sslmode=disable, md5 hashing, console.log(req.body)) used to show developers how to fix vulnerabilities. The patterns appear in string literals as educational examples, not as actual application code. WEB_IDOR_RISK matches a db.query example line in the remediation map (not a real DB query); WEB_LOG_PII matches a console.log fix-example and a grep pattern inside SKILL.md educational content; WEB_SESSION_WEAK_CONFIG matches cookie-config examples inside SKILL.md files that teach session hardening. security-mcp has no HTTP server, no user sessions, and no cookies — these checks do not apply to its architecture. This is a known false-positive class for security tools that document their own remediation guidance. Also covers GraphQL patterns found only in documentation and checklists (README.md, SKILL.md), not in a real GraphQL server.",
       "owner": "security-mcp-team",
       "approver": "security-mcp-team",
       "approval_role": "SecurityLead",
@@ -79,6 +80,23 @@
       "id": "self-scan-scanner-toolchain",
       "finding_ids": ["SCANNER_TOOLCHAIN_INCOMPLETE"],
       "justification": "The CI self-check environment has an empty scanner config (.github/security-tools-ci.json) because external scanners (gitleaks, semgrep, osv-scanner) are not installed in the GitHub Actions runner for this self-check step. The tool's own built-in checks cover the equivalent detections. Users are expected to have these tools installed in their own environments.",
+      "owner": "security-mcp-team",
+      "approver": "security-mcp-team",
+      "approval_role": "SecurityLead",
+      "expires_on": "2027-01-01"
+    },
+    {
+      "id": "self-scan-doc-and-data-false-positives",
+      "finding_ids": [
+        "WEB_HEADERS_MISSING",
+        "DANGEROUSLY_SET_INNER_HTML",
+        "SSRF_GUARD_REQUIRED",
+        "SSRF_USER_URL",
+        "IAM_OVERPRIVILEGED",
+        "PUBLIC_EXPOSURE_RISK",
+        "JWT_ALG_NONE_ACCEPTED"
+      ],
+      "justification": "False positives from patterns matched in non-application files: DANGEROUSLY_SET_INNER_HTML matched in .mcp/baselines/ JSON data (a stored scan result, not code); SSRF_GUARD_REQUIRED matched 'undici-types' in package-lock.json (a type-definition package, not an HTTP client usage); IAM_OVERPRIVILEGED matched 'Action: *' in README.md documentation showing an anti-pattern; PUBLIC_EXPOSURE_RISK matched '0.0.0.0/0' in README.md explaining what to avoid; JWT_ALG_NONE_ACCEPTED matched a checklist item in server.ts that documents JWT security requirements as a string literal, not actual jwt.verify() code; WEB_HEADERS_MISSING and SSRF_USER_URL matched HTTP calls in src/cli/ that have explicit hostname allowlist checks (ALLOWED_SKILL_HOSTS, ALLOWED_BINARY_HOSTS) validating URLs before every fetch — all callers pass only hardcoded constants or pre-allowlisted URLs. security-mcp is a CLI/MCP scanner tool with no HTTP server surface, no JWT auth, and no IAM policies.",
       "owner": "security-mcp-team",
       "approver": "security-mcp-team",
       "approval_role": "SecurityLead",
