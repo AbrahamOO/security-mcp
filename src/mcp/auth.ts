@@ -1,0 +1,130 @@
+/**
+ * MCP caller authentication for security-mcp.
+ *
+ * When SECURITY_MCP_SHARED_SECRET is set, every tool call is blocked until
+ * security.authenticate is called with the matching token. This provides a
+ * process-boundary guard against rogue processes that somehow obtain access
+ * to the MCP stdio channel without being the intended AI coding agent.
+ *
+ * Design notes:
+ * - One stdio session = one server process = one auth state (module singleton).
+ * - Token comparison uses constant-time HMAC to eliminate length-based timing
+ *   oracles (CWE-208). Both inputs are hashed to 32-byte digests before compare.
+ * - After AUTH_MAX_ATTEMPTS failures the process exits to prevent brute-force.
+ * - If SECURITY_MCP_SHARED_SECRET is absent, auth is disabled and all tools are
+ *   immediately available (backwards-compatible default).
+ */
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+
+/** Domain-separation constant for auth HMAC. Never changes. */
+const HMAC_DOMAIN = "security-mcp-session-auth-v1";
+
+/** Minimum acceptable secret length (bytes). Mirrors NIST SP 800-107 §5.3.4. */
+const SECRET_MIN_BYTES = 16;
+
+/** Maximum failed authentication attempts before the server process exits. */
+const AUTH_MAX_ATTEMPTS = 3;
+
+/** Unique ID for this server instance (for logging / correlation only). */
+const SESSION_ID = randomBytes(16).toString("hex");
+
+let _authenticated = false;
+let _attempts = 0;
+
+/** Whether the caller must authenticate before using any other tool. */
+export function isAuthRequired(): boolean {
+  return typeof process.env["SECURITY_MCP_SHARED_SECRET"] === "string" &&
+    process.env["SECURITY_MCP_SHARED_SECRET"].length > 0;
+}
+
+/**
+ * Whether the current session is authenticated.
+ * Always returns true when auth is disabled (no SECURITY_MCP_SHARED_SECRET).
+ */
+export function isAuthenticated(): boolean {
+  return !isAuthRequired() || _authenticated;
+}
+
+export function getSessionId(): string {
+  return SESSION_ID;
+}
+
+/**
+ * Attempt to authenticate the session with the provided token.
+ *
+ * Uses constant-time HMAC comparison to prevent timing oracles regardless of
+ * token length. After AUTH_MAX_ATTEMPTS failures, terminates the process.
+ */
+export function attemptAuth(token: string): {
+  success: boolean;
+  sessionId?: string;
+  attemptsRemaining?: number;
+  reason?: string;
+} {
+  if (!isAuthRequired()) {
+    return { success: true, sessionId: SESSION_ID };
+  }
+
+  if (_authenticated) {
+    return { success: true, sessionId: SESSION_ID };
+  }
+
+  _attempts++;
+  const remaining = AUTH_MAX_ATTEMPTS - _attempts;
+
+  const secret = process.env["SECURITY_MCP_SHARED_SECRET"]!;
+
+  if (Buffer.byteLength(secret, "utf-8") < SECRET_MIN_BYTES) {
+    // Server misconfiguration — warn but do not leak the secret value.
+    return {
+      success: false,
+      reason: `Server misconfiguration: SECURITY_MCP_SHARED_SECRET is shorter than ${SECRET_MIN_BYTES} bytes. Update the secret and restart the server.`
+    };
+  }
+
+  // Hash both inputs to fixed-length 32-byte digests so timingSafeEqual always
+  // receives same-length buffers (prevents length-based timing oracle, CWE-208).
+  const expected = createHmac("sha256", HMAC_DOMAIN).update(secret, "utf-8").digest();
+  const provided = createHmac("sha256", HMAC_DOMAIN).update(token, "utf-8").digest();
+
+  if (!timingSafeEqual(expected, provided)) {
+    if (remaining <= 0) {
+      // Schedule exit after a short delay so the error response can be sent.
+      setTimeout(() => process.exit(1), 200);
+      return {
+        success: false,
+        reason: "Maximum authentication attempts exceeded. Server is shutting down."
+      };
+    }
+    return {
+      success: false,
+      attemptsRemaining: remaining,
+      reason: `Invalid token. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining before server shutdown.`
+    };
+  }
+
+  _authenticated = true;
+  return { success: true, sessionId: SESSION_ID };
+}
+
+/**
+ * Returns the preamble to prepend to the system prompt when authentication
+ * is required but has not yet been completed.
+ */
+export function authSystemPromptPreamble(): string {
+  if (!isAuthRequired()) return "";
+  return [
+    "## ⚠️ Authentication Required",
+    "",
+    "This security-mcp server requires authentication before any security tools can be used.",
+    "**Call `security.authenticate` first** with the value of the `SECURITY_MCP_SHARED_SECRET`",
+    "environment variable configured on this server.",
+    "",
+    "```",
+    "security.authenticate({ token: \"<value of SECURITY_MCP_SHARED_SECRET>\" })",
+    "```",
+    "",
+    "All other tool calls will be rejected with UNAUTHENTICATED until this step completes.",
+    ""
+  ].join("\n");
+}
