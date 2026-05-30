@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { readFileSync, existsSync } from "node:fs";
+import { attemptAuth, authSystemPromptPreamble, getSessionId, isAuthRequired, isAuthenticated } from "./auth.js";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as dns from "node:dns/promises";
@@ -85,13 +86,27 @@ function asTextResponse(data: unknown) {
 }
 
 /**
- * Wraps a tool handler so that unhandled exceptions never leak internal paths,
- * stack traces, or system details back to the MCP caller. CWE-209.
+ * Wraps a tool handler so that:
+ *  1. Unauthenticated callers are rejected when SECURITY_MCP_SHARED_SECRET is set.
+ *  2. Unhandled exceptions never leak internal paths, stack traces, or system
+ *     details back to the MCP caller. CWE-209.
+ *
+ * security.authenticate is registered separately without this wrapper so that
+ * it remains callable before authentication succeeds.
  */
 function safeTool(
   handler: (args: unknown, extra: unknown) => Promise<ReturnType<typeof asTextResponse>>
 ): (args: unknown, extra: unknown) => Promise<ReturnType<typeof asTextResponse>> {
   return async (args, extra) => {
+    if (isAuthRequired() && !isAuthenticated()) {
+      return asTextResponse({
+        error: "UNAUTHENTICATED",
+        message:
+          "This security-mcp server requires authentication. " +
+          "Call security.authenticate with the value of SECURITY_MCP_SHARED_SECRET before using any other tool.",
+        hint: "security.authenticate({ token: \"<SECURITY_MCP_SHARED_SECRET value>\" })"
+      });
+    }
     try {
       return await handler(args, extra);
     } catch (err) {
@@ -101,6 +116,41 @@ function safeTool(
     }
   };
 }
+
+// ---------------------------------------------------------------------------
+// Authentication tool — registered WITHOUT safeTool so it is always callable
+// regardless of session auth state. This is the handshake entry point.
+// ---------------------------------------------------------------------------
+
+tool(
+  "security.authenticate",
+  "Authenticate this MCP session. Required before any other security-mcp tool can be used when SECURITY_MCP_SHARED_SECRET is set on the server. Pass the exact value of that environment variable as `token`. After three failed attempts the server process will exit.",
+  {
+    token: z.string().min(1).describe(
+      "The value of SECURITY_MCP_SHARED_SECRET configured on the security-mcp server."
+    )
+  },
+  async (args: unknown, _extra: unknown) => {
+    try {
+      const { token } = z.object({ token: z.string().min(1) }).parse(args);
+      const result = attemptAuth(token);
+      if (result.success) {
+        return asTextResponse({
+          authenticated: true,
+          sessionId: getSessionId(),
+          message: "Authentication successful. All security-mcp tools are now available."
+        });
+      }
+      return asTextResponse({
+        authenticated: false,
+        ...result
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Authentication error";
+      return asTextResponse({ authenticated: false, reason: msg });
+    }
+  }
+);
 
 // ---------------------------------------------------------------------------
 // CWE-918: SSRF guard for operator-configured webhook URLs.
@@ -426,7 +476,7 @@ tool(
       "control applies (OWASP, ATT&CK, NIST). Then move on.\n\n" +
       "---\n\n";
 
-    let prompt = OPERATING_MANDATE + getSecurityPrompt();
+    let prompt = authSystemPromptPreamble() + OPERATING_MANDATE + getSecurityPrompt();
 
     // Append a project-specific scope section if any context was provided
     if (stack ?? cloud ?? payment_processor) {
