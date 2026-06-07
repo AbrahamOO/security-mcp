@@ -20,6 +20,11 @@
     { "id": "ai_rag_authz", "description": "RAG retrieval enforces authorization — documents filtered by user permissions", "critical": true },
     { "id": "ai_no_pii_in_prompts", "description": "No PII, credentials, or secrets in prompt templates", "critical": true },
     { "id": "ai_fallback_handling", "description": "Model failures handled gracefully — no sensitive error details exposed to users", "critical": false },
-    { "id": "ai_owasp_llm_top10", "description": "OWASP LLM Top 10 controls reviewed and addressed for this AI surface", "critical": true }
+    { "id": "ai_owasp_llm_top10", "description": "OWASP LLM Top 10 controls reviewed and addressed for this AI surface", "critical": true },
+    { "id": "ai_context_session_isolation", "description": "Per-user session context is strictly isolated — no cross-user context bleed in multi-tenant deployments; conversation history scoped to authenticated user ID", "critical": true },
+    { "id": "ai_adversarial_probe_multi_turn", "description": "Multi-turn adversarial probing complete: role-play escapes, many-shot jailbreaks, encoded payloads (base64, l33tspeak), goal hijacking across conversation resets — all documented with pass/fail", "critical": true },
+    { "id": "ai_tool_sandboxing", "description": "AI agent tool execution sandboxed — filesystem, network, and shell access granted only via explicit allowlist; no ambient authority; each tool call requires declared capability", "critical": true },
+    { "id": "ai_model_supply_chain", "description": "AI model provider and version verified — model hash or digest pinned in configuration; shadow model substitution would be detected; provider SLA and security posture documented", "critical": false },
+    { "id": "ai_output_length_limit", "description": "Model output length limits enforced at the API layer; unbounded generation that could exhaust context or enable token flooding is blocked; streaming responses have an abort timeout", "critical": true }
   ]
 }

@@ -297,16 +297,20 @@ tool(
   })
 );
 
-// CWE-200: restrict to SECURITY_-prefixed names so callers cannot probe arbitrary env vars
-const ATTEST_ENV_VAR_RE = /^SECURITY_[A-Z][A-Z0-9_]{0,63}$/;
+// CWE-200: restrict signatureEnvVar to dedicated attestation-key vars only.
+// The broader SECURITY_* namespace contains operational credentials (JIRA_TOKEN,
+// PAGERDUTY_KEY, SLACK_WEBHOOK, MCP_SHARED_SECRET) that must never be used as
+// HMAC signing keys — doing so turns attestation into a chosen-plaintext oracle.
+// Only vars matching SECURITY_ATTEST_KEY or SECURITY_ATTEST_KEY_<SUFFIX> are permitted.
+const ATTEST_ENV_VAR_RE = /^SECURITY_ATTEST_KEY(?:_[A-Z0-9]{1,32})?$/;
 
 const AttestReviewParams = {
   runId: z.string().uuid().describe("Security review run ID."),
   signatureEnvVar: z.string()
-    .regex(ATTEST_ENV_VAR_RE, "signatureEnvVar must be a SECURITY_-prefixed env var name (e.g. SECURITY_ATTEST_KEY)")
+    .regex(ATTEST_ENV_VAR_RE, "signatureEnvVar must be SECURITY_ATTEST_KEY or SECURITY_ATTEST_KEY_<SUFFIX> — operational credential vars are not permitted")
     .optional()
     .describe(
-      "Optional SECURITY_-prefixed environment variable containing an HMAC key for attestation signing."
+      "Optional env var containing a dedicated HMAC attestation key. Must be SECURITY_ATTEST_KEY or SECURITY_ATTEST_KEY_<SUFFIX>."
     )
 };
 const AttestReviewSchema = z.object(AttestReviewParams);

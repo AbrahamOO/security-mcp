@@ -39,8 +39,16 @@ async function readJsonWithFallback(relPath: string, fallbackName: string): Prom
     ".mcp/catalog/control-catalog.json": "SECURITY_GATE_CONTROL_CATALOG"
   };
   const overrideEnv = overrideEnvMap[relPath];
-  if (overrideEnv && process.env[overrideEnv]) {
-    return await readFile(join(process.cwd(), process.env[overrideEnv] as string), "utf-8");
+  const overridePath = overrideEnv ? process.env[overrideEnv] : undefined;
+  if (overridePath) {
+    // Guard against path traversal (VULN-003 / CWE-22): resolve() + startsWith() is required;
+    // join() alone normalises '..' but does not prevent escape from the project directory.
+    const cwd = process.cwd();
+    const resolved = resolve(cwd, overridePath);
+    if (resolved !== cwd && !resolved.startsWith(cwd + "/")) {
+      throw new Error(`${overrideEnv} path escapes the project directory`);
+    }
+    return await readFile(resolved, "utf-8");
   }
 
   try {

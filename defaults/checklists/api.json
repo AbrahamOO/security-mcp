@@ -22,6 +22,11 @@
     { "id": "api_secrets_scan", "description": "Secrets scan clean — no hardcoded credentials or API keys", "critical": true },
     { "id": "api_sast_pass", "description": "SAST scan passed with no CRITICAL findings", "critical": true },
     { "id": "api_threat_model", "description": "Threat model completed and reviewed for this API surface change", "critical": true },
-    { "id": "api_health_endpoint", "description": "Health/readiness endpoints do not expose sensitive version or config info", "critical": false }
+    { "id": "api_health_endpoint", "description": "Health/readiness endpoints do not expose sensitive version or config info", "critical": false },
+    { "id": "api_graphql_introspection", "description": "GraphQL introspection disabled in production; query depth limit ≤ 10 and complexity budget enforced to prevent resource exhaustion", "critical": true },
+    { "id": "api_idempotency_replay", "description": "Financial and state-changing endpoints protected against replay via idempotency keys or HMAC-timestamped signatures with a time-bound window ≤ 5 minutes", "critical": true },
+    { "id": "api_command_injection", "description": "No user-controlled input passed to child_process.exec, execSync, spawn with shell:true, or any shell interpreter — allowlisted command templates only", "critical": true },
+    { "id": "api_file_upload_validation", "description": "File upload endpoints enforce MIME type server-side (not by extension), max file size, extension allowlist, and malware scanning; files stored outside web root", "critical": true },
+    { "id": "api_timing_safe_equality", "description": "All sensitive equality checks (tokens, reset codes, HMAC digests, API keys) use crypto.timingSafeEqual — no string ===, indexOf, or includes comparisons", "critical": true }
   ]
 }

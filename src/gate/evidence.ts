@@ -24,7 +24,14 @@ export type ControlStatus = {
 async function loadEvidenceMap(): Promise<EvidenceMap> {
   const overridePath = process.env["SECURITY_GATE_EVIDENCE_MAP"];
   if (overridePath) {
-    const raw = await readFile(join(process.cwd(), overridePath), "utf-8");
+    // Guard against path traversal (VULN-002 / CWE-22): join() normalises '..' sequences
+    // but does NOT prevent escape; resolve() + startsWith() is the correct check.
+    const cwd = process.cwd();
+    const resolved = resolve(cwd, overridePath);
+    if (resolved !== cwd && !resolved.startsWith(cwd + "/")) {
+      throw new Error("SECURITY_GATE_EVIDENCE_MAP path escapes the project directory");
+    }
+    const raw = await readFile(resolved, "utf-8");
     return JSON.parse(raw) as EvidenceMap;
   }
 

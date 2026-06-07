@@ -20,6 +20,9 @@
     { "id": "mobile_threat_model", "description": "Threat model completed and reviewed for this mobile surface change", "critical": true },
     { "id": "mobile_data_residency", "description": "Data residency requirements met — no user data stored on device beyond session", "critical": false },
     { "id": "mobile_backup_prevention", "description": "allowBackup=false in Android manifest — sensitive data not included in backups", "critical": true },
-    { "id": "mobile_logging", "description": "No sensitive data logged in production builds — crash reporting sanitized", "critical": true }
+    { "id": "mobile_logging", "description": "No sensitive data logged in production builds — crash reporting sanitized", "critical": true },
+    { "id": "mobile_tapjacking_prevention", "description": "Android tapjacking prevention: FLAG_SECURE set on sensitive screens; filterTouchesWhenObscured=true on clickable elements handling auth or payments", "critical": true },
+    { "id": "mobile_memory_zeroing", "description": "Sensitive data (passwords, keys, PAN) explicitly zeroed from memory after use — not relying on GC; no sensitive data in String objects (use char[] or SecureString)", "critical": false },
+    { "id": "mobile_anti_debugging", "description": "Anti-debugging and anti-tampering controls in place for high-risk operations; ptrace detection and integrity attestation verified before sensitive operations", "critical": false }
   ]
 }

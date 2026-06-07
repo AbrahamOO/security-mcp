@@ -72,20 +72,32 @@ export function attemptAuth(token: string): {
   _attempts++;
   const remaining = AUTH_MAX_ATTEMPTS - _attempts;
 
+  // Enforce lockout BEFORE any other check — including misconfiguration — so that
+  // the short-secret path cannot bypass the three-strike limit (AUTH-001 / CWE-307).
+  if (remaining < 0) {
+    setTimeout(() => process.exit(1), 200);
+    return {
+      success: false,
+      reason: "Authentication failed."
+    };
+  }
+
   const secret = process.env["SECURITY_MCP_SHARED_SECRET"]!;
 
   if (Buffer.byteLength(secret, "utf-8") < SECRET_MIN_BYTES) {
-    // Server misconfiguration — warn but do not leak the secret value.
+    // Server misconfiguration — warn but do not leak the secret value or byte length.
     return {
       success: false,
-      reason: `Server misconfiguration: SECURITY_MCP_SHARED_SECRET is shorter than ${SECRET_MIN_BYTES} bytes. Update the secret and restart the server.`
+      reason: "Authentication failed."
     };
   }
 
   // Hash both inputs to fixed-length 32-byte digests so timingSafeEqual always
   // receives same-length buffers (prevents length-based timing oracle, CWE-208).
-  const expected = createHmac("sha256", HMAC_DOMAIN).update(secret, "utf-8").digest();
-  const provided = createHmac("sha256", HMAC_DOMAIN).update(token, "utf-8").digest();
+  // Keys and messages are swapped relative to the original: the secret/token is
+  // used as the HMAC key and HMAC_DOMAIN is the fixed message (AUTH-003 / CWE-327).
+  const expected = createHmac("sha256", secret).update(HMAC_DOMAIN, "utf-8").digest();
+  const provided = createHmac("sha256", token).update(HMAC_DOMAIN, "utf-8").digest();
 
   if (!timingSafeEqual(expected, provided)) {
     if (remaining <= 0) {
@@ -93,13 +105,13 @@ export function attemptAuth(token: string): {
       setTimeout(() => process.exit(1), 200);
       return {
         success: false,
-        reason: "Maximum authentication attempts exceeded. Server is shutting down."
+        reason: "Authentication failed."
       };
     }
     return {
       success: false,
-      attemptsRemaining: remaining,
-      reason: `Invalid token. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining before server shutdown.`
+      // Do not expose attempt count to avoid targeted last-attempt attacks (AUTH-004 / CWE-204).
+      reason: "Authentication failed."
     };
   }
 
