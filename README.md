@@ -17,17 +17,12 @@ Works with **Claude Code, GitHub Copilot, Cursor, Codex, Replit**, and any MCP-c
 
 ## Table of Contents
 
-- [What's New in 1.1.4](#whats-new-in-114)
+- [What's New in 1.1.5](#whats-new-in-115)
 - [What Problem Does This Solve?](#what-problem-does-this-solve)
 - [Who Is This For?](#who-is-this-for)
 - [Two Modes - Pick Your Depth](#two-modes---pick-your-depth)
 - [Quick Start - Install in 60 Seconds](#quick-start---install-in-60-seconds)
-- [Step-by-Step Installation Guide](#step-by-step-installation-guide)
-  - [Claude Code](#step-by-step-claude-code)
-  - [Cursor](#step-by-step-cursor)
-  - [VS Code / GitHub Copilot](#step-by-step-vs-code--github-copilot)
-  - [Windsurf](#step-by-step-windsurf)
-  - [Manual Configuration](#manual-configuration-any-mcp-editor)
+- [Installation](#installation)
 - [Verify Your Installation](#verify-your-installation)
 - [How to Run Your First Security Review](#how-to-run-your-first-security-review)
 - [CI/CD Security Gate](#cicd-security-gate)
@@ -43,54 +38,112 @@ Works with **Claude Code, GitHub Copilot, Cursor, Codex, Replit**, and any MCP-c
 
 ---
 
-## What's New in 1.1.4
+## What's New in 1.1.5
 
-### 20 Checks (up from 18) - Deep Injection + Deep Auth Modules
+### Malicious Code & Repo Poisoning Detection (NEW)
 
-Two new deep-check modules run automatically for web and API surfaces:
+**`checkSupplyChainDeep`** — 16 new patterns that detect attacks a bad actor would embed to poison your repository or compromise developer workstations and CI pipelines:
 
-**`checkInjectionDeep`** — 11 new patterns: XXE (CWE-611), SSTI (CWE-94), prototype pollution (CWE-1321), open redirect (CWE-601), NoSQL operator injection (CWE-943), CRLF injection (CWE-113), unsafe YAML load (CWE-502), unsafe deserialization, path traversal (CWE-22), log injection (CWE-117), SSRF (CWE-918).
+| Pattern | ATT&CK Technique | What It Catches |
+| --- | --- | --- |
+| **Destructive commands** | T1485 | `rm -rf`, `dd if=/dev/zero`, recursive `fs.rm` — wiper malware |
+| **Keyloggers** | T1056.001 | `addEventListener('keydown')` combined with `fetch`/`sendBeacon` exfiltration |
+| **Credential exfiltration** | T1555 | `localStorage`/`sessionStorage`/`document.cookie` read + HTTP POST to external URL |
+| **Reverse shells** | T1059 | `net.createConnection` + `spawn('/bin/bash')`, `nc -e`, `bash -i` patterns |
+| **Environment variable theft** | T1552.001 | `process.env` sent to external HTTP endpoint — postinstall exfiltration pattern |
+| **Malicious postinstall** | T1195.002 | npm lifecycle scripts executing `curl`, `wget`, `bash -c`, or `eval()` |
+| **Dynamic require()** | T1059.007 | `require(userInput)` or `require(process.env.X)` — arbitrary module loading |
+| **Base64 obfuscated exec** | T1027 | `Buffer.from(..., 'base64')` decoded and passed to `eval`/`exec`/`spawn` |
+| **Cryptomining** | T1496 | CoinHive, XMRig, stratum+tcp, and 10+ mining library signatures |
+| **Sensitive file reads** | T1552 | `/etc/passwd`, `~/.ssh/id_rsa`, `.aws/credentials`, `.npmrc` reads |
+| **Unpinned dependencies** | T1195.002 | `*`, `latest`, `>=0.0.0` version ranges — supply chain compromise vector |
+| **process.exit + wipe** | T1485 + T1070 | Exit combined with deletion — anti-forensics / wiper pattern |
+| **Hidden file writes** | T1564.001 | Writing to non-standard dotfiles for persistence or concealment |
+| **DNS exfiltration** | T1048.003 | DNS lookups with encoded/derived hostnames — bypasses HTTP egress controls |
+| **Clipboard monitoring** | T1115 | `navigator.clipboard.read()` + network send — password manager attacks |
+| **Obfuscated DOM injection** | T1027 | `innerHTML +=` with `atob()`/`unescape()`/`\x`-encoded payloads |
 
-**`checkAuthDeep`** — 12 new patterns: JWT algorithm confusion / `alg:none` (CWE-327), session fixation (CWE-384), OAuth missing state parameter (CWE-352), OAuth `redirect_uri` open redirect (CWE-601), PKCE not enforced (RFC 7636), hardcoded JWT secret (CWE-798), missing rate limit on auth endpoints (CWE-307), plaintext password comparison (CWE-256), SAML signature validation disabled (CWE-347), insecure cookie flags (CWE-1004/614), refresh token not rotated (CWE-613), JWT HS/RS confusion (CVE-2015-9235 pattern).
+### Business Logic Security Checks (NEW)
+
+**`checkBusinessLogic`** — 8 patterns that catch IDOR, mass assignment, race conditions, and logic-layer vulnerabilities that injection scanners miss:
+
+- **Mass assignment** — `req.body` spread directly into database models without field allowlist (CWE-915)
+- **IDOR** — direct object lookup from user-supplied IDs without ownership verification (CWE-639 / OWASP API1)
+- **Negative amount bypass** — financial amounts not validated as strictly positive (CWE-20)
+- **Race conditions** — read-then-write on balance/quota/inventory without atomic operations (CWE-362)
+- **Hardcoded credentials** — credential literals that aren't environment variables (CWE-798)
+- **Missing input validation** — POST/PUT handlers writing `req.body` to the database without schema parsing (CWE-20)
+- **Unrestricted export endpoints** — `/export`, `/download`, `/backup` routes without authentication middleware (CWE-284)
+- **Integer overflow** — parsed user integers used in arithmetic without bounds checking (CWE-190)
+
+### MCP Caller Authentication
+
+Protect the MCP server channel against rogue processes that obtain stdio access without being the intended AI agent:
+
+```bash
+export SECURITY_MCP_SHARED_SECRET="$(openssl rand -hex 32)"
+```
+
+When set, every tool call is blocked until the AI agent calls `security.authenticate` with the matching token. Uses constant-time HMAC comparison (CWE-208 protection), 3-strike lockout, and minimum 16-byte secret enforcement. Backwards-compatible: when the variable is absent, all tools are immediately available.
+
+### Policy HMAC Integrity Signing
+
+Prevent tampered policy files from silently disabling severity blocking:
+
+```bash
+export SECURITY_POLICY_HMAC_KEY="$(openssl rand -hex 32)"
+npx security-mcp sign-policy
+```
+
+When `SECURITY_POLICY_HMAC_KEY` is set, the gate rejects any policy file whose HMAC sidecar (`.hmac`) does not match — making it impossible to quietly change `severity_block: ["HIGH","CRITICAL"]` to `[]` without detection.
+
+### 25 New Checklist Items Across All Surfaces
+
+Release checklists now cover 25 additional threat vectors:
+
+- **Web** — DOM clobbering, web cache poisoning, WebSocket authentication, postMessage origin validation, dangling markup injection
+- **API** — GraphQL introspection disabled, replay protection, command injection prevention, file upload validation, constant-time equality
+- **Infra** — IMDSv2 enforcement (blocks SSRF to cloud metadata), egress filtering, Kubernetes pod security standards, secret rotation policy, runtime threat detection
+- **AI** — per-user context session isolation, multi-turn adversarial probing, tool sandboxing, model supply chain verification, output length limits
+- **Mobile** — tapjacking prevention, memory zeroing for sensitive data, anti-debugging controls
+- **Payments** — Magecart/digital skimming prevention (SRI + DOM mutation monitoring), EMV 3DS 2.2+ enforcement
+
+### Expanded Deep Injection Patterns (15 → 4 more)
+
+`checkInjectionDeep` now covers 15 patterns including 4 new additions:
+
+- **Command injection** (CWE-78) — `child_process.exec/spawn` with user-controlled input or `shell:true`
+- **ReDoS** (CWE-1333) — `new RegExp(userInput)` causing catastrophic backtracking in the event loop
+- **JSONP callback injection** (CWE-79) — unvalidated callback parameter rendered in response
+- **Eval with encoded payload** (CWE-95) — `eval(atob(...))` / `eval(Buffer.from(...,'base64'))` obfuscated execution
+
+### Expanded Deep Auth Patterns (12 → 4 more)
+
+`checkAuthDeep` now covers 16 patterns including 4 new additions:
+
+- **API key in URL** (CWE-598) — tokens transmitted in query parameters, logged in plaintext by every proxy
+- **Password reset without expiry** (CWE-640) — reset tokens valid indefinitely after database breach
+- **Admin routes without authorization** (CWE-862) — `/admin`, `/internal`, `/debug` paths missing role middleware
+- **Timing oracle on security codes** (CWE-208) — OTP/PIN/token compared with `===` instead of `timingSafeEqual`
 
 ### Coverage Completeness Protocol (§0)
 
-Every security review now runs a mandatory 5-step protocol before reporting any result:
+Every security review runs a mandatory 5-step protocol before reporting results:
 
-1. **Complete file inventory** — enumerate all source files into `coverage-manifest.json`; no attack class can be called CLEAN without checking every file.
-2. **Taint tracking** — trace every user-controlled input (`req.body`, `req.query`, WebSocket, env, file uploads, external API responses) to all downstream sinks, classifying each SAFE / UNSAFE / UNRESOLVED.
-3. **Negative assertions** — after each attack class: `ATTACK CLASS: {name} | FILES: N/N | PATTERNS: {list} | RESULT: CLEAN`.
-4. **Fix verification loop** — after every fix, re-run the triggering check and confirm it no longer fires before advancing.
-5. **All-or-nothing mandate** — every HIGH/CRITICAL finding is either FIXED (verified clean) or BLOCKED (risk-accepted, gate failing, remediation plan written to `deferred-fixes.json`).
+1. **Complete file inventory** — all source files enumerated; no attack class is CLEAN without checking every file
+2. **Taint tracking** — every user-controlled input traced to all downstream sinks (SAFE / UNSAFE / UNRESOLVED)
+3. **Negative assertions** — per attack class: `ATTACK CLASS: {name} | FILES: N/N | PATTERNS: {list} | RESULT: CLEAN`
+4. **Fix verification loop** — after every fix, re-run the check and confirm it no longer fires before advancing
+5. **All-or-nothing mandate** — every HIGH/CRITICAL is either FIXED (verified clean) or BLOCKED with a written remediation plan
 
-### Enhanced Threat Model Template
+---
 
-The `security.threat_model` tool now generates a more complete template including LINDDUN privacy threat analysis (Linking, Identifying, Non-repudiation, Detecting, Data Disclosure, Unawareness, Non-compliance), TRIKE risk matrix (actor-action-asset-risk), DREAD scoring, attack trees for the top 3 critical paths, adversary profiles mapped to ATT&CK techniques, and supply chain threat enumeration.
+## What's New in 1.1.4
 
-### Expanded Release Checklists
-
-All domain-specific release checklists now include:
-
-- **OAuth/OIDC** — PKCE with S256, state/nonce verification, exact-match `redirect_uri`, code reuse prevention, audience validation
-- **Business Logic** — idempotency keys on payment mutations, negative input validation, race condition testing for balance/quota/inventory
-- **Serialization/Injection** — XXE, SSTI, unsafe YAML, deserialization, prototype pollution, open redirect, CRLF in every checklist
-- **AI/LLM** — system prompt extraction resistance, multi-turn attack chains, multimodal injection, agentic tool allowlist, AML.T0054/T0057 mitigations
-- **Payments (PCI DSS 4.0)** — PAN masking, DOM mutation monitoring, EMV 3DS 2.2+, Magecart prevention (SRI on checkout pages)
-- **Observability Gate** (new) — anomaly detection baselines, SLO definitions for security events, alert fatigue review, runbook coverage
-
-### Windsurf Support
-
-The installer now detects and configures Windsurf (`~/.windsurf/mcp.json`) automatically alongside Claude Code, Cursor, and VS Code.
-
-### `doctor` Command
-
-Verify your installation health at any time:
-
-```bash
-npx -y security-mcp@latest doctor
-```
-
-Checks Node.js version, editor configs, and skill files — prints PASS/FAIL per check with actionable fix commands.
+- `checkInjectionDeep` — 11 patterns: XXE, SSTI, prototype pollution, open redirect, NoSQL injection, CRLF, unsafe YAML load, unsafe deserialization, path traversal, log injection, SSRF
+- `checkAuthDeep` — 12 patterns: JWT alg:none, session fixation, OAuth missing state, OAuth redirect_uri open redirect, PKCE not enforced, hardcoded JWT secret, missing rate limit on auth, plaintext password compare, SAML signature disabled, insecure cookie flags, refresh token not rotated, JWT HS/RS confusion
+- Windsurf editor support added to the installer
+- `doctor` command for installation health checks
 
 ---
 
@@ -174,195 +227,32 @@ For a full 39-agent deep audit:
 
 ---
 
-## Step-by-Step Installation Guide
+## Installation
 
-### Step-by-Step: Claude Code
+> **Prerequisite:** Node.js 20+. Check with `node --version`.
 
-**Prerequisite:** Node.js 20+ installed. Check with `node --version`.
-
-**Step 1 - Run the installer:**
-
-```bash
-npx -y security-mcp@latest install --claude-code
-```
-
-This writes the MCP server config to `~/.claude/settings.json`.
-
-**Step 2 - Verify the config was written:**
-
-```bash
-cat ~/.claude/settings.json
-```
-
-You should see:
-
-```json
-{
-  "mcpServers": {
-    "security-mcp": {
-      "command": "npx",
-      "args": ["-y", "security-mcp@latest", "serve"]
-    }
-  }
-}
-```
-
-**Step 3 - Restart Claude Code** to pick up the new MCP server.
-
-**Step 4 - Verify the tools loaded.** In Claude Code, run:
-
-```text
-/mcp
-```
-
-You should see `security-mcp` listed as a connected server with `security.*`, `orchestration.*`, and `repo.*` tools available.
-
-**Step 5 - Run your first security review:**
-
-```text
-/senior-security-engineer
-```
-
-The agent will ask:
-
-- **A) Recent changes** - scans only what changed since your last commit (fastest, use daily)
-- **B) Full codebase** - scans everything (use for new projects or after major changes)
-- **C) Specific files or folders** - scans exactly what you specify
-
-Pick one and let it run.
-
----
-
-### Step-by-Step: Cursor
-
-**Step 1 - Run the installer:**
-
-```bash
-npx -y security-mcp@latest install --cursor
-```
-
-This writes to `~/.cursor/mcp.json`.
-
-**Step 2 - Verify:**
-
-```bash
-cat ~/.cursor/mcp.json
-```
-
-Expected output:
-
-```json
-{
-  "mcpServers": {
-    "security-mcp": {
-      "command": "npx",
-      "args": ["-y", "security-mcp@latest", "serve"]
-    }
-  }
-}
-```
-
-**Step 3 - Restart Cursor.**
-
-**Step 4 - Open Cursor's MCP panel** (Settings -> MCP) and confirm `security-mcp` shows as connected.
-
-**Step 5 - In the Cursor AI chat, type:**
-
-```text
-Use /senior-security-engineer to review my recent changes
-```
-
----
-
-### Step-by-Step: VS Code / GitHub Copilot
-
-**Step 1 - Run the installer:**
-
-```bash
-npx -y security-mcp@latest install --vscode
-```
-
-This writes to your VS Code user `settings.json`.
-
-**Step 2 - Verify in VS Code:**
-
-Open Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`) -> `Preferences: Open User Settings (JSON)`.
-
-You should see:
-
-```json
-{
-  "mcp.servers": {
-    "security-mcp": {
-      "command": "npx",
-      "args": ["-y", "security-mcp@latest", "serve"]
-    }
-  }
-}
-```
-
-**Step 3 - Restart VS Code.**
-
-**Step 4 - In GitHub Copilot Chat, type:**
-
-```text
-@security-mcp run /senior-security-engineer on recent changes
-```
-
----
-
-### Step-by-Step: Windsurf
-
-**Step 1 - Run the installer:**
+### One Command — Auto-detects Your Editor
 
 ```bash
 npx -y security-mcp@latest install
 ```
 
-This auto-detects Windsurf and writes to `~/.windsurf/mcp.json`.
+The installer detects Claude Code, Cursor, VS Code, and Windsurf automatically and writes the config to the correct location. Restart your editor when it finishes, then type `/senior-security-engineer`.
 
-**Step 2 - Verify:**
-
-```bash
-cat ~/.windsurf/mcp.json
-```
-
-Expected output:
-
-```json
-{
-  "mcpServers": {
-    "security-mcp": {
-      "command": "npx",
-      "args": ["-y", "security-mcp@latest", "serve"]
-    }
-  }
-}
-```
-
-**Step 3 - Restart Windsurf.**
-
-**Step 4 - In the Windsurf AI chat, type:**
-
-```text
-Use /senior-security-engineer to review my recent changes
-```
-
----
-
-### Manual Configuration (Any MCP Editor)
-
-If the installer doesn't detect your editor, or you prefer to configure manually:
-
-**Step 1 - Print the config snippet:**
+### Install for a Specific Editor
 
 ```bash
-npx -y security-mcp@latest config
+npx -y security-mcp@latest install --claude-code   # ~/.claude/settings.json
+npx -y security-mcp@latest install --cursor        # ~/.cursor/mcp.json
+npx -y security-mcp@latest install --vscode        # VS Code user settings.json
+npx -y security-mcp@latest install --windsurf      # ~/.windsurf/mcp.json
 ```
 
-**Step 2 - Copy the output** and paste it into your editor's MCP configuration file.
+### Manual Config (Any MCP-Compatible Editor)
 
-**Claude Code** (`~/.claude/settings.json`):
+Add this to your editor's MCP server config and restart:
+
+**Claude Code** (`~/.claude/settings.json`) · **Cursor** (`~/.cursor/mcp.json`) · **Windsurf** (`~/.windsurf/mcp.json`):
 
 ```json
 {
@@ -375,20 +265,7 @@ npx -y security-mcp@latest config
 }
 ```
 
-**Cursor** (`~/.cursor/mcp.json`):
-
-```json
-{
-  "mcpServers": {
-    "security-mcp": {
-      "command": "npx",
-      "args": ["-y", "security-mcp@latest", "serve"]
-    }
-  }
-}
-```
-
-**VS Code / GitHub Copilot** (`settings.json`):
+**VS Code / GitHub Copilot** (user `settings.json`):
 
 ```json
 {
@@ -399,39 +276,6 @@ npx -y security-mcp@latest config
     }
   }
 }
-```
-
-**Windsurf / Codex / Replit** - use the same `command`/`args` format your editor supports for MCP servers.
-
-**Step 3 - Restart your editor** after saving the config.
-
----
-
-### Global Install (Optional)
-
-If you want the `security-mcp` binary available system-wide without `npx`:
-
-```bash
-npm install -g security-mcp@latest
-security-mcp install-global
-```
-
-Then you can use:
-
-```bash
-security-mcp install-global --claude-code
-security-mcp install-global --cursor
-security-mcp install-global --vscode
-```
-
----
-
-### Preview Without Writing Anything
-
-To see what the installer would do without making any changes:
-
-```bash
-npx -y security-mcp@latest install --dry-run
 ```
 
 ---
@@ -578,7 +422,7 @@ jobs:
 
 ### What the CI Gate Checks
 
-The gate runs **20 checks in parallel** against your diff:
+The gate runs **24 check modules in parallel** against your diff:
 
 | Category | What It Catches |
 | --- | --- |
@@ -601,8 +445,10 @@ The gate runs **20 checks in parallel** against your diff:
 | **AI red-team** | Static + optional dynamic probes against AI endpoints |
 | **Exceptions** | Validates any active security exceptions are non-expired and properly approved |
 | **Baseline regression** | Detects when previously-satisfied controls go missing (BASELINE_REGRESSION HIGH finding injected on regression) |
-| **Deep injection** | XXE, SSTI, prototype pollution, open redirect, NoSQL operator injection, CRLF, unsafe YAML load, deserialization, path traversal, log injection, SSRF (11 new patterns) |
-| **Deep auth** | JWT algorithm confusion, session fixation, OAuth missing state, OAuth open redirect_uri, PKCE not enforced, hardcoded JWT secret, missing rate limit on auth endpoints, plaintext password compare, SAML signature disabled, insecure cookie flags, refresh token not rotated, JWT HS/RS confusion (12 new patterns) |
+| **Deep injection** | 15 patterns — XXE, SSTI, prototype pollution, open redirect, NoSQL injection, CRLF, unsafe YAML load, deserialization, path traversal, log injection, SSRF, command injection, ReDoS, JSONP injection, eval+base64 |
+| **Deep auth** | 16 patterns — JWT alg confusion, session fixation, OAuth missing state, redirect_uri open redirect, PKCE not enforced, hardcoded JWT secret, missing rate limit, plaintext password compare, SAML signature disabled, insecure cookie flags, refresh token not rotated, JWT HS/RS confusion, API key in URL, reset token no expiry, admin route without authz, timing oracle |
+| **Supply chain deep** | 16 patterns — keyloggers, reverse shells, destructive commands (rm -rf, wipers), process.exit+wipe, credential exfiltration, env variable theft, malicious postinstall scripts, dynamic require(), base64-obfuscated exec, cryptomining, sensitive file reads, unpinned dependencies, hidden file writes, DNS exfiltration, clipboard monitoring, obfuscated DOM injection |
+| **Business logic** | 8 patterns — IDOR without ownership check, mass assignment, negative amount bypass, race conditions on balance/quota, hardcoded credentials, missing input validation, unrestricted export endpoints, integer overflow |
 
 ### Customize the Gate Policy
 
@@ -1124,6 +970,8 @@ Edit `.mcp/exceptions/security-exceptions.json`:
 | `SECURITY_GATE_EXCEPTIONS` | `.mcp/exceptions/security-exceptions.json` | Path to exceptions file (must be within project directory) |
 | `SECURITY_GATE_MODE` | `full` | Set to `file_by_file` for scoped per-file scanning |
 | `SECURITY_GATE_TARGETS` | (all changed files) | Comma-separated file paths to restrict the scan surface |
+| `SECURITY_MCP_SHARED_SECRET` | (none) | Authenticates MCP tool callers via constant-time HMAC; enables 3-strike lockout. Generate with `openssl rand -hex 32` |
+| `SECURITY_POLICY_HMAC_KEY` | (none) | Signs the policy file so any tampering is detected at gate startup. Generate with `openssl rand -hex 32` |
 
 ### Integrations (all optional)
 
@@ -1187,7 +1035,7 @@ ls ~/.claude/skills/senior-security-engineer/SKILL.md
 
 **Fix:**
 
-1. Check the config file was written (see editor-specific paths in [Manual Configuration](#manual-configuration-any-mcp-editor))
+1. Check the config file was written (see editor-specific paths in [Installation](#installation))
 2. Fully restart the editor (quit and reopen, not just reload window)
 3. Check Node.js version: `node --version` - must be 20 or higher
 

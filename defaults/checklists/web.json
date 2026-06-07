@@ -25,6 +25,11 @@
     { "id": "web_sast_pass", "description": "SAST scan passed with no CRITICAL findings", "critical": true },
     { "id": "web_secrets_scan", "description": "Secrets scan clean — no credentials or tokens in source code", "critical": true },
     { "id": "web_logging", "description": "Required security events logged — no PII, tokens, or secrets in logs", "critical": false },
-    { "id": "web_staging_verified", "description": "Security headers verified in staging environment with automated check", "critical": false }
+    { "id": "web_staging_verified", "description": "Security headers verified in staging environment with automated check", "critical": false },
+    { "id": "web_dom_clobbering", "description": "DOM clobbering prevention reviewed — named form inputs, anchors, and embeds do not shadow window/document properties used in application logic", "critical": true },
+    { "id": "web_cache_poisoning", "description": "Web cache poisoning prevented — unkeyed headers (X-Forwarded-Host, X-Original-URL, X-Rewrite-URL) are not reflected in cached responses or redirects", "critical": true },
+    { "id": "web_websocket_auth", "description": "WebSocket upgrade validates authentication independently (token in first message or query param signed); does not rely solely on session cookies which bypass CORS", "critical": true },
+    { "id": "web_postmessage_origin", "description": "postMessage listeners validate event.origin against an explicit allowlist before processing any message data — no wildcard '*' as trusted origin", "critical": true },
+    { "id": "web_dangling_markup", "description": "Dangling markup injection reviewed — no user-controlled partial HTML tags output across multi-step page generation; prevents attribute-injection data exfiltration", "critical": false }
   ]
 }

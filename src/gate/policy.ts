@@ -32,6 +32,8 @@ import { runNucleiChecks } from "./checks/nuclei.js";
 import { getCommitHash, loadBaseline, saveBaseline, compareBaseline } from "./baseline.js";
 import { checkInjectionDeep } from "./checks/injection-deep.js";
 import { checkAuthDeep } from "./checks/auth-deep.js";
+import { checkSupplyChainDeep } from "./checks/supply-chain-deep.js";
+import { checkBusinessLogic } from "./checks/business-logic.js";
 
 const PolicySchema = z.object({
   name: z.string(),
@@ -253,7 +255,9 @@ async function runAllChecks(opts: {
     runCiPipelineChecks({ changedFiles }),
     stagingUrl   ? runNucleiChecks({ changedFiles })                        : Promise.resolve([]),
     isApiOrWeb   ? checkInjectionDeep({ changedFiles })                     : Promise.resolve([]),
-    isApiOrWeb   ? checkAuthDeep({ changedFiles })                          : Promise.resolve([])
+    isApiOrWeb   ? checkAuthDeep({ changedFiles })                          : Promise.resolve([]),
+    checkSupplyChainDeep({ changedFiles }),
+    checkBusinessLogic({ changedFiles })
   ]);
 
   const findings: Finding[] = [];

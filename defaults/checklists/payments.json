@@ -20,6 +20,8 @@
     { "id": "pci_chargeback_monitoring", "description": "Chargeback monitoring and alerting configured with defined response process", "critical": false },
     { "id": "pci_data_retention", "description": "Payment data retention policy enforced — data purged per PCI DSS schedule", "critical": true },
     { "id": "pci_ir_playbook", "description": "Payment fraud and PCI breach IR playbooks exist and are current", "critical": true },
-    { "id": "pci_threat_model", "description": "Threat model completed and reviewed for this payment surface change", "critical": true }
+    { "id": "pci_threat_model", "description": "Threat model completed and reviewed for this payment surface change", "critical": true },
+    { "id": "pci_magecart_prevention", "description": "Magecart/digital-skimming prevention: SRI hashes on all checkout page scripts; CSP blocks unauthorized exfiltration destinations; DOM mutation monitoring detects injected form skimmers", "critical": true },
+    { "id": "pci_3ds_enforced", "description": "EMV 3D Secure 2.2+ enforced for card-not-present transactions above risk threshold; step-up authentication triggered by anomaly score; 3DS bypass attempts logged and alerted", "critical": true }
   ]
 }

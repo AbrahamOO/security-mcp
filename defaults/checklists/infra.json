@@ -22,6 +22,11 @@
     { "id": "infra_provenance", "description": "SLSA provenance attestation generated for release artifacts", "critical": false },
     { "id": "infra_threat_model", "description": "Threat model completed and reviewed for this infrastructure change", "critical": true },
     { "id": "infra_zero_trust", "description": "Zero Trust controls applied — explicit authentication for all service-to-service calls", "critical": true },
-    { "id": "infra_ddos_protection", "description": "DDoS protection enabled for public-facing load balancers", "critical": false }
+    { "id": "infra_ddos_protection", "description": "DDoS protection enabled for public-facing load balancers", "critical": false },
+    { "id": "infra_imdsv2_enforced", "description": "IMDSv2 enforced on all EC2/cloud instances (hop limit 1, token required); SSRF to 169.254.169.254 blocked at network layer — prevents cloud metadata credential theft", "critical": true },
+    { "id": "infra_egress_filtering", "description": "Egress network filtering restricts outbound connections to known-good destinations; unexpected outbound traffic triggers alerts within 15 minutes", "critical": true },
+    { "id": "infra_pod_security_standards", "description": "Kubernetes pods run with Restricted security context: runAsNonRoot, readOnlyRootFilesystem, allowPrivilegeEscalation:false, seccomp profile enforced", "critical": true },
+    { "id": "infra_secret_rotation", "description": "All secrets and credentials have automated rotation policy with maximum rotation interval documented and enforced; rotation failures trigger immediate alerts", "critical": true },
+    { "id": "infra_runtime_threat_detection", "description": "Runtime threat detection enabled (Falco, GuardDuty, Defender for Cloud, or equivalent) on all compute; anomalies generate alerts within 15 minutes with documented runbook", "critical": false }
   ]
 }
