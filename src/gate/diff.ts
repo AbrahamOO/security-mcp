@@ -1,4 +1,5 @@
 import { execa } from "execa";
+import { access } from "node:fs/promises";
 
 // Allowlist for git ref strings. Blocks option injection (e.g. --upload-pack=…)
 // and git pathspec magic characters. CWE-88 / MITRE ATT&CK T1059.
@@ -16,13 +17,28 @@ export async function getChangedFiles(opts: { baseRef: string; headRef: string }
   validateRef("baseRef", opts.baseRef);
   validateRef("headRef", opts.headRef);
 
-  // Uses git diff in CI. Assumes checkout has full history for baseRef.
-  const { stdout } = await execa("git", ["diff", "--name-only", `${opts.baseRef}...${opts.headRef}`], {
-    stdio: ["ignore", "pipe", "pipe"]
-  });
+  // Fix 9: --diff-filter=ACMRT excludes deleted-only files; -M detects renames
+  // so renamed files appear as renames rather than delete+add pairs.
+  const { stdout } = await execa(
+    "git",
+    ["diff", "--diff-filter=ACMRT", "-M", "--name-only", `${opts.baseRef}...${opts.headRef}`],
+    { stdio: ["ignore", "pipe", "pipe"] }
+  );
 
-  return stdout
+  const candidates = stdout
     .split("\n")
     .map((s: string) => s.trim())
     .filter(Boolean);
+
+  // Fix 9: skip any file that no longer exists on disk (deleted/moved away edge cases)
+  const results: string[] = [];
+  for (const file of candidates) {
+    try {
+      await access(file);
+      results.push(file);
+    } catch {
+      // file does not exist on disk — skip gracefully
+    }
+  }
+  return results;
 }

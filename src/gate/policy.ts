@@ -55,7 +55,16 @@ const PolicySchema = z.object({
         evidence: z.array(z.string()).default([])
       })
     )
-    .default([])
+    .default([]),
+  // Fix 6: configurable severity blocking list
+  severity_block: z.array(z.string()).optional(),
+  // Fix 7: exceptions config with require_ticket
+  exceptions: z
+    .object({
+      require_ticket: z.boolean().optional(),
+      approval_roles: z.array(z.string()).optional()
+    })
+    .optional()
 });
 
 export type Policy = z.infer<typeof PolicySchema>;
@@ -180,6 +189,9 @@ export async function loadPolicy(policyPath: string): Promise<Policy> {
   return PolicySchema.parse(parsed);
 }
 
+// Fix 8: pattern to detect security-relevant config files that must not get docs-tier bypass
+const SECURITY_CONFIG_RE = /security-exceptions|security-policy|security-tools|\.checkov\.yaml|\.github\/workflows\//i;
+
 /**
  * Classify the change type based on file paths to apply appropriate gate tier.
  */
@@ -189,7 +201,14 @@ function classifyChangeType(files: string[]): ChangeType {
   const allMatch = (pattern: RegExp) => files.every((f) => pattern.test(f));
   const anyMatch = (pattern: RegExp) => files.some((f) => pattern.test(f));
 
-  if (allMatch(/\.(md|txt|rst)$|\/docs\/|README/i)) return "docs";
+  if (allMatch(/\.(md|txt|rst)$|\/docs\/|README/i)) {
+    // Fix 8: override docs tier when security config files are in the changeset
+    if (anyMatch(SECURITY_CONFIG_RE)) {
+      console.warn("[policy] Docs-tier override: security configuration file detected in changed files");
+      return "config";
+    }
+    return "docs";
+  }
   if (anyMatch(/\/payment|\/stripe|\/checkout|\/billing|\/invoice/i)) return "payment";
   if (anyMatch(/\/auth|\/login|\/session|\/token|\/jwt|\/oauth|\/permission/i)) return "auth";
   if (anyMatch(/\.tf$|Dockerfile|\.yaml$|\.yml$|\/k8s\/|\/helm\//)) return "infra";
@@ -217,6 +236,36 @@ function assignRiskSlas(findings: Finding[]): Finding[] {
 
 type ScannerReadiness = Awaited<ReturnType<typeof checkScannerReadiness>>;
 type Surfaces = ReturnType<typeof detectSurfaces>;
+
+// Names aligned with check array order in runAllChecks — used for GATE_CHECK_CRASHED findings
+const CHECK_NAMES = [
+  "required-artifacts",
+  "secrets",
+  "dependencies",
+  "scanner-readiness",
+  "evidence-coverage",
+  "web-nextjs",
+  "api",
+  "infra",
+  "mobile-ios",
+  "mobile-android",
+  "ai",
+  "graphql",
+  "kubernetes",
+  "database",
+  "crypto",
+  "dlp",
+  "sbom",
+  "playbook",
+  "ai-redteam",
+  "runtime",
+  "ci-pipeline",
+  "nuclei",
+  "injection-deep",
+  "auth-deep",
+  "supply-chain-deep",
+  "business-logic"
+] as const;
 
 /** Run every applicable security check in parallel and collect findings. */
 async function runAllChecks(opts: {
@@ -261,9 +310,24 @@ async function runAllChecks(opts: {
   ]);
 
   const findings: Finding[] = [];
-  for (const r of settled) {
-    if (r.status === "fulfilled") findings.push(...r.value);
-    else console.warn("[policy] Check failed:", r.reason);
+  // Fix 5: crashed check modules generate HIGH findings instead of silent console.warn
+  for (let i = 0; i < settled.length; i++) {
+    const r = settled[i];
+    if (r.status === "fulfilled") {
+      findings.push(...r.value);
+    } else {
+      const checkName = CHECK_NAMES[i] ?? `check-${i}`;
+      const errorMessage = r.reason instanceof Error ? r.reason.message : String(r.reason);
+      findings.push({
+        id: "GATE_CHECK_CRASHED",
+        title: "Security check module crashed — coverage gap",
+        severity: "HIGH",
+        evidence: [`Check module: ${checkName}`, `Error: ${errorMessage}`],
+        requiredActions: [
+          `The ${checkName} check module threw an unhandled error: ${errorMessage}. Findings from this module are unavailable, which may constitute a false negative.`
+        ]
+      });
+    }
   }
   return findings;
 }
@@ -410,8 +474,9 @@ export async function runPrGate(opts: {
     ...toolingCoverage
   ];
 
-  // Apply exceptions
-  const exceptionResult = await applySecurityExceptions(rawFindings);
+  // Apply exceptions — Fix 7: pass require_ticket from policy config
+  const requireTicket = policy.exceptions?.require_ticket ?? false;
+  const exceptionResult = await applySecurityExceptions(rawFindings, { requireTicket });
   const controlCoverageWithExceptions = controlCoverage.map((control) => {
     const excepted = exceptionResult.activeControlExceptionIds.includes(control.id);
     if (excepted && control.status === "missing") {
@@ -420,7 +485,8 @@ export async function runPrGate(opts: {
     return control;
   });
 
-  const baseFindings = [...exceptionResult.findings, ...exceptionResult.exceptionFindings];
+  // Include exception warnings (e.g. CI_EXCEPTIONS_IN_LOCAL_SCAN, EXCEPTIONS_FILE_UNSIGNED) in findings
+  const baseFindings = [...exceptionResult.findings, ...exceptionResult.exceptionFindings, ...exceptionResult.warnings];
 
   // Confidence metrics
   const cm = computeConfidence(controlCoverageWithExceptions, scannerReadiness);
@@ -434,7 +500,9 @@ export async function runPrGate(opts: {
     baselineDiff = br.diff;
   }
 
-  const status = effectiveFindings.some((f) => f.severity === "HIGH" || f.severity === "CRITICAL")
+  // Fix 6: read severity_block from policy instead of hardcoding HIGH/CRITICAL
+  const blockedSeverities: string[] = policy.severity_block ?? ["HIGH", "CRITICAL"];
+  const status = effectiveFindings.some((f) => blockedSeverities.includes(f.severity))
     ? "FAIL" : "PASS";
 
   const result: GateResult = {

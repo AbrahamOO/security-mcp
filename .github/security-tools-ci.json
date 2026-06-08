@@ -1,5 +1,6 @@
 {
+  "_comment": "CI self-scan uses no external scanners to avoid circular dependency; fail_closed=true ensures check module crashes are surfaced",
   "version": "1.0.0",
-  "fail_closed": false,
+  "fail_closed": true,
   "scanners": {}
 }

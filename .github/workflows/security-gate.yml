@@ -13,6 +13,7 @@ permissions:
 
 jobs:
   security-gate:
+    timeout-minutes: 15
     runs-on: ubuntu-latest
 
     steps:
@@ -63,14 +64,15 @@ jobs:
         with:
           config: "p/owasp-top-ten"
 
-      # 4) IaC scan — continue-on-error is intentional: repo has no Terraform/K8s today.
-      #    Remove continue-on-error if IaC files are added so findings block merges.
+      # 4) IaC scan — only runs (and gates) when IaC files are present in the repo.
+      #    continue-on-error removed: when IaC files exist, Checkov failures now block merges.
       - name: Checkov
+        if: hashFiles('**/*.tf', '**/*.yaml', 'k8s/**') != ''
         uses: bridgecrewio/checkov-action@4048c972aae68d0b983a48bb3479aab2d877b898  # bridgecrewio/checkov-action@v12
         with:
           directory: .
           framework: terraform,kubernetes,cloudformation
-        continue-on-error: true
+        continue-on-error: false
 
       # 5) Your deterministic policy gate (fails PR if HIGH/CRITICAL findings)
       - name: Run policy gate
