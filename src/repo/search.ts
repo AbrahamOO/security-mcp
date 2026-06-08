@@ -11,11 +11,30 @@ type SearchOptions = {
 
 // Maximum allowed regex pattern length. Longer patterns significantly raise
 // the risk of catastrophic backtracking (ReDoS). CWE-1333.
-const MAX_REGEX_LEN = 256;
+const MAX_REGEX_LEN = 500;
 
-// Detects nested quantifiers — the most common ReDoS trigger — without being
-// overly complex itself. Matches patterns like (a+)+, (a*)*, (\w+)+.
-const NESTED_QUANTIFIER_RE = /\([^)]*[+*][^)]*\)[+*?{]/;
+/**
+ * Detects regex patterns that risk catastrophic backtracking (ReDoS).
+ * Covers nested quantifiers, ambiguous alternation with outer quantifiers,
+ * counted repetition inside groups, and overlapping wildcard groups.
+ * CWE-1333 / MITRE ATT&CK T1499.
+ */
+function isCatastrophicRegex(pattern: string): boolean {
+	// Original: nested quantifiers like (a+)+, (a*)*, (\w+)+
+	if (/\([^)]*[+*][^)]*\)[+*?{]/.test(pattern)) return true;
+
+	// Ambiguous alternation with outer quantifier: (a|aa)+ or (a|b)+
+	if (/\([^)]*\|[^)]*\)[+*]/.test(pattern)) return true;
+
+	// Counted repetition with nested group: (a{2,})+ or (a{1,3})+
+	if (/\([^)]*\{[^)]*\}[^)]*\)[+*]/.test(pattern)) return true;
+
+	// Overlapping alternatives: (.+)+ or (\w+)+
+	if (/\(\.[+*][^)]*\)[+*]/.test(pattern)) return true;
+	if (/\(\\[wWdDsS][+*][^)]*\)[+*]/.test(pattern)) return true;
+
+	return false;
+}
 
 /**
  * Validates and compiles a user-supplied regex string.
@@ -27,7 +46,7 @@ function compileUserRegex(pattern: string): RegExp {
 	if (pattern.length > MAX_REGEX_LEN) {
 		throw new Error(`Regex pattern too long (max ${MAX_REGEX_LEN} chars)`);
 	}
-	if (NESTED_QUANTIFIER_RE.test(pattern)) {
+	if (isCatastrophicRegex(pattern)) {
 		throw new Error("Regex pattern contains nested quantifiers that risk catastrophic backtracking (ReDoS)");
 	}
 	return new RegExp(pattern, "i"); // throws SyntaxError on invalid patterns
@@ -63,6 +82,7 @@ function scanLines(
 export async function searchRepo(opts: SearchOptions): Promise<RepoMatch[]> {
 	const files = await fg(["**/*.*"], {
 		dot: true,
+		followSymbolicLinks: false,  // Prevent glob-based symlink traversal outside workspace root.
 		ignore: [
 			"**/node_modules/**",
 			"**/.git/**",

@@ -603,6 +603,50 @@ async function checkHardcodedIpAddress(): Promise<Finding | null> {
   };
 }
 
+/**
+ * GitHub Actions pinning check — detects actions pinned to mutable refs (tags/branches)
+ * instead of immutable commit SHAs (CWE-1357 / ATT&CK T1195.002).
+ */
+async function checkGithubActionsPinning(): Promise<Finding | null> {
+  // Search workflow files for 'uses:' with any ref — we filter down to mutable refs below.
+  // This broad pattern catches tags with or without a 'v' prefix (e.g. @v4, @0.35.0),
+  // branch names (main, master, latest), and composite release tags (ubuntu-20.04).
+  const hits = await allSearch(
+    String.raw`uses:\s+[\w/.-]+@[^\s#]+`
+  );
+  // Only flag files in .github/workflows/
+  const workflowHits = hits.filter(
+    (h) => /\.github[/\\]workflows[/\\][^/\\]+\.ya?ml$/.test(h.file)
+  );
+  // Exclude lines that are already pinned to an EXACTLY 40-char lowercase hex commit SHA.
+  // The negative lookahead (?![0-9a-f]) ensures we don't accept 41+ char strings that
+  // merely start with 40 valid hex characters — those are NOT valid SHA-1 digests.
+  const mutableRefRe = /uses:\s+[\w/.-]+@([0-9a-f]{40})(?![0-9a-f])/;
+  const unpinned = workflowHits.filter((h) => !mutableRefRe.test(h.preview));
+  if (!unpinned.length) return null;
+
+  // Extract the action ref for display
+  const evidence = unpinned.slice(0, 10).map((h) => {
+    const m = /uses:\s+([\w/.-]+)@(\S+)/.exec(h.preview);
+    const ref = m ? `${m[1]}@${m[2]}` : h.preview.trim();
+    return `${h.file}:${h.line}: ${ref}`;
+  });
+
+  return {
+    id: "GITHUB_ACTIONS_MUTABLE_REF",
+    title: "GitHub Actions workflow uses a mutable ref (tag/branch) instead of a pinned commit SHA — supply chain risk (CWE-1357)",
+    severity: "HIGH",
+    evidence,
+    files: [...new Set(unpinned.slice(0, 10).map((h) => h.file))],
+    requiredActions: [
+      "Pin each GitHub Action to a specific commit SHA instead of a tag or branch name.",
+      "ATT&CK T1195.002 — a compromised action repository can push malicious code to a tag; a SHA pin is immutable.",
+      "Fix: uses: actions/checkout@v4  →  uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2",
+      "Use `pin-github-action` (https://github.com/mheap/pin-github-action) or Dependabot to automate SHA pinning."
+    ]
+  };
+}
+
 export async function checkSupplyChainDeep(_opts: { changedFiles: string[] }): Promise<Finding[]> {
   try {
     const results = await Promise.all([
@@ -633,6 +677,8 @@ export async function checkSupplyChainDeep(_opts: { changedFiles: string[] }): P
       checkChildProcessExecShell(),
       checkWeakCryptoHash(),
       checkHardcodedIpAddress(),
+      // ── GitHub Actions supply chain ──
+      checkGithubActionsPinning(),
     ]);
     return results.filter((f): f is Finding => f !== null);
   } catch (err) {

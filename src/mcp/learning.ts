@@ -6,7 +6,8 @@
  * Persists to .mcp/memory/patterns.json (per-project, gitignore-safe).
  */
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { createHash, timingSafeEqual } from "node:crypto";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 
@@ -16,9 +17,71 @@ import { z } from "zod";
 
 const MEMORY_DIR = join(".mcp", "memory");
 const PATTERNS_FILE = join(MEMORY_DIR, "patterns.json");
-const MIN_SAMPLE_SIZE = 3;       // need ≥3 outcomes before routing is trusted
+const PATTERNS_HASH_FILE = join(MEMORY_DIR, "patterns.sha256");
+const MIN_SAMPLE_SIZE = 10;      // need ≥10 outcomes before routing is trusted (was 3 — too easy to manipulate)
 const HIGH_CONFIDENCE = 0.85;   // route automatically above this success rate
 const LOW_CONFIDENCE = 0.40;    // escalate below this success rate
+
+// ---------------------------------------------------------------------------
+// Suppression safety caps (OWASP LLM04 / LLM08 — Excessive Agency)
+// ---------------------------------------------------------------------------
+
+/**
+ * Maximum number of distinct finding IDs that may be simultaneously suppressed
+ * via false-positive rate. Prevents an attacker from suppressing ALL finding
+ * types by flooding the learning engine with false-positive reports across many IDs.
+ * MITRE ATLAS AML.T0043 (Craft Adversarial Data) mitigation.
+ */
+const MAX_SUPPRESSED_FINDING_TYPES = 5;
+
+/**
+ * Maximum cumulative false-positive count any single finding ID may accumulate
+ * before further FP submissions are rejected regardless of rate-limit window.
+ * Prevents an attacker who controls multiple agents from slowly poisoning a
+ * finding type by spreading FP reports across many hourly windows.
+ */
+const MAX_FP_COUNT_PER_FINDING = 20;
+
+// ---------------------------------------------------------------------------
+// Rate limiting — false-positive submissions per finding
+// ---------------------------------------------------------------------------
+
+const _falsePositiveSubmissions = new Map<string, { count: number; windowStart: number; cumulative: number }>();
+const FP_RATE_LIMIT = 5;      // max 5 false-positive reports per finding per window
+const FP_WINDOW_MS = 3_600_000; // 1 hour window
+
+/**
+ * Returns true (allowed) only when:
+ *   1. The per-hour sliding window has not been exhausted.
+ *   2. The cumulative all-time FP count for this finding has not reached MAX_FP_COUNT_PER_FINDING.
+ * CWE-799 / OWASP LLM04 (Model Denial of Service via learning system abuse).
+ */
+function checkFalsePositiveRateLimit(findingId: string): { allowed: boolean; reason?: string } {
+  const now = Date.now();
+  const entry = _falsePositiveSubmissions.get(findingId);
+
+  if (!entry || now - entry.windowStart > FP_WINDOW_MS) {
+    // Check cumulative cap even when opening a new window.
+    const cumulative = entry?.cumulative ?? 0;
+    if (cumulative >= MAX_FP_COUNT_PER_FINDING) {
+      return { allowed: false, reason: `Cumulative false-positive cap reached for finding ${findingId} (max ${MAX_FP_COUNT_PER_FINDING} all-time). Investigate scanner accuracy before submitting more.` };
+    }
+    _falsePositiveSubmissions.set(findingId, { count: 1, windowStart: now, cumulative: cumulative + 1 });
+    return { allowed: true };
+  }
+
+  if (entry.cumulative >= MAX_FP_COUNT_PER_FINDING) {
+    return { allowed: false, reason: `Cumulative false-positive cap reached for finding ${findingId} (max ${MAX_FP_COUNT_PER_FINDING} all-time). Investigate scanner accuracy before submitting more.` };
+  }
+
+  if (entry.count >= FP_RATE_LIMIT) {
+    return { allowed: false, reason: `Rate limit exceeded for false-positive submissions on ${findingId}. Max ${FP_RATE_LIMIT} per hour per finding.` };
+  }
+
+  entry.count++;
+  entry.cumulative++;
+  return { allowed: true };
+}
 
 // ---------------------------------------------------------------------------
 // Schemas
@@ -91,6 +154,25 @@ async function ensureMemoryDir(): Promise<void> {
 async function loadStore(): Promise<PatternsStore> {
   try {
     const raw = await readFile(PATTERNS_FILE, "utf-8");
+
+    // Integrity check: compare SHA-256 of file content against stored sidecar hash.
+    // If the sidecar exists and the hash mismatches, the file may have been tampered with.
+    try {
+      const storedHash = (await readFile(PATTERNS_HASH_FILE, "utf-8")).trim();
+      const actualHash = createHash("sha256").update(raw).digest("hex");
+      // Use timingSafeEqual to prevent timing-oracle inference of the stored hash (CWE-208).
+      const storedBuf = Buffer.from(storedHash, "hex");
+      const actualBuf = Buffer.from(actualHash, "hex");
+      const hashMatch = storedBuf.length === actualBuf.length && timingSafeEqual(storedBuf, actualBuf);
+      if (!hashMatch) {
+        console.warn("[security-mcp] Agent memory patterns.json may have been tampered with. Resetting to empty state.");
+        return { version: 1, updatedAt: new Date().toISOString(), patterns: {} };
+      }
+    } catch (hashErr: any) {
+      // Sidecar doesn't exist yet (first run after upgrade) — allow and create on next save.
+      if (hashErr.code !== "ENOENT") throw hashErr;
+    }
+
     return JSON.parse(raw) as PatternsStore;
   } catch {
     return { version: 1, updatedAt: new Date().toISOString(), patterns: {} };
@@ -100,7 +182,19 @@ async function loadStore(): Promise<PatternsStore> {
 async function saveStore(store: PatternsStore): Promise<void> {
   await ensureMemoryDir();
   store.updatedAt = new Date().toISOString();
-  await writeFile(PATTERNS_FILE, JSON.stringify(store, null, 2) + "\n", "utf-8");
+  const content = JSON.stringify(store, null, 2) + "\n";
+  const hash = createHash("sha256").update(content).digest("hex");
+
+  // Write patterns + sidecar atomically: write to temp files first, then rename
+  // both into place. This prevents a TOCTOU window where an attacker could replace
+  // patterns.json between the two writes and pass integrity on the next load.
+  // CWE-367 (TOCTOU Race Condition) / CAPEC-29.
+  const tmpPatterns = PATTERNS_FILE + ".tmp";
+  const tmpHash    = PATTERNS_HASH_FILE + ".tmp";
+  await writeFile(tmpPatterns, content, { encoding: "utf-8", mode: 0o600 });
+  await writeFile(tmpHash, hash + "\n", { encoding: "utf-8", mode: 0o600 });
+  await rename(tmpPatterns, PATTERNS_FILE);
+  await rename(tmpHash, PATTERNS_HASH_FILE);
 }
 
 // ---------------------------------------------------------------------------
@@ -111,8 +205,21 @@ async function saveStore(store: PatternsStore): Promise<void> {
  * Record the outcome of an agent resolving (or failing to resolve) a finding.
  * Called after every agent completes work on a specific finding.
  */
-export async function recordOutcome(outcome: Outcome): Promise<{ recorded: boolean; pattern: PatternRecord }> {
+export async function recordOutcome(outcome: Outcome): Promise<{ recorded: boolean; pattern: PatternRecord; warning?: string }> {
   const validated = OutcomeSchema.parse(outcome);
+
+  // Rate-limit false-positive submissions to prevent learning-system abuse (OWASP LLM04 / CWE-799).
+  if (validated.falsePositive) {
+    const rlCheck = checkFalsePositiveRateLimit(validated.findingId);
+    if (!rlCheck.allowed) {
+      return {
+        recorded: false,
+        pattern: {} as PatternRecord,
+        warning: rlCheck.reason ?? "Rate limit exceeded for false-positive submissions on this finding."
+      };
+    }
+  }
+
   const store = await loadStore();
 
   const existing = store.patterns[validated.findingId] ?? {
@@ -183,10 +290,36 @@ export async function recordOutcome(outcome: Outcome): Promise<{ recorded: boole
     agentStats: existing.agentStats
   };
 
+  // Global suppression cap: count how many distinct finding IDs currently have
+  // falsePositiveRate > 0.8 AND sampleSize >= MIN_SAMPLE_SIZE (i.e., are "suppressed").
+  // If this update would push us over MAX_SUPPRESSED_FINDING_TYPES, reject it.
+  // Prevents an attacker from suppressing ALL finding types simultaneously
+  // (OWASP LLM08 — Excessive Agency / MITRE ATLAS AML.T0043).
+  if (validated.falsePositive && updated.falsePositiveRate > 0.8 && updated.sampleSize >= MIN_SAMPLE_SIZE) {
+    const suppressedCount = Object.values(store.patterns).filter(
+      (p) => p.findingId !== validated.findingId && p.falsePositiveRate > 0.8 && p.sampleSize >= MIN_SAMPLE_SIZE
+    ).length;
+    if (suppressedCount >= MAX_SUPPRESSED_FINDING_TYPES) {
+      console.error(`[security-mcp] SECURITY_ALERT: Global suppression cap reached. ${suppressedCount} finding types already suppressed. Rejecting FP update for ${validated.findingId}. Possible learning-system attack.`);
+      return {
+        recorded: false,
+        pattern: updated,
+        warning: `GLOBAL_SUPPRESSION_CAP_EXCEEDED: ${suppressedCount} finding types are already suppressed (max ${MAX_SUPPRESSED_FINDING_TYPES}). Investigate potential learning-system manipulation before submitting more false-positives.`
+      };
+    }
+  }
+
   store.patterns[validated.findingId] = updated;
   await saveStore(store);
 
-  return { recorded: true, pattern: updated };
+  // Anomaly detection: flag unusually high false-positive rate for this finding.
+  let warning: string | undefined;
+  if (updated.sampleSize > MIN_SAMPLE_SIZE && updated.falsePositiveRate > 0.8) {
+    warning = `LEARNING_ANOMALY_HIGH_FP_RATE: Finding ${validated.findingId} has a false-positive rate of ${Math.round(updated.falsePositiveRate * 100)}% across ${updated.sampleSize} samples. Investigate scanner accuracy.`;
+    console.warn(`[security-mcp] ${warning}`);
+  }
+
+  return { recorded: true, pattern: updated, ...(warning ? { warning } : {}) };
 }
 
 /**

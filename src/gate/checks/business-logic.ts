@@ -44,25 +44,91 @@ async function checkMassAssignment(): Promise<Finding | null> {
   };
 }
 
-async function checkIdorDirect(): Promise<Finding | null> {
+async function checkIdorDirect(): Promise<Finding[]> {
+  const findings: Finding[] = [];
+
+  // Original single-line IDOR check
   const hits = await codeSearch(
     String.raw`(?:findById|findOne|findByPk|findUnique|getById|where\s*:\s*\{\s*id)\s*\(\s*(?:req\.|params\.|query\.|body\.)(?:id|userId|accountId|recordId|documentId|resourceId)\b`
   );
-  const safeRe = /userId\s*===|\.userId\s*==|currentUser|req\.user\.|session\.userId|ownership|authorized|canAccess|hasPermission/;
+  // req\.user\?? covers both req.user.id and req.user?.id (optional chaining ownership pattern)
+  const safeRe = /userId\s*===|\.userId\s*==|currentUser|req\.user\??\.id|session\.userId|ownership|authorized|canAccess|hasPermission/;
   const unsafe = hits.filter((h) => !safeRe.test(h.preview));
-  if (!unsafe.length) return null;
-  return {
-    id: "IDOR_DIRECT_ACCESS",
-    title: "Direct object lookup from user-supplied ID without ownership check — IDOR (CWE-639 / OWASP API1)",
-    severity: "HIGH",
-    evidence: toEvidence(unsafe),
-    files: toFiles(unsafe),
-    requiredActions: [
-      "Always verify that the authenticated user owns or has permission to access the requested resource.",
-      "CWE-639 — IDOR allows any authenticated user to access any other user's data by changing the ID in the request.",
-      "Fix: const record = await Model.findById(req.params.id); if (record.userId !== req.user.id) return res.status(403).end();"
-    ]
-  };
+  if (unsafe.length > 0) {
+    findings.push({
+      id: "IDOR_DIRECT_ACCESS",
+      title: "Direct object lookup from user-supplied ID without ownership check — IDOR (CWE-639 / OWASP API1)",
+      severity: "HIGH",
+      evidence: toEvidence(unsafe),
+      files: toFiles(unsafe),
+      requiredActions: [
+        "Always verify that the authenticated user owns or has permission to access the requested resource.",
+        "CWE-639 — IDOR allows any authenticated user to access any other user's data by changing the ID in the request.",
+        "Fix: const record = await Model.findById(req.params.id); if (record.userId !== req.user.id) return res.status(403).end();"
+      ]
+    });
+  }
+
+  // Two-pass multi-line IDOR: find user-supplied ID, then check if DB lookup uses it without ownership
+  const idSourceHits = await codeSearch(
+    String.raw`(?:req\.params\.\w+|req\.query\.\w+|args\.\w+)`
+  );
+  const dbLookupHits = await codeSearch(
+    String.raw`(?:findById|findOne|findByPk|findUnique|findFirst|getById)\s*\(`
+  );
+
+  const idsByFile = new Map<string, Array<{ line: number; varName: string; preview: string }>>();
+  for (const h of idSourceHits) {
+    const varMatch = /(?:const|let|var)\s+(\w+)\s*=/.exec(h.preview);
+    const varName = varMatch?.[1] ?? "";
+    if (!idsByFile.has(h.file)) idsByFile.set(h.file, []);
+    idsByFile.get(h.file)!.push({ line: h.line, varName, preview: h.preview });
+  }
+
+  const toctouIdorHits: Array<{ file: string; line: number; preview: string }> = [];
+  for (const db of dbLookupHits) {
+    if (safeRe.test(db.preview)) continue;
+    const idSources = idsByFile.get(db.file) ?? [];
+    for (const src of idSources) {
+      const lineDiff = db.line - src.line;
+      if (lineDiff >= 0 && lineDiff <= 15 && src.varName && db.preview.includes(src.varName)) {
+        toctouIdorHits.push({ file: db.file, line: db.line, preview: `id@${src.line}→lookup@${db.line}: ${db.preview.trim()}` });
+        break;
+      }
+    }
+  }
+
+  // GraphQL resolver IDOR: resolve functions using args.id without context.user.id check
+  const resolverHits = await codeSearch(
+    String.raw`resolve\s*:\s*(?:async\s*)?\([^)]*\)\s*=>\s*\{`
+  );
+  const resolverIdorHits = resolverHits.filter((h) => {
+    return /args\.\w+/.test(h.preview) && !safeRe.test(h.preview) && !/context\.user\.id/.test(h.preview);
+  });
+
+  // Prisma findFirst without userId in where clause
+  const prismaHits = await codeSearch(
+    String.raw`\.findFirst\s*\(\s*\{[^}]*where\s*:\s*\{[^}]*id\s*:`
+  );
+  const prismaIdorHits = prismaHits.filter((h) => !/userId\s*:/.test(h.preview));
+
+  const multiLineIdorHits = [...toctouIdorHits, ...resolverIdorHits, ...prismaIdorHits];
+  if (multiLineIdorHits.length > 0) {
+    findings.push({
+      id: "IDOR_MULTI_LINE",
+      title: "User-supplied ID reaches DB lookup without ownership check across multiple lines — IDOR (CWE-639)",
+      severity: "HIGH",
+      evidence: multiLineIdorHits.slice(0, 10).map((h) => `${h.file}:${h.line}:${h.preview}`),
+      files: [...new Set(multiLineIdorHits.slice(0, 10).map((h) => h.file))],
+      requiredActions: [
+        "Verify ownership before returning any record fetched by a user-supplied ID.",
+        "CWE-639 — multi-line IDOR occurs when the ID is extracted early, then used in a DB call several lines later without an intermediate ownership check.",
+        "Fix: add userId to the where clause (Prisma: { where: { id: args.id, userId: ctx.user.id } }) or check after fetch."
+      ]
+    });
+  }
+
+  return findings;
 }
 
 async function checkNegativeAmountBypass(): Promise<Finding | null> {
@@ -87,25 +153,119 @@ async function checkNegativeAmountBypass(): Promise<Finding | null> {
   };
 }
 
-async function checkRaceConditionBalance(): Promise<Finding | null> {
-  const hits = await codeSearch(
+async function checkRaceConditionBalance(): Promise<Finding[]> {
+  const findings: Finding[] = [];
+  const safeRe = /transaction|atomic|\$inc|increment.*atomic|select.*for\s+update|WITH\s+LOCK|optimisticLock|version/i;
+
+  // Single-line check (original)
+  const singleLineHits = await codeSearch(
     String.raw`(?:findOne|findById|findUnique)[^;]*(?:balance|quota|inventory|stock|seats|credits)[^;]*(?:update|save|increment|decrement)`
   );
-  const safeRe = /transaction|atomic|$inc|increment.*atomic|select.*for\s+update|WITH\s+LOCK|optimisticLock|version/i;
-  const unsafe = hits.filter((h) => !safeRe.test(h.preview));
-  if (!unsafe.length) return null;
-  return {
-    id: "RACE_CONDITION_BALANCE",
-    title: "Read-then-write on balance/quota without atomic operation — TOCTOU race condition (CWE-362)",
-    severity: "HIGH",
-    evidence: toEvidence(unsafe),
-    files: toFiles(unsafe),
-    requiredActions: [
-      "Use atomic database operations (SQL FOR UPDATE, MongoDB $inc, Prisma transactions) to prevent race conditions.",
-      "CWE-362 — concurrent requests reading the same balance and both decrementing can overdraft accounts or oversell inventory.",
-      "Fix: await db.$transaction([db.account.update({ where: { id }, data: { balance: { decrement: amount } } })]);"
-    ]
-  };
+  const unsafeSingle = singleLineHits.filter((h) => !safeRe.test(h.preview));
+  if (unsafeSingle.length > 0) {
+    findings.push({
+      id: "RACE_CONDITION_BALANCE",
+      title: "Read-then-write on balance/quota without atomic operation — TOCTOU race condition (CWE-362)",
+      severity: "HIGH",
+      evidence: toEvidence(unsafeSingle),
+      files: toFiles(unsafeSingle),
+      requiredActions: [
+        "Use atomic database operations (SQL FOR UPDATE, MongoDB $inc, Prisma transactions) to prevent race conditions.",
+        "CWE-362 — concurrent requests reading the same balance and both decrementing can overdraft accounts or oversell inventory.",
+        "Fix: await db.$transaction([db.account.update({ where: { id }, data: { balance: { decrement: amount } } })]);"
+      ]
+    });
+  }
+
+  // Two-pass multi-line TOCTOU: find read operations, capture variable, find writes near them
+  const readHits = await codeSearch(
+    String.raw`(?:findOne|findById|findUnique|getBalance|getAccount|fs\.access|fs\.stat|fs\.exists)\s*\(`
+  );
+  const writeHits = await codeSearch(
+    String.raw`(?:\.update\s*\(|\.save\s*\(|\.increment\s*\(|\.decrement\s*\(|fs\.unlink\s*\(|fs\.write\s*\(|fs\.rename\s*\()`
+  );
+
+  const readByFile = new Map<string, Array<{ line: number; varName: string; preview: string }>>();
+  for (const rh of readHits) {
+    if (safeRe.test(rh.preview)) continue;
+    const varMatch = /(?:const|let|var)\s+(\w+)\s*=/.exec(rh.preview);
+    const varName = varMatch?.[1] ?? "";
+    if (!readByFile.has(rh.file)) readByFile.set(rh.file, []);
+    readByFile.get(rh.file)!.push({ line: rh.line, varName, preview: rh.preview });
+  }
+
+  const toctouHits: Array<{ file: string; line: number; preview: string }> = [];
+  for (const wh of writeHits) {
+    if (safeRe.test(wh.preview)) continue;
+    const reads = readByFile.get(wh.file) ?? [];
+    for (const r of reads) {
+      const lineDiff = wh.line - r.line;
+      if (lineDiff > 0 && lineDiff <= 15 && r.varName && wh.preview.includes(r.varName)) {
+        toctouHits.push({ file: wh.file, line: wh.line, preview: `read@${r.line}→write@${wh.line}: ${wh.preview.trim()}` });
+        break;
+      }
+    }
+  }
+
+  if (toctouHits.length > 0) {
+    findings.push({
+      id: "RACE_CONDITION_TOCTOU",
+      title: "Multi-line read-then-write without SELECT FOR UPDATE, transaction, or mutex — TOCTOU race condition (CWE-362)",
+      severity: "HIGH",
+      evidence: toctouHits.slice(0, 10).map((h) => `${h.file}:${h.line}:${h.preview}`),
+      files: [...new Set(toctouHits.slice(0, 10).map((h) => h.file))],
+      requiredActions: [
+        "Wrap read-then-write sequences in a database transaction with SELECT FOR UPDATE to prevent concurrent modification.",
+        "CWE-362 — TOCTOU allows two concurrent requests to read the same state and both apply writes based on stale data.",
+        "Fix: await db.$transaction(async (tx) => { const r = await tx.account.findUnique(...); await tx.account.update(...); });"
+      ]
+    });
+  }
+
+  // File system TOCTOU: fs.access/stat followed by fs.unlink/open/write within 10 lines without locking
+  const fsReadHits = await codeSearch(
+    String.raw`fs\.(?:access|stat|exists)\s*\(`
+  );
+  const fsWriteHits = await codeSearch(
+    String.raw`fs\.(?:unlink|open|rename|writeFile|writeFileSync)\s*\(`
+  );
+
+  const fsReadByFile = new Map<string, Array<{ line: number; preview: string }>>();
+  for (const rh of fsReadHits) {
+    if (!fsReadByFile.has(rh.file)) fsReadByFile.set(rh.file, []);
+    fsReadByFile.get(rh.file)!.push({ line: rh.line, preview: rh.preview });
+  }
+
+  const fsLockRe = /flock|lockFile|lock\s*\(|exclusive/i;
+  const fsToctouHits: Array<{ file: string; line: number; preview: string }> = [];
+  for (const wh of fsWriteHits) {
+    if (fsLockRe.test(wh.preview)) continue;
+    const reads = fsReadByFile.get(wh.file) ?? [];
+    for (const r of reads) {
+      const lineDiff = wh.line - r.line;
+      if (lineDiff > 0 && lineDiff <= 10) {
+        fsToctouHits.push({ file: wh.file, line: wh.line, preview: `fs.check@${r.line}→fs.write@${wh.line}: ${wh.preview.trim()}` });
+        break;
+      }
+    }
+  }
+
+  if (fsToctouHits.length > 0) {
+    findings.push({
+      id: "FILESYSTEM_TOCTOU",
+      title: "fs.access/fs.stat followed by fs.write/fs.unlink without file locking — filesystem TOCTOU (CWE-362)",
+      severity: "HIGH",
+      evidence: fsToctouHits.slice(0, 10).map((h) => `${h.file}:${h.line}:${h.preview}`),
+      files: [...new Set(fsToctouHits.slice(0, 10).map((h) => h.file))],
+      requiredActions: [
+        "Use atomic file operations (open with O_EXCL flag, or a file-locking library) instead of check-then-act patterns.",
+        "CWE-362 — between fs.access() and fs.unlink/fs.write, another process can modify or replace the file.",
+        "Fix: use fs.open(path, 'wx') which atomically creates-or-fails, or proper advisory locking via proper-lockfile."
+      ]
+    });
+  }
+
+  return findings;
 }
 
 async function checkHardcodedCredentials(): Promise<Finding | null> {
@@ -265,9 +425,129 @@ async function checkHardcodedDbUrlPassword(): Promise<Finding | null> {
   };
 }
 
+async function checkFloatMonetaryArithmetic(): Promise<Finding | null> {
+  const hitsA = await codeSearch(
+    String.raw`(?:price|amount|total|balance|cost|fee|charge)\s*\*\s*(?:\d+\.\d+|[^;]*(?:rate|percent|factor))`
+  );
+  const hitsB = await codeSearch(
+    String.raw`parseFloat\s*\([^)]*(?:price|amount|total|balance|cost|fee)`
+  );
+  // Unary + coercion: +req.body.price, +req.query.amount — same float risk as parseFloat()
+  const hitsD = await codeSearch(
+    String.raw`(?<![+\w])\+\s*req\.(?:body|query|params)\.\w*(?:price|amount|total|balance|cost|fee)\w*`
+  );
+  const hitsC = await codeSearch(
+    String.raw`\.toFixed\s*\(\s*[02]\s*\)`
+  );
+  const hits = [...hitsA, ...hitsB, ...hitsC, ...hitsD];
+  const safeRe = /BigInt|bigint|Decimal|decimal\.js|dinero|bignumber|integer.*cent|cent.*integer|\*\s*100|Math\.round.*100/i;
+  const unsafe = hits.filter((h) => !safeRe.test(h.preview));
+  if (!unsafe.length) return null;
+  return {
+    id: "MONETARY_FLOAT_ARITHMETIC",
+    title: "Floating-point arithmetic on monetary values — rounding errors in financial calculations (CWE-681)",
+    severity: "HIGH",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    requiredActions: [
+      "Floating-point arithmetic on monetary values can cause rounding errors. Use integer-cent representation (multiply by 100, work in integers, divide at display time) or a decimal library.",
+      "CWE-681 — float imprecision can cause under- or over-charging by fractional amounts that accumulate at scale.",
+      "Fix: const amountCents = Math.round(price * 100); // work in integers, or use: import Decimal from 'decimal.js'; new Decimal(price).times(rate)"
+    ]
+  };
+}
+
+async function checkHttpParamPollution(): Promise<Finding | null> {
+  const hitsA = await codeSearch(
+    String.raw`(?:parseInt|parseFloat|Number)\s*\(\s*req\.(?:query|body)\.\w+`
+  );
+  const hitsB = await codeSearch(
+    String.raw`if\s*\(\s*req\.(?:query|body)\.\w+\s*(?:===|!==|>|<|>=|<=)`
+  );
+  const hits = [...hitsA, ...hitsB];
+  const safeRe = /Array\.isArray|isArray\s*\(|typeof.*string|schema\.parse|validate\s*\(/;
+  const unsafe = hits.filter((h) => !safeRe.test(h.preview));
+  if (!unsafe.length) return null;
+  return {
+    id: "HTTP_PARAM_POLLUTION_RISK",
+    title: "Request parameter used in arithmetic/comparison without Array.isArray guard — HTTP parameter pollution (CWE-20)",
+    severity: "MEDIUM",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    requiredActions: [
+      "Request parameters may be arrays when sent as duplicate query params (e.g., ?amount=10&amount=-500). Validate scalar vs array type before use in business logic.",
+      "CWE-20 — HTTP parameter pollution allows sending duplicate params that become arrays, bypassing single-value validations.",
+      "Fix: const raw = req.query.amount; if (Array.isArray(raw)) return res.status(400).end(); const amount = Number(raw);"
+    ]
+  };
+}
+
+async function checkVoucherReplay(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`(?:coupon|voucher|promo|gift.*card|redeem|discount.*code)`
+  );
+  // Require the idempotency signal to be a READ/CHECK, not just an assignment.
+  // "voucher.usedAt = new Date()" set in-memory before persistence does NOT prevent replay —
+  // two concurrent requests both read usedAt=null, both pass the check, then both write.
+  // Safe patterns: conditional checks (if/throw/return on usedAt), DB-level unique constraints,
+  // or idempotency key lookups. Pure assignment lines are excluded via negative lookahead.
+  const idempotencyRe = /(?:if|throw|return|where|find|unique|create).*(?:usedAt|redeemed|usageCount|redemptionCount|idempotencyKey)|(?:usedAt|redeemed).*(?:===|!==|==|!=|throw|return)|unique.*code|code.*unique/i;
+  const unsafe = hits.filter((h) => !idempotencyRe.test(h.preview));
+  if (!unsafe.length) return null;
+  return {
+    id: "VOUCHER_REPLAY_RISK",
+    title: "Voucher/coupon redemption without idempotency check — replay attack enables unlimited reuse (CWE-384)",
+    severity: "HIGH",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    requiredActions: [
+      "Voucher/coupon redemption without idempotency check enables replay. Track redemptions with a unique constraint on code+userId.",
+      "CWE-384 — a replayable redemption endpoint allows a single coupon to be used unlimited times.",
+      "Fix: await db.redemption.create({ data: { code, userId } }); // with UNIQUE(code, userId) constraint to reject duplicates"
+    ]
+  };
+}
+
+async function checkStateMachineBypass(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`(?:\/checkout\/confirm|\/checkout\/payment|\/verify\/complete|\/onboarding\/step\d|\/wizard\/step)`
+  );
+  const prerequisiteRe = /req\.session\.\w+|req\.user\.\w+|await.*[Ss]tep.*[Cc]omplete|await.*verified|session\[|user\.step|completed/;
+  const unsafe = hits.filter((h) => !prerequisiteRe.test(h.preview));
+  if (!unsafe.length) return null;
+  return {
+    id: "STATE_MACHINE_BYPASS_RISK",
+    title: "Multi-step flow endpoint does not verify prior-step completion — state machine bypass (CWE-841)",
+    severity: "MEDIUM",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    requiredActions: [
+      "Each step in a multi-step flow (checkout, onboarding, wizard) must verify that preceding steps were completed.",
+      "CWE-841 — skipping steps can bypass payment, identity verification, or terms acceptance.",
+      "Fix: if (!req.session.step1Complete) return res.status(400).json({ error: 'Complete step 1 first' });"
+    ]
+  };
+}
+
 export async function checkBusinessLogic(_opts: { changedFiles: string[] }): Promise<Finding[]> {
   try {
-    const results = await Promise.all([
+    const [
+      massAssignment,
+      idorResults,
+      negativeAmount,
+      raceResults,
+      hardcodedCreds,
+      hardcodedDb,
+      missingValidation,
+      insecureUrl,
+      intOverflow,
+      missingAdminAuth,
+      timingOracle,
+      floatMonetary,
+      httpParamPollution,
+      voucherReplay,
+      stateMachineBypass,
+    ] = await Promise.all([
       checkMassAssignment(),
       checkIdorDirect(),
       checkNegativeAmountBypass(),
@@ -279,8 +559,18 @@ export async function checkBusinessLogic(_opts: { changedFiles: string[] }): Pro
       checkIntegerOverflow(),
       checkMissingAdminAuth(),
       checkTimingOracle(),
+      checkFloatMonetaryArithmetic(),
+      checkHttpParamPollution(),
+      checkVoucherReplay(),
+      checkStateMachineBypass(),
     ]);
-    return results.filter((f): f is Finding => f !== null);
+
+    const singles = [massAssignment, negativeAmount, hardcodedCreds, hardcodedDb, missingValidation, insecureUrl, intOverflow, missingAdminAuth, timingOracle, floatMonetary, httpParamPollution, voucherReplay, stateMachineBypass];
+    return [
+      ...singles.filter((f): f is Finding => f !== null),
+      ...idorResults,
+      ...raceResults,
+    ];
   } catch (err) {
     console.warn("[checkBusinessLogic] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));
     return [];

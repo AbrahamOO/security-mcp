@@ -45,6 +45,31 @@ const CIRCUIT_BREAKER_THRESHOLD = 3;   // failures before circuit opens
 const CIRCUIT_BREAKER_COOLDOWN_MS = 60_000; // 60 seconds
 
 // ---------------------------------------------------------------------------
+// Rate limiting — recordProviderFailure to prevent circuit-breaker manipulation
+// ---------------------------------------------------------------------------
+
+const _providerFailureSubmissions = new Map<string, { count: number; windowStart: number }>();
+const FAILURE_RATE_LIMIT = 5;     // max 5 failure reports per provider per window
+const FAILURE_WINDOW_MS = 300_000; // 5 minute window
+
+export function recordProviderFailureRateLimited(providerName: string): { allowed: boolean; reason?: string } {
+  const now = Date.now();
+  const entry = _providerFailureSubmissions.get(providerName);
+
+  if (!entry || now - entry.windowStart > FAILURE_WINDOW_MS) {
+    _providerFailureSubmissions.set(providerName, { count: 1, windowStart: now });
+    return { allowed: true };
+  }
+
+  if (entry.count >= FAILURE_RATE_LIMIT) {
+    return { allowed: false, reason: `Rate limit exceeded: max ${FAILURE_RATE_LIMIT} failure reports per provider per 5 minutes` };
+  }
+
+  entry.count++;
+  return { allowed: true };
+}
+
+// ---------------------------------------------------------------------------
 // Provider & Model Registry
 // ---------------------------------------------------------------------------
 
@@ -651,8 +676,14 @@ export async function trackUsage(usage: Omit<UsageRecord, "timestamp">): Promise
 /**
  * Record a provider failure (connection error, rate limit, auth failure).
  * Opens circuit breaker after CIRCUIT_BREAKER_THRESHOLD consecutive failures.
+ * Rate-limited to prevent deliberate circuit-breaker manipulation (max 5 per provider per 5 min).
  */
-export async function recordProviderFailure(provider: Provider): Promise<void> {
+export async function recordProviderFailure(provider: Provider): Promise<{ recorded: boolean; reason?: string }> {
+  const rateCheck = recordProviderFailureRateLimited(provider);
+  if (!rateCheck.allowed) {
+    return { recorded: false, reason: rateCheck.reason };
+  }
+
   const health = await loadHealthStore();
   const now = new Date();
 
@@ -673,6 +704,32 @@ export async function recordProviderFailure(provider: Provider): Promise<void> {
 
   health.providers[provider] = state;
   await saveHealthStore(health);
+
+  // Circuit-state audit: warn and emit structured audit record if all known providers are circuit-open.
+  // Deliberate manipulation requires only CIRCUIT_BREAKER_THRESHOLD (3) failures per provider × 5 providers
+  // = 15 calls, constrained to max 5 per provider per 5-min window. Log at ERROR level so SIEM picks this up.
+  // MITRE ATLAS AML.T0040 (ML Model Inference API) — circuit-breaker exhaustion attack.
+  const allProviders: Provider[] = ["anthropic", "openai", "google", "cohere", "local"];
+  const allProvidersDown = allProviders.every((p) => isCircuitOpen(health.providers[p]));
+  if (allProvidersDown) {
+    // Determine which fallback model will be used (cheapest in registry, circuit ignored).
+    const fallbackCandidates = MODEL_REGISTRY.filter((m) => m.provider === "anthropic" && m.capabilityTier === "standard");
+    const fallbackModel = fallbackCandidates[0]?.modelId ?? "unknown";
+    console.error(
+      JSON.stringify({
+        severity: "CRITICAL",
+        event: "ALL_PROVIDERS_CIRCUIT_OPEN",
+        message: "All AI providers are circuit-open. Routing to fallback model. This may indicate deliberate circuit-breaker manipulation.",
+        fallbackModel,
+        timestamp: new Date().toISOString(),
+        failingProvider: provider,
+        mitre: "AML.T0040",
+        action: "Manual investigation required. Call security.reset_provider_circuit after confirming provider health."
+      })
+    );
+  }
+
+  return { recorded: true };
 }
 
 /**

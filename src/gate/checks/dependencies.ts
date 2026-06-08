@@ -62,6 +62,143 @@ async function fetchScorecardScore(dep: string): Promise<number | null> {
 	}
 }
 
+// Known public registry scopes — scoped packages under these are NOT private
+const KNOWN_PUBLIC_SCOPES = new Set([
+	"@types", "@babel", "@testing-library", "@jest", "@storybook", "@emotion",
+	"@mui", "@angular", "@vue", "@svelte", "@nestjs", "@aws-sdk", "@google-cloud",
+	"@azure", "@microsoft", "@graphql-codegen", "@typescript-eslint", "@eslint",
+	"@rollup", "@vitejs", "@vitest", "@remix-run", "@next", "@vercel", "@sentry",
+	"@opentelemetry", "@prisma", "@trpc", "@tanstack", "@radix-ui", "@headlessui",
+	"@tailwindcss", "@postcss", "@node-red", "@npmcli"
+]);
+
+async function checkDependencyConfusion(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+
+	try {
+		let pkgRaw: string;
+		try {
+			pkgRaw = await readFile("package.json", "utf8");
+		} catch {
+			return [];
+		}
+
+		const pkg = JSON.parse(pkgRaw) as {
+			dependencies?: Record<string, string>;
+			devDependencies?: Record<string, string>;
+		};
+
+		const allDeps: Record<string, string> = {
+			...pkg.dependencies,
+			...pkg.devDependencies
+		};
+
+		// Read .npmrc for private registry scope routing
+		let npmrcContent = "";
+		try {
+			npmrcContent = await readFile(".npmrc", "utf8");
+		} catch {
+			// .npmrc absent
+		}
+
+		const unprotectedScopes: string[] = [];
+		for (const name of Object.keys(allDeps)) {
+			if (!name.startsWith("@")) continue;
+			const scope = name.split("/")[0]; // e.g. "@mycompany"
+			if (!scope) continue;
+			if (KNOWN_PUBLIC_SCOPES.has(scope)) continue;
+
+			// Check if .npmrc has a registry entry for this scope
+			// e.g. @mycompany:registry=https://npm.mycompany.com
+			const escapedScope = scope.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+			const scopeRegistryRe = new RegExp(`${escapedScope}\\s*:.*registry\\s*=|registry\\s*=.*${escapedScope}`, "i");
+			if (!scopeRegistryRe.test(npmrcContent)) {
+				unprotectedScopes.push(`${name} (scope ${scope} has no private registry entry in .npmrc)`);
+			}
+		}
+
+		// Also check for common typosquat vectors against critical ecosystem packages
+		const EXTENDED_TYPOSQUATS: Record<string, string> = {
+			"prism": "prisma",
+			"prismaa": "prisma",
+			"nextjs": "next",
+			"nextt": "next",
+			"nuxt3": "nuxt",
+			"vue3": "vue",
+			"sveltejs": "svelte",
+			"mongoosejs": "mongoose",
+			"sequelizejs": "sequelize",
+			"passportjs": "passport",
+			"jsonwebtoken-": "jsonwebtoken",
+			"bcryptjs-": "bcrypt",
+			"multerjs": "multer",
+			"axiosjs": "axios",
+			"socketio": "socket.io",
+			"redisjs": "redis",
+			"mysql-2": "mysql2",
+			"pgg": "pg",
+			"typeormjs": "typeorm",
+			"expressjs": "express",
+			"fastifyjs": "fastify",
+			"helmetjs": "helmet",
+			"corsjs": "cors"
+		};
+
+		const extendedHits: string[] = [];
+		for (const [name] of Object.entries(allDeps)) {
+			const normalized = name.toLowerCase();
+			if (EXTENDED_TYPOSQUATS[normalized]) {
+				extendedHits.push(`"${name}" (possible typo of "${EXTENDED_TYPOSQUATS[normalized]}")`);
+			}
+		}
+
+		if (unprotectedScopes.length > 0) {
+			findings.push({
+				id: "DEPENDENCY_CONFUSION_RISK",
+				title: `${unprotectedScopes.length} scoped package(s) lack a private registry entry in .npmrc — dependency confusion risk`,
+				severity: "HIGH",
+				evidence: unprotectedScopes.slice(0, 10),
+				requiredActions: [
+					"Scoped packages without a private registry mapping in .npmrc will resolve from the public npm registry, enabling dependency confusion attacks.",
+					"ATT&CK T1195.002 — an attacker can publish a higher-versioned package to the public registry under your private scope name.",
+					"Fix: add to .npmrc: @yourscope:registry=https://your-private-registry.example.com"
+				]
+			});
+		}
+
+		if (extendedHits.length > 0) {
+			findings.push({
+				id: "DEP_TYPOSQUAT_EXTENDED",
+				title: "Possible typosquatted ecosystem package name(s) detected",
+				severity: "CRITICAL",
+				evidence: extendedHits.slice(0, 10),
+				requiredActions: [
+					"Verify each flagged package is the intended dependency — typosquatting replaces legitimate packages with malicious ones.",
+					"Remove the package, run `npm install` with the correctly-spelled name, and audit `package-lock.json`.",
+					"Use `npm audit` and review the package on npmjs.com before reinstalling."
+				]
+			});
+		}
+	} catch (err) {
+		console.warn("[checkDependencyConfusion] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));
+	}
+
+	return findings;
+}
+
+// Malicious lifecycle script patterns
+const MALICIOUS_SCRIPT_RES = [
+	/curl\s+[^\s]+\s*\|\s*(?:sh|bash)/,
+	/wget\s+[^\s]+\s*\|\s*(?:sh|bash)/,
+	/node\s+-e\s+['"`]\s*(?:eval|require|exec|spawn)/,
+	/base64\s+--decode\s*\|\s*(?:sh|bash)/,
+	/python\s+-c\s+['"`]\s*(?:import os|exec|eval)/,
+];
+
+function isScriptMalicious(scriptValue: string): boolean {
+	return MALICIOUS_SCRIPT_RES.some((re) => re.test(scriptValue));
+}
+
 async function checkNpmProvenance(): Promise<{ findings: Finding[] }> {
 	const findings: Finding[] = [];
 
@@ -103,13 +240,36 @@ async function checkNpmProvenance(): Promise<{ findings: Finding[] }> {
 			// npm not available or < v9 — skip gracefully
 		}
 
-		// 2. OpenSSF Scorecard for top 5 production deps
+		// 2. OpenSSF Scorecard — check all prod deps and CI-executed dev deps, up to 20 total
 		try {
 			const pkgRaw = await readFile("package.json", "utf8");
-			const pkg = JSON.parse(pkgRaw) as { dependencies?: Record<string, string> };
-			const prodDeps = Object.keys(pkg.dependencies ?? {}).slice(0, 5);
+			const pkg = JSON.parse(pkgRaw) as {
+				dependencies?: Record<string, string>;
+				devDependencies?: Record<string, string>;
+				scripts?: Record<string, string>;
+			};
 
-			for (const dep of prodDeps) {
+			const prodDeps = Object.keys(pkg.dependencies ?? {});
+
+			// Determine which devDependencies are executed in CI scripts
+			const scriptText = Object.values(pkg.scripts ?? {}).join(" ");
+			const devDepsUsedInScripts = Object.keys(pkg.devDependencies ?? {}).filter(
+				(dep) => {
+					// Check if the dep name (or its binary form) is referenced in any script
+					const shortName = dep.replace(/^@[^/]+\//, "").replace(/-/g, "[-_]?");
+					try {
+						return new RegExp(shortName, "i").test(scriptText);
+					} catch {
+						return false;
+					}
+				}
+			);
+
+			// Merge: prod deps first, then CI-executed dev deps, up to 20
+			const depsToCheck = [...new Set([...prodDeps, ...devDepsUsedInScripts])].slice(0, 20);
+			const totalAllDeps = prodDeps.length + Object.keys(pkg.devDependencies ?? {}).length;
+
+			for (const dep of depsToCheck) {
 				const score = await fetchScorecardScore(dep);
 				if (score !== null && score < 5.0) {
 					findings.push({
@@ -123,6 +283,21 @@ async function checkNpmProvenance(): Promise<{ findings: Finding[] }> {
 						]
 					});
 				}
+			}
+
+			// Report partial coverage when total deps exceed the cap
+			if (totalAllDeps > 20) {
+				findings.push({
+					id: "SUPPLY_CHAIN_SCORECARD_PARTIAL",
+					title: `OpenSSF Scorecard checked ${depsToCheck.length} of ${totalAllDeps} total dependencies — coverage is partial`,
+					severity: "LOW",
+					evidence: [`Checked: ${depsToCheck.length} deps. Unchecked: ${totalAllDeps - depsToCheck.length} deps.`],
+					requiredActions: [
+						`${totalAllDeps - depsToCheck.length} dependencies were not checked against OpenSSF Scorecard due to the 20-dep cap.`,
+						"Run `npx ossf-scorecard` or review https://scorecard.dev for full coverage.",
+						"Consider using socket.dev or Snyk for continuous supply chain monitoring across all dependencies."
+					]
+				});
 			}
 		} catch {
 			// package.json unreadable or API unavailable — skip
@@ -184,6 +359,9 @@ export async function checkDependencies(_: { changedFiles: string[] }): Promise<
 
 	const typosquat = await checkTyposquatting();
 	findings.push(...typosquat);
+
+	const depConfusion = await checkDependencyConfusion();
+	findings.push(...depConfusion);
 
 	const threatIntel = await checkCveExploitation();
 	findings.push(...threatIntel);
@@ -301,39 +479,173 @@ function hasLifecycleScript(pkg: LockfilePackage): boolean {
 function scanLockfilePackages(packages: Record<string, LockfilePackage>): {
 	scriptPkgs: string[];
 	missingIntegrityPkgs: string[];
+	maliciousScriptPkgs: string[];
 } {
 	const scriptPkgs: string[] = [];
 	const missingIntegrityPkgs: string[] = [];
+	const maliciousScriptPkgs: string[] = [];
 
 	for (const [name, pkg] of Object.entries(packages)) {
 		if (!name) continue; // skip root entry
 		const pkgName = name.replace(/^node_modules\//, "");
-		if (hasLifecycleScript(pkg)) scriptPkgs.push(pkgName);
+		if (hasLifecycleScript(pkg)) {
+			scriptPkgs.push(pkgName);
+
+			// Check each lifecycle script VALUE for malicious patterns
+			for (const scriptKey of LIFECYCLE_SCRIPTS) {
+				const scriptVal = pkg.scripts?.[scriptKey];
+				if (scriptVal && isScriptMalicious(scriptVal)) {
+					maliciousScriptPkgs.push(`${pkgName} [${scriptKey}]: ${scriptVal.slice(0, 120)}`);
+				}
+			}
+		}
 		if (pkg.version && !pkg.integrity) missingIntegrityPkgs.push(pkgName);
 	}
 
-	return { scriptPkgs, missingIntegrityPkgs };
+	return { scriptPkgs, missingIntegrityPkgs, maliciousScriptPkgs };
+}
+
+/**
+ * Scan yarn.lock content for lifecycle script values using a regex-based approach
+ * (yarn.lock is a custom format, not JSON/YAML, so we use heuristic line scanning).
+ * We look for `postinstall`, `preinstall`, or `install` key lines followed by a value
+ * in the same stanza, and check the value for malicious patterns.
+ */
+function scanYarnLockForMaliciousScripts(content: string): { maliciousScriptPkgs: string[]; scriptPkgs: string[] } {
+	const maliciousScriptPkgs: string[] = [];
+	const scriptPkgs: string[] = [];
+	const lines = content.split("\n");
+	let currentPkg = "";
+	for (const line of lines) {
+		// New stanza starts with a non-space character that ends with a colon (package header)
+		const pkgHeader = /^"?([^"#\s][^:]*)(?:@[^:]+)?":?\s*$/.exec(line);
+		if (pkgHeader) {
+			currentPkg = pkgHeader[1].trim();
+			continue;
+		}
+		// Lifecycle script lines inside a stanza look like:  postinstall "cmd"
+		const scriptLine = /^\s+(postinstall|preinstall|install)\s+"([^"]+)"/.exec(line);
+		if (scriptLine && currentPkg) {
+			const scriptKey = scriptLine[1];
+			const scriptVal = scriptLine[2];
+			scriptPkgs.push(`${currentPkg} [${scriptKey}]`);
+			if (isScriptMalicious(scriptVal)) {
+				maliciousScriptPkgs.push(`${currentPkg} [${scriptKey}]: ${scriptVal.slice(0, 120)}`);
+			}
+		}
+	}
+	return { maliciousScriptPkgs, scriptPkgs };
+}
+
+/**
+ * Scan pnpm-lock.yaml content for lifecycle script values.
+ * pnpm-lock.yaml stores scripts in `requiresBuild: true` stanzas; the actual
+ * script content is in node_modules (not the lockfile itself). We flag any
+ * package that sets `requiresBuild: true` as having a lifecycle script,
+ * and also scan for inline `scripts:` blocks using a heuristic regex.
+ */
+function scanPnpmLockForMaliciousScripts(content: string): { maliciousScriptPkgs: string[]; scriptPkgs: string[] } {
+	const maliciousScriptPkgs: string[] = [];
+	const scriptPkgs: string[] = [];
+	const lines = content.split("\n");
+	let currentPkg = "";
+	for (const line of lines) {
+		// pnpm-lock.yaml package stanza: starts with exactly 2-space indent + "/" or name
+		const pkgHeader = /^ {2}\/?([^\s:][^:]+):$/.exec(line);
+		if (pkgHeader) {
+			currentPkg = pkgHeader[1].trim();
+			continue;
+		}
+		// requiresBuild: true means the package has a lifecycle script
+		if (/^\s+requiresBuild:\s*true/.test(line) && currentPkg) {
+			scriptPkgs.push(currentPkg);
+		}
+		// Inline script value (rare in pnpm-lock but possible in older format)
+		const scriptLine = /^\s+(?:postinstall|preinstall|install):\s+"?([^"]+)"?/.exec(line);
+		if (scriptLine && currentPkg) {
+			const scriptVal = scriptLine[1];
+			if (isScriptMalicious(scriptVal)) {
+				maliciousScriptPkgs.push(`${currentPkg}: ${scriptVal.slice(0, 120)}`);
+			}
+		}
+	}
+	return { maliciousScriptPkgs, scriptPkgs };
 }
 
 async function checkTransitiveDependencies(): Promise<Finding[]> {
 	const findings: Finding[] = [];
 
 	try {
-		let lockRaw: string;
+		// Try package-lock.json first (npm), then yarn.lock, then pnpm-lock.yaml.
+		// Each lockfile type has different structure; we use format-specific parsers.
+		let scriptPkgs: string[] = [];
+		let missingIntegrityPkgs: string[] = [];
+		let maliciousScriptPkgs: string[] = [];
+		let lockfileFound = false;
+
+		// ── npm package-lock.json ──────────────────────────────────────────────
 		try {
-			lockRaw = await readFile("package-lock.json", "utf8");
+			const lockRaw = await readFile("package-lock.json", "utf8");
+			let lock: { packages?: Record<string, LockfilePackage> };
+			try {
+				lock = JSON.parse(lockRaw) as { packages?: Record<string, LockfilePackage> };
+				const result = scanLockfilePackages(lock.packages ?? {});
+				scriptPkgs = result.scriptPkgs;
+				missingIntegrityPkgs = result.missingIntegrityPkgs;
+				maliciousScriptPkgs = result.maliciousScriptPkgs;
+				lockfileFound = true;
+			} catch {
+				// JSON parse failure — skip
+			}
 		} catch {
-			return [];
+			// package-lock.json not present — try alternatives
 		}
 
-		let lock: { packages?: Record<string, LockfilePackage> };
-		try {
-			lock = JSON.parse(lockRaw) as { packages?: Record<string, LockfilePackage> };
-		} catch {
-			return [];
+		// ── yarn.lock ──────────────────────────────────────────────────────────
+		if (!lockfileFound) {
+			try {
+				const yarnRaw = await readFile("yarn.lock", "utf8");
+				const result = scanYarnLockForMaliciousScripts(yarnRaw);
+				scriptPkgs = result.scriptPkgs;
+				maliciousScriptPkgs = result.maliciousScriptPkgs;
+				lockfileFound = true;
+				// yarn.lock does not encode integrity per entry the same way; skip integrity check
+			} catch {
+				// yarn.lock not present
+			}
 		}
 
-		const { scriptPkgs, missingIntegrityPkgs } = scanLockfilePackages(lock.packages ?? {});
+		// ── pnpm-lock.yaml ─────────────────────────────────────────────────────
+		if (!lockfileFound) {
+			try {
+				const pnpmRaw = await readFile("pnpm-lock.yaml", "utf8");
+				const result = scanPnpmLockForMaliciousScripts(pnpmRaw);
+				scriptPkgs = result.scriptPkgs;
+				maliciousScriptPkgs = result.maliciousScriptPkgs;
+				lockfileFound = true;
+			} catch {
+				// pnpm-lock.yaml not present
+			}
+		}
+
+		if (!lockfileFound) {
+			return findings;
+		}
+
+		// Report malicious script patterns first — CRITICAL severity
+		if (maliciousScriptPkgs.length > 0) {
+			findings.push({
+				id: "DEPENDENCY_MALICIOUS_SCRIPT",
+				title: `${maliciousScriptPkgs.length} transitive dependency lifecycle script(s) contain malicious execution patterns`,
+				severity: "CRITICAL",
+				evidence: maliciousScriptPkgs.slice(0, 10),
+				requiredActions: [
+					"A transitive dependency has a lifecycle script matching known malicious patterns (download-and-execute, inline eval, base64 decode).",
+					"CWE-494 / ATT&CK T1195.002 — malicious postinstall scripts run automatically on every npm install.",
+					"Remove or replace these dependencies immediately. Treat the development environment as potentially compromised and rotate all secrets."
+				]
+			});
+		}
 
 		if (scriptPkgs.length > 0) {
 			findings.push({
@@ -442,7 +754,31 @@ const KNOWN_TYPOSQUATS: Record<string, string> = {
 	"debugg": "debug",
 	"debu": "debug",
 	"async-": "async",
-	"asyncs": "async"
+	"asyncs": "async",
+	// Extended ecosystem packages
+	"prism": "prisma",
+	"prismaa": "prisma",
+	"nextjs": "next",
+	"nextt": "next",
+	"nuxt3": "nuxt",
+	"vue3": "vue",
+	"sveltejs": "svelte",
+	"mongoosejs": "mongoose",
+	"sequelizejs": "sequelize",
+	"passportjs": "passport",
+	"jsonwebtoken-": "jsonwebtoken",
+	"bcryptjs-": "bcrypt",
+	"multerjs": "multer",
+	"axiosjs": "axios",
+	"socketio": "socket.io",
+	"redisjs": "redis",
+	"mysql-2": "mysql2",
+	"pgg": "pg",
+	"typeormjs": "typeorm",
+	"expressjs": "express",
+	"fastifyjs": "fastify",
+	"helmetjs": "helmet",
+	"corsjs": "cors"
 };
 
 // Suspicious version patterns used in dependency confusion / version injection attacks

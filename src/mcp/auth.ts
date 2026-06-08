@@ -19,8 +19,13 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 /** Domain-separation constant for auth HMAC. Never changes. */
 const HMAC_DOMAIN = "security-mcp-session-auth-v1";
 
-/** Minimum acceptable secret length (bytes). Mirrors NIST SP 800-107 §5.3.4. */
-const SECRET_MIN_BYTES = 16;
+/**
+ * Minimum acceptable secret length (bytes).
+ * OWASP ASVS L2 V2.9.1 requires 32 bytes (256 bits) for HMAC secrets.
+ * NIST SP 800-107 §5.3.4 / SP 800-131A recommend ≥ 112-bit keys for HMAC-SHA256;
+ * we enforce 32 bytes (256-bit) for full ASVS L2 compliance.
+ */
+const SECRET_MIN_BYTES = 32;
 
 /** Maximum failed authentication attempts before the server process exits. */
 const AUTH_MAX_ATTEMPTS = 3;
@@ -29,6 +34,7 @@ const AUTH_MAX_ATTEMPTS = 3;
 const SESSION_ID = randomBytes(16).toString("hex");
 
 let _authenticated = false;
+let _authenticatedAt: number | null = null;
 let _attempts = 0;
 
 /** Whether the caller must authenticate before using any other tool. */
@@ -40,9 +46,50 @@ export function isAuthRequired(): boolean {
 /**
  * Whether the current session is authenticated.
  * Always returns true when auth is disabled (no SECURITY_MCP_SHARED_SECRET).
+ * Enforces session TTL: if the session has exceeded SECURITY_SESSION_TTL_MS
+ * (default 8 hours), it is automatically invalidated and false is returned.
  */
 export function isAuthenticated(): boolean {
-  return !isAuthRequired() || _authenticated;
+  if (!isAuthRequired()) return true;
+  if (_authenticated && _authenticatedAt) {
+    // Guard against NaN/negative from malformed env var — attacker-set "" or "abc"
+    // would produce NaN, making the comparison always false and bypassing TTL (CWE-1288).
+    // Also cap the TTL at 24 hours (86400000 ms) to prevent an attacker who controls
+    // the env from setting an arbitrarily large value that effectively disables TTL expiry.
+    // OWASP ASVS V3.7.1: sessions must expire within a reasonable bound.
+    const SESSION_TTL_MAX_MS = 86_400_000; // 24 hours absolute maximum
+    const parsedTtl = Number.parseInt(process.env["SECURITY_SESSION_TTL_MS"] ?? "28800000", 10);
+    const SESSION_TTL_MS = Number.isFinite(parsedTtl) && parsedTtl > 0
+      ? Math.min(parsedTtl, SESSION_TTL_MAX_MS)
+      : 28800000;
+    if (Date.now() - _authenticatedAt > SESSION_TTL_MS) {
+      _authenticated = false;
+      _authenticatedAt = null;
+      return false;
+    }
+  }
+  return _authenticated;
+}
+
+/**
+ * Explicitly log out the current session. Resets authentication state and
+ * timestamp so the next tool call will require re-authentication.
+ */
+export function logout(): void {
+  _authenticated = false;
+  _authenticatedAt = null;
+}
+
+/**
+ * Increment the failed-attempt counter regardless of whether the input is
+ * structurally valid. Call this BEFORE Zod parsing in the authenticate handler
+ * so that malformed requests still burn a lockout attempt (fixes CWE-307 bypass
+ * via invalid-shape inputs that would otherwise never reach attemptAuth).
+ */
+export function recordAttempt(): void {
+  if (isAuthRequired() && !_authenticated) {
+    _attempts++;
+  }
 }
 
 export function getSessionId(): string {
@@ -69,7 +116,8 @@ export function attemptAuth(token: string): {
     return { success: true, sessionId: SESSION_ID };
   }
 
-  _attempts++;
+  // NOTE: _attempts is incremented by recordAttempt() called BEFORE Zod parsing
+  // in the server.ts handler. Do not increment here again to avoid double-counting.
   const remaining = AUTH_MAX_ATTEMPTS - _attempts;
 
   // Enforce lockout BEFORE any other check — including misconfiguration — so that
@@ -116,6 +164,7 @@ export function attemptAuth(token: string): {
   }
 
   _authenticated = true;
+  _authenticatedAt = Date.now();
   return { success: true, sessionId: SESSION_ID };
 }
 
