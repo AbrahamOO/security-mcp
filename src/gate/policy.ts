@@ -13,7 +13,7 @@ import { checkInfra } from "./checks/infra.js";
 import { checkMobileIos } from "./checks/mobile-ios.js";
 import { checkMobileAndroid } from "./checks/mobile-android.js";
 import { checkAi } from "./checks/ai.js";
-import { checkScannerReadiness } from "./checks/scanners.js";
+import { checkScannerReadiness, runScanners } from "./checks/scanners.js";
 import { evaluateEvidenceCoverage } from "./evidence.js";
 import { applySecurityExceptions } from "./exceptions.js";
 import { controlApplies, loadControlCatalog } from "./catalog.js";
@@ -264,7 +264,8 @@ const CHECK_NAMES = [
   "injection-deep",
   "auth-deep",
   "supply-chain-deep",
-  "business-logic"
+  "business-logic",
+  "scanners-run"
 ] as const;
 
 /** Run every applicable security check in parallel and collect findings. */
@@ -306,7 +307,8 @@ async function runAllChecks(opts: {
     isApiOrWeb   ? checkInjectionDeep({ changedFiles })                     : Promise.resolve([]),
     isApiOrWeb   ? checkAuthDeep({ changedFiles })                          : Promise.resolve([]),
     checkSupplyChainDeep({ changedFiles }),
-    checkBusinessLogic({ changedFiles })
+    checkBusinessLogic({ changedFiles }),
+    runScanners({ surfaces, changedFiles })
   ]);
 
   const findings: Finding[] = [];

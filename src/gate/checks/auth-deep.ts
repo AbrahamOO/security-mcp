@@ -720,6 +720,99 @@ async function checkRefreshTokenNotRotated(): Promise<Finding | null> {
   };
 }
 
+// ---------------------------------------------------------------------------
+// OWASP A09 / NIST AU-11 / PCI Req 10 — Observability checks
+// ---------------------------------------------------------------------------
+
+async function checkMissingStructuredLogging(): Promise<Finding[]> {
+  const findings: Finding[] = [];
+
+  // Detect web framework usage
+  const webFrameworkHits = await codeSearch(
+    String.raw`require\s*\(\s*['"](?:express|fastify|koa)['"]\s*\)|from\s+['"](?:express|fastify|koa)['"]`
+  );
+  if (!webFrameworkHits.length) return findings;
+
+  // Detect structured logger
+  const loggerHits = await codeSearch(
+    String.raw`require\s*\(\s*['"](?:pino|morgan|winston|bunyan)['"]\s*\)|from\s+['"](?:pino|winston|morgan|bunyan)['"]`
+  );
+
+  if (!loggerHits.length) {
+    findings.push({
+      id: "MISSING_STRUCTURED_LOGGING",
+      title: "No structured logging library detected (pino, winston, morgan, bunyan). OWASP A09 requires logging security events.",
+      severity: "HIGH",
+      evidence: toEvidence(webFrameworkHits),
+      files: toFiles(webFrameworkHits),
+      requiredActions: [
+        "Install a structured logging library (pino, winston, morgan, or bunyan) and integrate it with the web framework.",
+        "OWASP A09 — without structured logs, authentication failures, authorization errors, and anomalies cannot be detected or alerted on.",
+        "Fix: import pino from 'pino'; const logger = pino(); app.use(pinoHttp({ logger }));"
+      ]
+    });
+    return findings;
+  }
+
+  // Logger found — check for .error( or .warn( near auth endpoints
+  const authRouteHits = await codeSearch(
+    String.raw`(?:router|app)\.(?:post|get|put|patch|delete)\s*\(\s*['"][^'"]*(?:\/login|\/auth|\/token)['"]\s*,`
+  );
+  if (!authRouteHits.length) return findings;
+
+  const authLogHits = await codeSearch(
+    String.raw`\.(?:error|warn)\s*\([^)]*(?:login|auth|token|unauthorized|forbidden|invalid|fail|deny|reject)`
+  );
+  if (!authLogHits.length) {
+    findings.push({
+      id: "AUTH_EVENTS_NOT_LOGGED",
+      title: "Auth endpoints detected but no .error()/.warn() calls found near login/auth/token routes — security events may not be logged",
+      severity: "MEDIUM",
+      evidence: toEvidence(authRouteHits),
+      files: toFiles(authRouteHits),
+      requiredActions: [
+        "Add structured log calls (logger.warn / logger.error) for authentication failures, authorization denials, and anomalous requests.",
+        "OWASP A09 — unlogged auth failures prevent detection of credential stuffing and brute-force attacks.",
+        "Fix: logger.warn({ userId, ip: req.ip }, 'Authentication failed — invalid credentials');"
+      ]
+    });
+  }
+
+  return findings;
+}
+
+async function checkLogRetentionConfig(): Promise<Finding[]> {
+  const findings: Finding[] = [];
+
+  // Only run if a logger is configured
+  const loggerHits = await codeSearch(
+    String.raw`require\s*\(\s*['"](?:pino|morgan|winston|bunyan)['"]\s*\)|from\s+['"](?:pino|winston|morgan|bunyan)['"]`
+  );
+  if (!loggerHits.length) return findings;
+
+  // Check for retention settings
+  const retentionHits = await codeSearch(
+    String.raw`maxFiles|maxsize|tailable|retentionDays|retention|logRotation`
+  );
+  if (retentionHits.length) return findings; // retention configured — no finding needed
+
+  findings.push({
+    id: "LOG_RETENTION_NOT_CONFIGURED",
+    title: "No log retention policy found. PCI DSS Req 10.3 requires audit logs retained for 12 months; NIST AU-11 requires risk-aligned retention.",
+    severity: "MEDIUM",
+    evidence: toEvidence(loggerHits),
+    files: toFiles(loggerHits),
+    requiredActions: [
+      "Configure log rotation and retention: set maxFiles / maxsize / retentionDays in your logging configuration.",
+      "PCI DSS Req 10.3 — audit logs must be retained for at least 12 months, with 3 months immediately available.",
+      "NIST AU-11 — audit record retention must be aligned to organizational risk policy.",
+      "Fix (winston): new winston.transports.File({ filename: 'app.log', maxFiles: 365, maxsize: 10485760, tailable: true })"
+    ]
+  });
+
+  return findings;
+}
+
 export async function checkAuthDeep(_opts: { changedFiles: string[] }): Promise<Finding[]> {
   try {
     const [
@@ -744,6 +837,8 @@ export async function checkAuthDeep(_opts: { changedFiles: string[] }): Promise<
       cookieSecureFlags,
       refreshTokenNotRotated,
       accountLockout,
+      missingStructuredLoggingFindings,
+      logRetentionFindings,
     ] = await Promise.all([
       checkJwtAlgNone(),
       checkSessionFixation(),
@@ -766,6 +861,8 @@ export async function checkAuthDeep(_opts: { changedFiles: string[] }): Promise<
       checkCookieSecureFlags(),
       checkRefreshTokenNotRotated(),
       checkAccountLockout(),
+      checkMissingStructuredLogging(),
+      checkLogRetentionConfig(),
     ]);
 
     const singleFindings = [
@@ -794,6 +891,8 @@ export async function checkAuthDeep(_opts: { changedFiles: string[] }): Promise<
       ...jwtMissingExpiryFindings,
       ...samlXswFindings,
       ...jwtHsRsConfusionFindings,
+      ...missingStructuredLoggingFindings,
+      ...logRetentionFindings,
     ];
   } catch (err) {
     console.warn("[checkAuthDeep] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));

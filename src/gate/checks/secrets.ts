@@ -4,6 +4,10 @@ import { readFileSafe } from "../../repo/fs.js";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { existsSync, readFileSync } from "fs";
+import { unlink } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { randomBytes } from "node:crypto";
 
 const execFileAsync = promisify(execFile);
 
@@ -331,7 +335,7 @@ export async function checkSecrets(_: { changedFiles: string[] }): Promise<Findi
       ]
     });
   } else {
-    const reportPath = "/tmp/gitleaks-history.json";
+    const tmpReport = path.join(os.tmpdir(), `gitleaks-${randomBytes(8).toString("hex")}.json`);
     try {
       await execFileAsync("gitleaks", [
         "detect",
@@ -340,7 +344,7 @@ export async function checkSecrets(_: { changedFiles: string[] }): Promise<Findi
         "--no-git=false",
         "--exit-code", "1",
         "--report-format", "json",
-        "--report-path", reportPath
+        "--report-path", tmpReport
       ]);
       // exit code 0 — no findings
     } catch {
@@ -348,8 +352,8 @@ export async function checkSecrets(_: { changedFiles: string[] }): Promise<Findi
     }
 
     try {
-      if (existsSync(reportPath)) {
-        const raw = readFileSync(reportPath, "utf8");
+      if (existsSync(tmpReport)) {
+        const raw = readFileSync(tmpReport, "utf8");
         const leaksData = JSON.parse(raw) as Array<{
           RuleID?: string;
           File?: string;
@@ -385,6 +389,8 @@ export async function checkSecrets(_: { changedFiles: string[] }): Promise<Findi
       }
     } catch {
       // report parse failure — non-fatal
+    } finally {
+      try { await unlink(tmpReport); } catch {}
     }
   }
 
