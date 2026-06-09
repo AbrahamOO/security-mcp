@@ -54,6 +54,12 @@ function compileUserRegex(pattern: string): RegExp {
 
 const MAX_PREVIEW_LEN = 240;
 
+const SECRET_REDACT_RE = /\b(?:AKIA[A-Z0-9]{16}|sk-[A-Za-z0-9]{32,}|ghp_[A-Za-z0-9]{36,}|xox[baprs]-[A-Za-z0-9-]{10,}|eyJ[A-Za-z0-9_-]{20,}(?:\.[A-Za-z0-9_-]{20,}){2})\b/g;
+
+function redactSecrets(s: string): string {
+	return s.replace(SECRET_REDACT_RE, "[REDACTED]");
+}
+
 function isHit(line: string, query: string, re: RegExp | null): boolean {
 	return re ? re.test(line) : line.includes(query);
 }
@@ -74,7 +80,7 @@ function scanLines(
 		matches.push({
 			file,
 			line: i + 1,
-			preview: line.slice(0, MAX_PREVIEW_LEN)
+			preview: redactSecrets(line.slice(0, MAX_PREVIEW_LEN))
 		});
 	}
 }

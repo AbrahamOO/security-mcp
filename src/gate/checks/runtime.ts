@@ -1,12 +1,15 @@
 /**
  * Runtime evidence verification.
  * Checks HTTP security headers and TLS configuration against a live target.
+ * Also contains static Dockerfile security analysis.
  */
 import * as dns from "node:dns/promises";
 import * as net from "node:net";
 import * as https from "node:https";
 import * as tls from "node:tls";
 import { Finding } from "../result.js";
+import fg from "fast-glob";
+import { readFileSafe } from "../../repo/fs.js";
 
 // CWE-918: SSRF guard — block private/link-local/metadata IP ranges
 const PRIVATE_CIDR_PATTERNS = [
@@ -363,5 +366,179 @@ export async function runRuntimeChecks(opts: {
     }
   }
 
+  return findings;
+}
+
+// ---------------------------------------------------------------------------
+// Static Dockerfile analysis
+// ---------------------------------------------------------------------------
+
+const DOCKERFILE_GLOBS = ["**/Dockerfile", "**/Dockerfile.*", "**/*.dockerfile"];
+const COMPOSE_GLOBS = ["**/docker-compose*.yml", "**/docker-compose*.yaml"];
+const IGNORE = ["**/node_modules/**", "**/dist/**", "**/.git/**"];
+
+async function loadDockerfiles(): Promise<Array<{ file: string; content: string }>> {
+  const paths = await fg(DOCKERFILE_GLOBS, { ignore: IGNORE });
+  const results: Array<{ file: string; content: string }> = [];
+  for (const file of paths) {
+    try {
+      const content = await readFileSafe(file);
+      results.push({ file, content });
+    } catch {
+      // skip unreadable files
+    }
+  }
+  return results;
+}
+
+async function loadComposeFiles(): Promise<Array<{ file: string; content: string }>> {
+  const paths = await fg(COMPOSE_GLOBS, { ignore: IGNORE });
+  const results: Array<{ file: string; content: string }> = [];
+  for (const file of paths) {
+    try {
+      const content = await readFileSafe(file);
+      results.push({ file, content });
+    } catch {
+      // skip unreadable files
+    }
+  }
+  return results;
+}
+
+async function checkDockerfileNoUser(): Promise<Finding[]> {
+  const dockerfiles = await loadDockerfiles();
+  const offending = dockerfiles
+    .filter(({ content }) => {
+      if (!/^FROM\s/m.test(content)) return false;
+      // For multi-stage builds the USER directive must appear in the final stage
+      // (after the last FROM). A USER only in an earlier build stage still leaves
+      // the runtime stage running as root.
+      const lines = content.split("\n");
+      let lastFromIdx = -1;
+      lines.forEach((line, idx) => { if (/^FROM\s/i.test(line)) lastFromIdx = idx; });
+      return !lines.slice(lastFromIdx).some((l) => /^USER\s/i.test(l));
+    })
+    .map(({ file }) => file)
+    .slice(0, 10);
+  if (offending.length === 0) return [];
+  return [{
+    id: "DOCKER_NO_USER_DIRECTIVE",
+    title: "Dockerfile has no USER directive — container runs all processes as root (CWE-250)",
+    severity: "HIGH",
+    files: offending,
+    requiredActions: [
+      "Add a USER directive to each Dockerfile to run the process as a non-root user.",
+      "Create a dedicated low-privilege user (e.g. RUN adduser --disabled-password appuser) and switch to it before CMD/ENTRYPOINT."
+    ]
+  }];
+}
+
+async function checkDockerfileAddUrl(): Promise<Finding[]> {
+  const dockerfiles = await loadDockerfiles();
+  const offending = dockerfiles
+    .filter(({ content }) => /^ADD\s+https?:\/\//m.test(content))
+    .map(({ file }) => file)
+    .slice(0, 10);
+  if (offending.length === 0) return [];
+  return [{
+    id: "DOCKER_ADD_REMOTE_URL",
+    title: "Dockerfile ADD with remote URL — no integrity check, CDN compromise or DNS hijack injects malicious content",
+    severity: "HIGH",
+    files: offending,
+    requiredActions: [
+      "Replace ADD <url> with RUN curl --fail -sSL <url> | sha256sum -c <expected> to verify integrity.",
+      "Prefer COPY over ADD for local files; use a multi-stage build to fetch and verify remote artifacts."
+    ]
+  }];
+}
+
+async function checkDockerfileSecretsInEnv(): Promise<Finding[]> {
+  const dockerfiles = await loadDockerfiles();
+  const offending = dockerfiles
+    .filter(({ content }) =>
+      // Match assignment form (ENV KEY=val), legacy space form (ENV KEY val), and
+      // secret as a non-first variable on one line (ENV PORT=3000 DB_PASSWORD=x).
+      // Negative lookbehind ensures keyword is not mid-word (e.g. MONKEY won't match KEY).
+      /^ENV\s+.*(?<![A-Z\d])(?:PASSWORD|SECRET|TOKEN|CREDENTIAL|PRIVATE_KEY|API_KEY|KEY)(?:\s*=|\s+\S)/im.test(content)
+    )
+    .map(({ file }) => file)
+    .slice(0, 10);
+  if (offending.length === 0) return [];
+  return [{
+    id: "DOCKER_SECRETS_IN_ENV",
+    title: "Dockerfile ENV instruction contains secret-named variable — credentials baked into image layer, visible in docker inspect",
+    severity: "CRITICAL",
+    files: offending,
+    requiredActions: [
+      "Remove secret values from ENV instructions; inject secrets at runtime via Docker secrets, environment variables passed at container start, or a secrets manager.",
+      "Audit existing image layers with 'docker history --no-trunc' to confirm no secret values are stored."
+    ]
+  }];
+}
+
+async function checkDockerPrivilegedFlag(): Promise<Finding[]> {
+  const allGlobs = [
+    ...DOCKERFILE_GLOBS,
+    "**/docker-compose*.yml",
+    "**/docker-compose*.yaml",
+    "**/*.docker-compose.yml"
+  ];
+  const paths = await fg(allGlobs, { ignore: IGNORE });
+  const offending: string[] = [];
+  for (const file of paths) {
+    try {
+      const content = await readFileSafe(file);
+      if (/privileged:\s*true|--privileged/.test(content)) {
+        offending.push(file);
+        if (offending.length >= 10) break;
+      }
+    } catch {
+      // skip unreadable files
+    }
+  }
+  if (offending.length === 0) return [];
+  return [{
+    id: "DOCKER_PRIVILEGED_FLAG",
+    title: "Container started with --privileged or privileged:true — all Linux capabilities granted, complete isolation disabled",
+    severity: "CRITICAL",
+    files: offending,
+    requiredActions: [
+      "Remove privileged: true and --privileged from all container configurations.",
+      "Grant only the specific Linux capabilities required using the cap_add directive (e.g. NET_ADMIN, SYS_PTRACE)."
+    ]
+  }];
+}
+
+async function checkDockerSocketMountCompose(): Promise<Finding[]> {
+  const composeFiles = await loadComposeFiles();
+  const offending = composeFiles
+    .filter(({ content }) => /\/var\/run\/docker\.sock/.test(content))
+    .map(({ file }) => file)
+    .slice(0, 10);
+  if (offending.length === 0) return [];
+  return [{
+    id: "DOCKER_SOCKET_MOUNT",
+    title: "Docker socket mounted into container in docker-compose — full Docker daemon control enables host root escape",
+    severity: "CRITICAL",
+    files: offending,
+    requiredActions: [
+      "Remove /var/run/docker.sock volume mounts from all docker-compose services.",
+      "If Docker-in-Docker is required, use rootless Docker or a dedicated DinD sidecar with a restricted socket proxy (e.g. Tecnativa/docker-socket-proxy)."
+    ]
+  }];
+}
+
+export async function runDockerChecks(_opts: { changedFiles: string[] }): Promise<Finding[]> {
+  const settled = await Promise.allSettled([
+    checkDockerfileNoUser(),
+    checkDockerfileAddUrl(),
+    checkDockerfileSecretsInEnv(),
+    checkDockerPrivilegedFlag(),
+    checkDockerSocketMountCompose()
+  ]);
+  const findings: Finding[] = [];
+  for (const r of settled) {
+    if (r.status === "fulfilled") findings.push(...r.value);
+  }
   return findings;
 }

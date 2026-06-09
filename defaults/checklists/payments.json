@@ -22,6 +22,18 @@
     { "id": "pci_ir_playbook", "description": "Payment fraud and PCI breach IR playbooks exist and are current", "critical": true },
     { "id": "pci_threat_model", "description": "Threat model completed and reviewed for this payment surface change", "critical": true },
     { "id": "pci_magecart_prevention", "description": "Magecart/digital-skimming prevention: SRI hashes on all checkout page scripts; CSP blocks unauthorized exfiltration destinations; DOM mutation monitoring detects injected form skimmers", "critical": true },
-    { "id": "pci_3ds_enforced", "description": "EMV 3D Secure 2.2+ enforced for card-not-present transactions above risk threshold; step-up authentication triggered by anomaly score; 3DS bypass attempts logged and alerted", "critical": true }
+    { "id": "pci_3ds_enforced", "description": "EMV 3D Secure 2.2+ enforced for card-not-present transactions above risk threshold; step-up authentication triggered by anomaly score; 3DS bypass attempts logged and alerted", "critical": true },
+    { "id": "pci_currency_validation", "title": "Payment currency fixed server-side — client-supplied currency code rejected or validated against strict allowlist", "severity": "critical", "automated": true },
+    { "id": "pci_discount_stacking", "title": "Discount/coupon stacking limited server-side — maximum one promotion per order enforced atomically", "severity": "high", "automated": true },
+    { "id": "pci_payment_confirmation_server_side", "title": "Order/fulfillment status derived exclusively from payment processor API response — never from client-supplied status field", "severity": "critical", "automated": true },
+    { "id": "pci_webhook_timestamp_tolerance", "title": "Webhook timestamp tolerance ≤ 300 seconds — stale events rejected", "severity": "high", "automated": true },
+    { "id": "pci_server_side_totals", "title": "Tax, shipping, and discount amounts computed server-side — never sourced from client request body", "severity": "high", "automated": true },
+    { "id": "pci_total_revalidation", "title": "Final charge amount re-computed server-side from canonical item prices — client-supplied total field never used as charge amount", "severity": "critical", "automated": true },
+    { "id": "pci_referral_abuse_prevention", "title": "Referral/signup bonus protected against self-referral and multi-account abuse with deduplication", "severity": "high", "automated": true },
+    { "id": "biz_email_normalization", "title": "Email addresses normalised before uniqueness check — duplicate account creation via aliasing prevented", "severity": "high", "automated": true },
+    { "id": "biz_feature_flag_server_side", "title": "Feature entitlements derived from server-side session/database record — not from client-supplied plan/tier/featureFlag parameters", "severity": "high", "automated": true },
+    { "id": "biz_api_version_controls_parity", "title": "All security controls applied uniformly across all live API versions — deprecated versions sunset or mirrored", "severity": "high", "automated": false },
+    { "id": "pci_trial_abuse_prevention", "title": "Free trial creation checked for velocity on payment method fingerprint, BIN prefix, IP, and device identifier", "severity": "high", "automated": true },
+    { "id": "pci_payment_intent_idempotency", "title": "Payment intent charge guarded by distributed lock or unique constraint — concurrent double-charge prevented", "severity": "critical", "automated": true }
   ]
 }

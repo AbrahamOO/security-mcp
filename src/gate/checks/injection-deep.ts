@@ -732,6 +732,248 @@ async function checkRedisEvalInjection(): Promise<Finding | null> {
   };
 }
 
+async function checkSecondOrderInjection(): Promise<Finding | null> {
+  // Two-pass file-correlation: avoids multiline regex that would trigger ReDoS
+  // detector and can never match in line-by-line search mode.
+  const dbHits = await codeSearch(
+    String.raw`(?:findOne|findById|findAll|findMany|getUser|getRecord)\s*\(`
+  );
+  if (!dbHits.length) return null;
+  const dbFiles = new Set(dbHits.map((h) => h.file));
+  const sinkHits = await codeSearch(
+    String.raw`(?:SELECT|INSERT|UPDATE|DELETE)\s*['"` + "`" + String.raw`]|exec\s*\(userInput|compile\s*\(userInput|render\s*\(userInput`
+  );
+  const hits = sinkHits.filter((h) => dbFiles.has(h.file));
+  if (!hits.length) return null;
+  return {
+    id: "SECOND_ORDER_INJECTION",
+    title: "Data retrieved from DB/store passed directly to SQL/template/shell sink without re-validation — second-order injection",
+    severity: "CRITICAL",
+    evidence: toEvidence(hits),
+    files: toFiles(hits),
+    requiredActions: [
+      "Treat data read from a database as untrusted — re-validate before passing to SQL, template, or shell sinks.",
+      "CWE-89 / CWE-94 / CWE-78 — second-order injection exploits stored user-controlled data after it bypasses first-pass input validation.",
+      "Fix: always sanitize or parameterize values returned from the DB before using them in downstream sinks."
+    ]
+  };
+}
+
+async function checkSstiJavaPhp(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`(?:freemarker\.template|VelocityEngine|Template\.getInstance|cfg\.getTemplate|\$twig->render|\$smarty->display|mako\.template\.Template)\s*\([^)]*(?:request|req\.|userInput|getParam)`
+  );
+  if (!hits.length) return null;
+  return {
+    id: "SSTI_JAVA_PHP_ENGINES",
+    title: "Java/PHP template engine (Freemarker/Velocity/Twig/Smarty) compiles user input — SSTI RCE",
+    severity: "CRITICAL",
+    evidence: toEvidence(hits),
+    files: toFiles(hits),
+    requiredActions: [
+      "Never pass user input as the template source to Freemarker, Velocity, Twig, Smarty, or Mako.",
+      "CWE-94 / ATT&CK T1059 — SSTI in Java template engines enables RCE via expression evaluation (e.g. ${7*7} → arbitrary method calls).",
+      "Fix: load templates from the filesystem at startup; pass user data only as context variables, never as template source."
+    ]
+  };
+}
+
+async function checkSpelOgnlInjection(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`(?:SpelExpressionParser|parseExpression|ExpressionParser|OgnlContext|Ognl\.getValue|Ognl\.parseExpression|MVEL\.eval)\s*\([^)]*(?:request\.getParameter|userInput|req\.)`
+  );
+  if (!hits.length) return null;
+  return {
+    id: "SPEL_OGNL_INJECTION",
+    title: "Spring SpEL/OGNL/MVEL expression parser evaluates user input — RCE via T(java.lang.Runtime)",
+    severity: "CRITICAL",
+    evidence: toEvidence(hits),
+    files: toFiles(hits),
+    requiredActions: [
+      "Never pass user-controlled input directly to SpEL, OGNL, or MVEL expression parsers.",
+      "CWE-94 / ATT&CK T1059 — T(java.lang.Runtime).getRuntime().exec('id') achieves RCE via SpEL expression evaluation.",
+      "Fix: use a SimpleEvaluationContext with a restricted type locator, or validate input against a strict allowlist before evaluation."
+    ]
+  };
+}
+
+async function checkPickleDeserialize(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`(?:pickle\.loads?\s*\(|cPickle\.loads?\s*\(|Marshal\.load\s*\(|joblib\.load\s*\(|torch\.load\s*\(|numpy\.load\s*\([^)]*allow_pickle\s*=\s*True)`
+  );
+  if (!hits.length) return null;
+  return {
+    id: "PICKLE_MARSHAL_DESERIALIZATION",
+    title: "Python pickle.loads/Marshal.load deserializes user data — RCE gadget chain risk (CWE-502)",
+    severity: "CRITICAL",
+    evidence: toEvidence(hits),
+    files: toFiles(hits),
+    requiredActions: [
+      "Never deserialize pickle, Marshal, or joblib data from untrusted sources — there is no safe way to sandbox pickle.loads.",
+      "CWE-502 / ATT&CK T1059 — a crafted pickle payload executes arbitrary Python via __reduce__ during deserialization.",
+      "Fix: use JSON or MessagePack with a strict schema; for ML models use ONNX or safetensors instead of torch.load/joblib.load."
+    ]
+  };
+}
+
+async function checkJavaDeserialize(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`(?:new\s+ObjectInputStream\s*\(|readObject\s*\(\s*\)|readUnshared\s*\(\s*\)|XMLDecoder\s*\(|XStream\.fromXML\s*\(|Kryo\.readObject)`
+  );
+  if (!hits.length) return null;
+  return {
+    id: "JAVA_OBJECT_DESERIALIZATION",
+    title: "Java ObjectInputStream.readObject/XStream/Kryo deserializes untrusted data — gadget chain RCE (CWE-502)",
+    severity: "CRITICAL",
+    evidence: toEvidence(hits),
+    files: toFiles(hits),
+    requiredActions: [
+      "Avoid Java native deserialization from untrusted sources; use serialization filters (JEP 290) if unavoidable.",
+      "CWE-502 / ATT&CK T1059 — Apache Commons Collections gadget chains achieve RCE via ObjectInputStream.readObject().",
+      "Fix: replace with JSON/Protobuf; if ObjectInputStream is required, implement a strict allowlisting ObjectInputFilter."
+    ]
+  };
+}
+
+async function checkCssInjection(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`(?:style\s*=\s*\{\{[^}]*(?:req\.|params\.|query\.)|createGlobalStyle`+"`"+String.raw`[^`+"`"+String.raw`]*\$\{(?:req|params|query)|css`+"`"+String.raw`[^`+"`"+String.raw`]*\$\{(?:req|params|query))`
+  );
+  if (!hits.length) return null;
+  return {
+    id: "CSS_INJECTION",
+    title: "User input in CSS-in-JS or style attribute — CSS injection enabling data exfiltration (CWE-79)",
+    severity: "HIGH",
+    evidence: toEvidence(hits),
+    files: toFiles(hits),
+    requiredActions: [
+      "Never interpolate user input directly into CSS-in-JS template literals or inline style attributes.",
+      "CWE-79 — CSS injection via expression() or url() can exfiltrate sensitive data to attacker-controlled servers.",
+      "Fix: validate CSS property values against a strict allowlist; never accept raw CSS strings from users."
+    ]
+  };
+}
+
+async function checkElasticsearchInjection(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`(?:client\.search\s*\(|esClient\.search\s*\()[^)]*(?:req\.|body\.|params\.|query\.)|(?:query_string|script\.source)\s*:\s*(?:req\.|body\.|params\.|query\.)`
+  );
+  if (!hits.length) return null;
+  return {
+    id: "ELASTICSEARCH_INJECTION",
+    title: "Elasticsearch query_string or script.source uses user input — Painless script injection (CWE-943)",
+    severity: "HIGH",
+    evidence: toEvidence(hits),
+    files: toFiles(hits),
+    requiredActions: [
+      "Never pass user input directly to Elasticsearch query_string or script.source — use match/term queries with explicit field mapping.",
+      "CWE-943 — Elasticsearch Painless script injection via script.source can read cluster data or cause DoS.",
+      "Fix: use structured queries (match, term, range) with user input as values, never as query syntax; disable dynamic scripting."
+    ]
+  };
+}
+
+async function checkWebSocketInjection(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`(?:ws\.on\s*\(\s*['"]message['"]|socket\.on\s*\(\s*['"]message['"])[\s\S]{0,300}(?:eval\s*\(|exec\s*\(|compile\s*\(|\.find\s*\(|\.query\s*\(|render\s*\()`
+  );
+  if (!hits.length) return null;
+  return {
+    id: "WEBSOCKET_MESSAGE_INJECTION",
+    title: "WebSocket message data passed to injection sinks without validation (CWE-20)",
+    severity: "HIGH",
+    evidence: toEvidence(hits),
+    files: toFiles(hits),
+    requiredActions: [
+      "Validate and sanitize all WebSocket message payloads before passing to eval, exec, DB query, or template sinks.",
+      "CWE-20 — WebSocket messages bypass HTTP-layer input validation; treat them as untrusted user input.",
+      "Fix: parse WebSocket messages with a strict Zod schema; never pass raw message data to eval(), exec(), or query functions."
+    ]
+  };
+}
+
+async function checkBracketNotationPollution(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`\w+\s*\[\s*(?:req\.|body\.|params\.|query\.|key\b|prop\b|field\b)[^\]]*\]\s*=`
+  );
+  const unsafe = hits.filter(
+    (h) => !/allowlist|allowedKeys|ALLOWED_KEYS|Object\.create\(null\)/.test(h.preview)
+  );
+  if (!unsafe.length) return null;
+  return {
+    id: "BRACKET_NOTATION_POLLUTION",
+    title: "Dynamic property assignment with user-controlled key — prototype pollution via bracket notation (CWE-1321)",
+    severity: "HIGH",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    requiredActions: [
+      "Validate property keys against an explicit allowlist before dynamic assignment; use Object.create(null) for key-value stores.",
+      "CWE-1321 — obj[req.body.key] = value with key='__proto__' or 'constructor' pollutes the prototype chain.",
+      "Fix: const ALLOWED = new Set(['name','email']); if (!ALLOWED.has(key)) throw new Error('Invalid key');"
+    ]
+  };
+}
+
+async function checkSseCrlfInjection(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`(?:res\.write\s*\(\s*[` + "`" + String.raw`'"]data:\s*\$\{|res\.write\s*\([^)]*(?:req\.|body\.|params\.|query\.)[^)]*(?:\\n|\\r))`
+  );
+  if (!hits.length) return null;
+  return {
+    id: "SSE_CRLF_INJECTION",
+    title: "SSE stream write with user input — CRLF injection into event stream (CWE-113)",
+    severity: "HIGH",
+    evidence: toEvidence(hits),
+    files: toFiles(hits),
+    requiredActions: [
+      "Strip or encode CRLF characters from user input before writing to SSE streams.",
+      "CWE-113 — CRLF injection into SSE data: fields can inject fake events or terminate the event stream.",
+      String.raw`Fix: const safe = userValue.replace(/[\r\n]/g, ' '); res.write('data: ' + safe + '\n\n');`
+    ]
+  };
+}
+
+async function checkPdfDocInjection(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`(?:pdfmake\.createPdf|new\s+jsPDF|puppeteer\.goto|page\.goto|wkhtmltopdf|docxtemplater|new\s+PizZip)\s*\([^)]*(?:req\.|body\.|params\.|query\.|user\.)`
+  );
+  if (!hits.length) return null;
+  return {
+    id: "PDF_DOCUMENT_INJECTION",
+    title: "PDF/Office generation library uses user input — formula injection or SSRF via file:// URL (CWE-74)",
+    severity: "HIGH",
+    evidence: toEvidence(hits),
+    files: toFiles(hits),
+    requiredActions: [
+      "Sanitize user input before passing to PDF/Office generation libraries — strip formula-triggering characters (=, +, -, @) and validate URLs.",
+      "CWE-74 — formula injection in generated spreadsheets can execute commands when opened; file:// URLs in headless browsers cause SSRF.",
+      "Fix: prefix cell values starting with =,+,-,@ with a single quote; validate puppeteer URLs against an allowlist blocking file://, localhost."
+    ]
+  };
+}
+
+async function checkHttpResponseSplitting(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`(?:writeHead\s*\(\s*\d+\s*,\s*(?:req\.|body\.|params\.)|headers\.set\s*\([^,]+,\s*(?:req\.|body\.|params\.))`
+  );
+  const unsafe = hits.filter(
+    (h) => !/replace.*\\r|replace.*\\n|encodeURIComponent/.test(h.preview)
+  );
+  if (!unsafe.length) return null;
+  return {
+    id: "HTTP_RESPONSE_SPLITTING",
+    title: "HTTP response splitting via writeHead or headers.set with user input (CWE-113)",
+    severity: "HIGH",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    requiredActions: [
+      "Strip CRLF characters from all user-controlled values before passing to writeHead or headers.set.",
+      "CWE-113 — HTTP response splitting via CRLF injection enables cache poisoning, XSS, and session fixation.",
+      String.raw`Fix: const safe = value.replace(/[\r\n]/g, ''); res.writeHead(200, { 'X-Header': safe });`
+    ]
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function checkInjectionDeep(_opts: { changedFiles: string[] }): Promise<Finding[]> {
@@ -759,6 +1001,18 @@ export async function checkInjectionDeep(_opts: { changedFiles: string[] }): Pro
       checkXpathInjection(),
       checkJndiInjection(),
       checkRedisEvalInjection(),
+      checkSecondOrderInjection(),
+      checkSstiJavaPhp(),
+      checkSpelOgnlInjection(),
+      checkPickleDeserialize(),
+      checkJavaDeserialize(),
+      checkCssInjection(),
+      checkElasticsearchInjection(),
+      checkWebSocketInjection(),
+      checkBracketNotationPollution(),
+      checkSseCrlfInjection(),
+      checkPdfDocInjection(),
+      checkHttpResponseSplitting(),
     ]);
     return results.flat().filter((f): f is Finding => f !== null);
   } catch (err) {

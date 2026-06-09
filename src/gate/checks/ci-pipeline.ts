@@ -101,6 +101,297 @@ async function checkGateStepPresent(changedFiles: string[]): Promise<Finding[]> 
 	return findings;
 }
 
+async function checkWorkflowInjection(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+	try {
+		const workflowFiles = await fg(["**/.github/workflows/*.yml", "**/.github/workflows/*.yaml"], {
+			dot: true,
+			ignore: ["**/node_modules/**", "**/.git/**"]
+		});
+		// Covers all attacker-controlled GitHub context tokens that can contain shell metacharacters:
+		// - github.event.{issue,pull_request,comment,review,discussion,inputs,release}.*
+		// - github.head_ref (attacker-controlled branch name on fork PRs)
+		// - github.ref_name (mutable, attacker-influenced on PRs)
+		// - github.actor (attacker-controlled username)
+		// - github.event.workflow_run.head_branch / head_commit.*
+		const injectionRe = /\$\{\{\s*(?:github\.event\.(?:issue|pull_request|comment|review|discussion|inputs|release|workflow_run)\.[a-z_.]+|github\.(?:head_ref|ref_name|actor))\s*\}\}/;
+		const flaggedFiles: string[] = [];
+		for (const file of workflowFiles) {
+			let content: string;
+			try {
+				content = await readFileSafe(file);
+			} catch {
+				continue;
+			}
+			const lines = content.split("\n");
+			for (let i = 0; i < lines.length; i++) {
+				if (!injectionRe.test(lines[i])) continue;
+				// Check if "run:" appears within the 5 lines before this match
+				const windowStart = Math.max(0, i - 5);
+				const contextLines = lines.slice(windowStart, i);
+				if (contextLines.some((l) => /run:/.test(l))) {
+					flaggedFiles.push(file);
+					break;
+				}
+			}
+		}
+		if (flaggedFiles.length > 0) {
+			findings.push({
+				id: "CI_WORKFLOW_INJECTION",
+				title: "GitHub Actions workflow uses github.event.* user input in run: step — workflow injection RCE",
+				severity: "CRITICAL",
+				files: flaggedFiles.slice(0, 10),
+				requiredActions: [
+					"GitHub Actions workflow uses github.event.* user input in run: step — workflow injection RCE (ATT&CK T1059, GHSL-2021-1167)",
+					"Never interpolate ${{ github.event.* }} directly into shell run: steps — pass values via environment variables instead (`env: VAL: ${{ github.event.issue.title }}`) and reference $VAL in the shell.",
+					"An attacker can craft a title/body/branch containing shell metacharacters to achieve arbitrary code execution with the runner's permissions."
+				]
+			});
+		}
+	} catch (err) {
+		console.warn("[checkWorkflowInjection] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));
+	}
+	return findings;
+}
+
+async function checkCiCachePoisoning(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+	try {
+		const workflowFiles = await fg(["**/.github/workflows/*.yml", "**/.github/workflows/*.yaml"], {
+			dot: true,
+			ignore: ["**/node_modules/**", "**/.git/**"]
+		});
+		const cacheActionRe = /uses:\s+actions\/cache/;
+		const poisonKeyRe = /key:.*\$\{\{.*github\.(?:head_ref|event\.pull_request\.head)/;
+		const flaggedFiles: string[] = [];
+		for (const file of workflowFiles) {
+			let content: string;
+			try {
+				content = await readFileSafe(file);
+			} catch {
+				continue;
+			}
+			const lines = content.split("\n");
+			for (let i = 0; i < lines.length; i++) {
+				if (!cacheActionRe.test(lines[i])) continue;
+				const windowEnd = Math.min(lines.length, i + 20);
+				const contextLines = lines.slice(i, windowEnd);
+				if (contextLines.some((l) => poisonKeyRe.test(l))) {
+					flaggedFiles.push(file);
+					break;
+				}
+			}
+		}
+		if (flaggedFiles.length > 0) {
+			findings.push({
+				id: "CI_CACHE_POISONING",
+				title: "CI cache key includes attacker-controlled branch name — cache poisoning risk",
+				severity: "HIGH",
+				files: flaggedFiles.slice(0, 10),
+				requiredActions: [
+					"CI cache key includes attacker-controlled branch name — cache poisoning injects malicious build artifacts (ATT&CK T1195.002)",
+					"Do not use `github.head_ref` or `github.event.pull_request.head.*` in cache keys — an attacker can craft a branch name to collide with another PR's cache.",
+					"Use only trusted, non-user-controlled values in cache keys (e.g. `github.ref`, `hashFiles(...)`)."
+				]
+			});
+		}
+	} catch (err) {
+		console.warn("[checkCiCachePoisoning] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));
+	}
+	return findings;
+}
+
+async function checkDownloadArtifactNoVerify(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+	try {
+		const workflowFiles = await fg(["**/.github/workflows/*.yml", "**/.github/workflows/*.yaml"], {
+			dot: true,
+			ignore: ["**/node_modules/**", "**/.git/**"]
+		});
+		const downloadRe = /uses:\s+(?:actions\/download-artifact|dawidd6\/action-download-artifact)/;
+		const verifyRe = /sha256|signature|cosign|sigstore|verify/i;
+		const flaggedFiles: string[] = [];
+		for (const file of workflowFiles) {
+			let content: string;
+			try {
+				content = await readFileSafe(file);
+			} catch {
+				continue;
+			}
+			const lines = content.split("\n");
+			for (let i = 0; i < lines.length; i++) {
+				if (!downloadRe.test(lines[i])) continue;
+				const windowEnd = Math.min(lines.length, i + 10);
+				const contextLines = lines.slice(i, windowEnd);
+				if (!contextLines.some((l) => verifyRe.test(l))) {
+					flaggedFiles.push(file);
+					break;
+				}
+			}
+		}
+		if (flaggedFiles.length > 0) {
+			findings.push({
+				id: "CI_ARTIFACT_NO_VERIFY",
+				title: "CI downloads build artifact without integrity verification",
+				severity: "HIGH",
+				files: flaggedFiles.slice(0, 10),
+				requiredActions: [
+					"CI downloads build artifact without integrity verification — artifact poisoning risk (ATT&CK T1195.002)",
+					"After downloading an artifact, verify its SHA-256 checksum or use Sigstore/cosign attestations before executing it.",
+					"An unverified artifact from a compromised or malicious workflow run can silently introduce backdoors into the build."
+				]
+			});
+		}
+	} catch (err) {
+		console.warn("[checkDownloadArtifactNoVerify] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));
+	}
+	return findings;
+}
+
+async function checkGithubTokenWriteAll(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+	try {
+		const workflowFiles = await fg(["**/.github/workflows/*.yml", "**/.github/workflows/*.yaml"], {
+			dot: true,
+			ignore: ["**/node_modules/**", "**/.git/**"]
+		});
+		const writePermRe = /permissions:\s*write-all|packages:\s*write|contents:\s*write|pull-requests:\s*write/;
+		const prTriggerRe = /pull_request(?:_target)?:/;
+		const flaggedFiles: string[] = [];
+		for (const file of workflowFiles) {
+			let content: string;
+			try {
+				content = await readFileSafe(file);
+			} catch {
+				continue;
+			}
+			if (writePermRe.test(content) && prTriggerRe.test(content)) {
+				flaggedFiles.push(file);
+			}
+		}
+		if (flaggedFiles.length > 0) {
+			findings.push({
+				id: "CI_GITHUB_TOKEN_WRITE_ALL",
+				title: "GITHUB_TOKEN granted write permissions in workflow triggered by external PRs",
+				severity: "HIGH",
+				files: flaggedFiles.slice(0, 10),
+				requiredActions: [
+					"GITHUB_TOKEN granted write permissions in workflow triggered by external PRs — token theft enables repo write (ATT&CK T1552.001)",
+					"Restrict permissions to the minimum required scopes; avoid `write-all` on workflows that process untrusted pull requests.",
+					"Use `permissions: read-all` as the default and elevate only the specific scopes needed (e.g. `issues: write`)."
+				]
+			});
+		}
+	} catch (err) {
+		console.warn("[checkGithubTokenWriteAll] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));
+	}
+	return findings;
+}
+
+async function checkForkSecretExposure(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+	try {
+		const workflowFiles = await fg(["**/.github/workflows/*.yml", "**/.github/workflows/*.yaml"], {
+			dot: true,
+			ignore: ["**/node_modules/**", "**/.git/**"]
+		});
+		const secretsRe = /secrets\./;
+		const flaggedFiles: string[] = [];
+		for (const file of workflowFiles) {
+			let content: string;
+			try {
+				content = await readFileSafe(file);
+			} catch {
+				continue;
+			}
+			// Match "pull_request:" but NOT "pull_request_target:"
+			if (/^\s*pull_request:/m.test(content) && secretsRe.test(content)) {
+				flaggedFiles.push(file);
+			}
+		}
+		if (flaggedFiles.length > 0) {
+			findings.push({
+				id: "CI_FORK_SECRET_EXPOSURE",
+				title: "Secrets referenced in pull_request-triggered workflow — exposed to fork PR contributors",
+				severity: "CRITICAL",
+				files: flaggedFiles.slice(0, 10),
+				requiredActions: [
+					"Secrets referenced in pull_request-triggered workflow — exposed to fork PR contributors (ATT&CK T1552.001)",
+					"Workflows triggered by `pull_request` from forks do not have access to secrets by default, but referencing them signals intent and may expose them in other contexts.",
+					"Move secret-dependent steps to a separate workflow triggered by `pull_request_target` with explicit trust checks, or use environment protection rules to gate secret access."
+				]
+			});
+		}
+	} catch (err) {
+		console.warn("[checkForkSecretExposure] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));
+	}
+	return findings;
+}
+
+async function checkNpmIgnoreScriptsCi(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+	try {
+		const workflowFiles = await fg(["**/.github/workflows/*.yml", "**/.github/workflows/*.yaml"], {
+			dot: true,
+			ignore: ["**/node_modules/**", "**/.git/**"]
+		});
+
+		// Check whether .npmrc already sets ignore-scripts=true
+		let npmrcDisablesScripts = false;
+		const npmrcFiles = await fg([".npmrc", "**/.npmrc"], {
+			dot: true,
+			ignore: ["**/node_modules/**", "**/.git/**"]
+		});
+		for (const rc of npmrcFiles) {
+			let rcContent: string;
+			try {
+				rcContent = await readFileSafe(rc);
+			} catch {
+				continue;
+			}
+			if (/^\s*ignore-scripts\s*=\s*true/m.test(rcContent)) {
+				npmrcDisablesScripts = true;
+				break;
+			}
+		}
+
+		if (npmrcDisablesScripts) {
+			return findings;
+		}
+
+		// npm install/ci without --ignore-scripts (and not already covered by .npmrc)
+		const npmBareRe = /npm\s+(?:install|ci)(?!.*--ignore-scripts)/;
+		const flaggedFiles: string[] = [];
+		for (const file of workflowFiles) {
+			let content: string;
+			try {
+				content = await readFileSafe(file);
+			} catch {
+				continue;
+			}
+			if (npmBareRe.test(content)) {
+				flaggedFiles.push(file);
+			}
+		}
+		if (flaggedFiles.length > 0) {
+			findings.push({
+				id: "CI_NPM_MISSING_IGNORE_SCRIPTS",
+				title: "npm install/ci in CI without --ignore-scripts",
+				severity: "MEDIUM",
+				files: flaggedFiles.slice(0, 10),
+				requiredActions: [
+					"npm install/ci in CI without --ignore-scripts — postinstall scripts execute automatically (ATT&CK T1195.001)",
+					"Add `--ignore-scripts` to all `npm install` / `npm ci` invocations in CI, or set `ignore-scripts=true` in .npmrc.",
+					"Malicious or compromised dependencies can use postinstall/preinstall lifecycle scripts to exfiltrate secrets or modify build artifacts."
+				]
+			});
+		}
+	} catch (err) {
+		console.warn("[checkNpmIgnoreScriptsCi] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));
+	}
+	return findings;
+}
+
 export async function runCiPipelineChecks(_opts: { changedFiles: string[] }): Promise<Finding[]> {
 	const findings: Finding[] = [
 		...await checkGateStepPresent(_opts.changedFiles)
@@ -244,6 +535,16 @@ export async function runCiPipelineChecks(_opts: { changedFiles: string[] }): Pr
 	} catch (err) {
 		console.warn("[runCiPipelineChecks] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));
 	}
+
+	const additional = await Promise.all([
+		checkWorkflowInjection(),
+		checkCiCachePoisoning(),
+		checkDownloadArtifactNoVerify(),
+		checkGithubTokenWriteAll(),
+		checkForkSecretExposure(),
+		checkNpmIgnoreScriptsCi()
+	]);
+	findings.push(...additional.flat());
 
 	return findings;
 }

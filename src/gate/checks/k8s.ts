@@ -115,6 +115,39 @@ function checkContainerSecurity(ctx: K8sContext): Finding[] {
 		});
 	}
 
+	const runsAsRootFiles = matching(ctx, /runAsUser:\s*0/);
+	if (runsAsRootFiles.length > 0) {
+		findings.push({
+			id: "K8S_CONTAINER_RUNS_AS_ROOT",
+			title: "Container explicitly runs as root (runAsUser: 0)",
+			severity: "HIGH",
+			files: runsAsRootFiles,
+			requiredActions: [
+				"Container explicitly runs as root (runAsUser: 0) — container escape yields immediate host root.",
+				"Set runAsNonRoot: true and use a non-zero runAsUser UID (e.g. 1000) in all container securityContexts."
+			]
+		});
+	}
+
+	// Use /capabilities:/ as the anchor so pod-level securityContext (which has no capabilities)
+	// doesn't cause a false positive, and YAML comments don't trigger a match.
+	const capsNotDroppedFiles = filterFiles(
+		ctx,
+		(c) => /capabilities:/.test(c) && !/drop:/.test(c)
+	);
+	if (capsNotDroppedFiles.length > 0) {
+		findings.push({
+			id: "K8S_CAPABILITIES_NOT_DROPPED",
+			title: "Container capabilities not dropped",
+			severity: "HIGH",
+			files: capsNotDroppedFiles,
+			requiredActions: [
+				"Container capabilities not dropped — NET_RAW/SYS_PTRACE available for host attacks.",
+				"Add capabilities.drop: [ALL] to all container securityContexts and explicitly re-add only required capabilities."
+			]
+		});
+	}
+
 	return findings;
 }
 
@@ -202,15 +235,110 @@ function checkRbacAndConfig(ctx: K8sContext): Finding[] {
 		});
 	}
 
+	const nodePortFiles = matching(ctx, /type:\s*NodePort/);
+	if (nodePortFiles.length > 0) {
+		findings.push({
+			id: "K8S_NODEPORT_EXPOSURE",
+			title: "Kubernetes NodePort service detected",
+			severity: "MEDIUM",
+			files: nodePortFiles,
+			requiredActions: [
+				"Kubernetes NodePort service detected — service exposed on every node's public IP, bypasses WAF.",
+				"Replace NodePort services with LoadBalancer or Ingress resources fronted by a WAF/API gateway."
+			]
+		});
+	}
+
+	// Also match YAML-quoted forms: anonymous-auth: 'true' and anonymous-auth: "true"
+	const anonAuthFiles = matching(ctx, /--anonymous-auth=true|anonymous-auth:\s*['"]?true['"]?/);
+	if (anonAuthFiles.length > 0) {
+		findings.push({
+			id: "K8S_API_ANONYMOUS_AUTH",
+			title: "Kubernetes API server has --anonymous-auth=true",
+			severity: "CRITICAL",
+			files: anonAuthFiles,
+			requiredActions: [
+				"Kubernetes API server has --anonymous-auth=true — unauthenticated requests processed as system:anonymous.",
+				"Set --anonymous-auth=false in the kube-apiserver configuration and remove any ClusterRoleBindings for system:anonymous."
+			]
+		});
+	}
+
+	return findings;
+}
+
+function checkDockerSocketMount(ctx: K8sContext): Finding[] {
+	const findings: Finding[] = [];
+
+	const dockerSocketFiles = matching(ctx, /\/var\/run\/docker\.sock/);
+	if (dockerSocketFiles.length > 0) {
+		findings.push({
+			id: "K8S_DOCKER_SOCKET_MOUNT",
+			title: "Docker socket mounted inside Kubernetes pod",
+			severity: "CRITICAL",
+			files: dockerSocketFiles,
+			requiredActions: [
+				"Docker socket mounted inside Kubernetes pod — container controls host Docker daemon, trivial escape to root.",
+				"Remove /var/run/docker.sock volume mounts. Use a dedicated sidecar image builder (e.g. Kaniko, Buildah) or an in-cluster container registry instead."
+			]
+		});
+	}
+
+	return findings;
+}
+
+function checkTillerHelm(ctx: K8sContext): Finding[] {
+	const findings: Finding[] = [];
+
+	const tillerFiles = matching(ctx, /tiller-deploy|gcr\.io\/kubernetes-helm\/tiller/);
+	if (tillerFiles.length > 0) {
+		findings.push({
+			id: "K8S_TILLER_HELM_V2",
+			title: "Helm v2 Tiller detected",
+			severity: "CRITICAL",
+			files: tillerFiles,
+			requiredActions: [
+				"Helm v2 Tiller detected — unauthenticated cluster-admin gRPC endpoint inside cluster.",
+				"Migrate to Helm v3 which eliminates Tiller entirely. Remove all tiller-deploy Deployments and ServiceAccounts."
+			]
+		});
+	}
+
+	return findings;
+}
+
+function checkMtlsPolicy(ctx: K8sContext): Finding[] {
+	const findings: Finding[] = [];
+
+	// PeerAuthentication is Istio-specific. Linkerd uses Server/AuthorizationPolicy CRDs
+	// (linkerd.io/v1alpha2) — those are not covered here.
+	const mtlsPermissiveFiles = filterFiles(
+		ctx,
+		(c) => /kind:\s*PeerAuthentication/.test(c) && /mode:\s*(?:PERMISSIVE|DISABLE)/.test(c)
+	);
+	if (mtlsPermissiveFiles.length > 0) {
+		findings.push({
+			id: "K8S_MTLS_NOT_STRICT",
+			title: "Istio PeerAuthentication in PERMISSIVE or DISABLE mode",
+			severity: "HIGH",
+			files: mtlsPermissiveFiles,
+			requiredActions: [
+				"Istio/Linkerd PeerAuthentication in PERMISSIVE or DISABLE mode — plaintext inter-service traffic allowed.",
+				"Set mode: STRICT in all PeerAuthentication resources to enforce mTLS for all inter-service communication."
+			]
+		});
+	}
+
 	return findings;
 }
 
 async function checkNetworkAndAdmission(ctx: K8sContext): Promise<Finding[]> {
 	const findings: Finding[] = [];
 
-	const networkPolicyFiles = await fg(
-		["**/NetworkPolicy*.yaml", "**/*network-policy*.yaml", "**/NetworkPolicy*.yml", "**/*network-policy*.yml"],
-		{ ignore: ["**/node_modules/**", "**/dist/**", "**/.git/**"] }
+	// Filename-only glob misses NetworkPolicy manifests in files like policies.yaml;
+	// fall back to content-scanning already-loaded ctx files as the authoritative check.
+	const networkPolicyFiles = ctx.files.filter((f) =>
+		/kind:\s*NetworkPolicy/.test(ctx.contents.get(f) ?? "")
 	);
 	if (networkPolicyFiles.length === 0) {
 		findings.push({
@@ -272,6 +400,9 @@ export async function checkKubernetes(_opts: { changedFiles: string[] }): Promis
 		return [
 			...checkContainerSecurity(ctx),
 			...checkRbacAndConfig(ctx),
+			...checkDockerSocketMount(ctx),
+			...checkTillerHelm(ctx),
+			...checkMtlsPolicy(ctx),
 			...networkFindings
 		];
 	} catch (err) {

@@ -113,6 +113,79 @@ async function checkGraphqlAliasAmplification(graphqlInUse: boolean): Promise<Fi
 	return findings;
 }
 
+async function checkGraphqlResolverInjection(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+
+	const resolverInjectionHits = await searchRepo({
+		query: String.raw`(?:resolve|resolver)\s*\([^)]*\)\s*\{[^}]*(?:SELECT|INSERT|UPDATE|DELETE|\$where|\$regex|aggregate)\s*['"].*\$\{args\.`,
+		isRegex: true,
+		maxMatches: 200
+	});
+
+	const resolverInjectionBroadHits = await searchRepo({
+		query: String.raw`resolve.*\{[^}]*(?:SELECT|INSERT)[^}]*\$\{args`,
+		isRegex: true,
+		maxMatches: 200
+	});
+
+	const allHits = [...resolverInjectionHits, ...resolverInjectionBroadHits];
+	const uniqueHits = allHits.filter(
+		(hit, idx, arr) => arr.findIndex((h) => h.file === hit.file && h.line === hit.line) === idx
+	);
+
+	if (uniqueHits.length > 0) {
+		findings.push({
+			id: "GRAPHQL_RESOLVER_INJECTION",
+			title: "GraphQL resolver argument concatenated into raw SQL/NoSQL query — injection via resolver args (CWE-89/CWE-943)",
+			severity: "CRITICAL",
+			evidence: uniqueHits.slice(0, 10).map((m) => `${m.file}:${m.line}:${m.preview}`),
+			files: [...new Set(uniqueHits.slice(0, 10).map((m) => m.file))],
+			requiredActions: [
+				"Never interpolate resolver args directly into SQL or NoSQL queries.",
+				"Use parameterized queries or an ORM to pass resolver arguments safely.",
+				"Validate and sanitize all args before use in any query expression."
+			]
+		});
+	}
+
+	return findings;
+}
+
+async function checkGraphqlAliasBatching(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+
+	const serverHits = await searchRepo({
+		query: String.raw`(?:ApolloServer|makeExecutableSchema|buildSchema|graphqlHTTP)\s*\(`,
+		isRegex: true,
+		maxMatches: 200
+	});
+
+	if (serverHits.length === 0) return findings;
+
+	const aliasLimitHits = await searchRepo({
+		query: String.raw`(?:maxAliasCount|depthLimit|complexityLimit|queryComplexity|fieldExtensions.*complexity)`,
+		isRegex: true,
+		maxMatches: 200
+	});
+
+	if (aliasLimitHits.length === 0) {
+		findings.push({
+			id: "GRAPHQL_ALIAS_BATCHING",
+			title: "GraphQL server without alias count limit — N+1 batching enables account enumeration and DoS (CWE-770)",
+			severity: "HIGH",
+			evidence: serverHits.slice(0, 10).map((m) => `${m.file}:${m.line}:${m.preview}`),
+			files: [...new Set(serverHits.slice(0, 10).map((m) => m.file))],
+			requiredActions: [
+				"Add a maxAliasCount or equivalent alias limit to the GraphQL server configuration.",
+				"Use graphql-query-complexity or graphql-depth-limit to bound alias expansion.",
+				"Without limits, attackers can batch aliased fields to enumerate data or exhaust backend resources."
+			]
+		});
+	}
+
+	return findings;
+}
+
 async function checkGraphqlCircularFragments(graphqlInUse: boolean): Promise<Finding[]> {
 	if (!graphqlInUse) return [];
 	const findings: Finding[] = [];
@@ -262,6 +335,14 @@ export async function checkGraphQL(_opts: { changedFiles: string[] }): Promise<F
 		// 8. Circular fragment protection
 		const fragmentFindings = await checkGraphqlCircularFragments(graphqlInUse);
 		findings.push(...fragmentFindings);
+
+		// 9. Resolver injection
+		const resolverInjectionFindings = await checkGraphqlResolverInjection();
+		findings.push(...resolverInjectionFindings);
+
+		// 10. Alias batching without limit
+		const aliasBatchingFindings = await checkGraphqlAliasBatching();
+		findings.push(...aliasBatchingFindings);
 	} catch (err) {
 		console.warn("[checkGraphQL] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));
 	}

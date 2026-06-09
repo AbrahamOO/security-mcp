@@ -23,6 +23,25 @@
     { "id": "mobile_logging", "description": "No sensitive data logged in production builds — crash reporting sanitized", "critical": true },
     { "id": "mobile_tapjacking_prevention", "description": "Android tapjacking prevention: FLAG_SECURE set on sensitive screens; filterTouchesWhenObscured=true on clickable elements handling auth or payments", "critical": true },
     { "id": "mobile_memory_zeroing", "description": "Sensitive data (passwords, keys, PAN) explicitly zeroed from memory after use — not relying on GC; no sensitive data in String objects (use char[] or SecureString)", "critical": false },
-    { "id": "mobile_anti_debugging", "description": "Anti-debugging and anti-tampering controls in place for high-risk operations; ptrace detection and integrity attestation verified before sensitive operations", "critical": false }
+    { "id": "mobile_anti_debugging", "description": "Anti-debugging and anti-tampering controls in place for high-risk operations; ptrace detection and integrity attestation verified before sensitive operations", "critical": false },
+    { "id": "mobile_ios_temp_sensitive", "title": "iOS: Sensitive data not written to NSTemporaryDirectory or NSCachesDirectory without explicit cleanup", "severity": "high", "automated": true },
+    { "id": "mobile_ios_file_protection_none", "title": "iOS: NSFileProtectionNone not set on any file containing sensitive data", "severity": "critical", "automated": true },
+    { "id": "mobile_ios_appstorage_sensitive", "title": "iOS: @AppStorage not used for sensitive credentials or tokens", "severity": "high", "automated": true },
+    { "id": "mobile_ios_sqlite_unencrypted", "title": "iOS: SQLite databases encrypted with SQLCipher when storing sensitive data", "severity": "high", "automated": true },
+    { "id": "mobile_ios_webview_http", "title": "iOS: WKWebView does not load http:// URLs when JavaScript is enabled", "severity": "critical", "automated": true },
+    { "id": "mobile_ios_universal_links", "title": "iOS: Universal Links configured with HTTPS AASA and restrictive path patterns", "severity": "high", "automated": true },
+    { "id": "mobile_android_root_detection", "title": "Android: Root detection implemented for high-risk operations", "severity": "medium", "automated": true },
+    { "id": "mobile_android_frida_magisk_detection", "title": "Android: Frida/Magisk/Xposed detection in place for high-risk app flows", "severity": "medium", "automated": true },
+    { "id": "mobile_android_webview_ssl_error", "title": "Android: WebViewClient.onReceivedSslError does not call proceed() unconditionally", "severity": "critical", "automated": true },
+    { "id": "mobile_android_firebase_rules", "title": "Android: Firebase Realtime Database and Firestore rules deny unauthenticated access", "severity": "critical", "automated": true },
+    { "id": "mobile_android_maps_api_key", "title": "Android: Google Maps API key not hardcoded in manifest or resource files", "severity": "high", "automated": true },
+    { "id": "mobile_android_deeplink_traversal", "title": "Android: Deep link path parameters validated and sanitized before use in file or URL operations", "severity": "high", "automated": true },
+    { "id": "mobile_android_sharedprefs_world", "title": "Android: SharedPreferences not opened with MODE_WORLD_READABLE or MODE_WORLD_WRITEABLE", "severity": "critical", "automated": true },
+    { "id": "mobile_android_content_provider_permission", "title": "Android: ContentProvider with exported=true has explicit readPermission and writePermission", "severity": "high", "automated": true },
+    { "id": "mobile_rn_async_storage_sensitive", "title": "React Native: AsyncStorage not used for credentials or tokens — use react-native-keychain or Expo SecureStore", "severity": "high", "automated": true },
+    { "id": "mobile_rn_codepush_integrity", "title": "React Native: OTA bundle updates verified with code signing before execution", "severity": "high", "automated": true },
+    { "id": "mobile_flutter_sharedprefs_sensitive", "title": "Flutter: Sensitive data stored in flutter_secure_storage, not shared_preferences", "severity": "high", "automated": true },
+    { "id": "mobile_expo_async_vs_secure", "title": "Expo: Credentials and tokens stored in SecureStore, not AsyncStorage", "severity": "high", "automated": true },
+    { "id": "mobile_certificate_transparency", "title": "Certificate Transparency enforcement enabled for production domains", "severity": "medium", "automated": true }
   ]
 }

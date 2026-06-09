@@ -541,6 +541,123 @@ async function checkSessionWeakConfig(): Promise<Finding[]> {
 }
 
 // ---------------------------------------------------------------------------
+// 16. WEB_DANGLING_MARKUP — user input reflected in HTML attribute values
+// ---------------------------------------------------------------------------
+
+async function checkDanglingMarkup(): Promise<Finding[]> {
+  const hits = await searchRepo({
+    query: String.raw`(?:res\.send\s*\(\s*['"][^'"]*<[a-z]+[^>]*(?:src|href|action)\s*=\s*['"][^'"]*\$\{|ejs\.render[^)]*\{[^}]*(?:req\.|body\.|params\.|query\.))`,
+    isRegex: true,
+    maxMatches: 200
+  });
+
+  if (hits.length === 0) return [];
+  return [
+    {
+      id: "WEB_DANGLING_MARKUP",
+      title: "User input reflected in HTML attribute value — dangling markup injection risk",
+      severity: "HIGH",
+      evidence: hits.slice(0, 15).map((m) => `${m.file}:${m.line}:${m.preview}`),
+      requiredActions: [
+        "User input reflected in HTML attribute value — dangling markup injection enables data exfiltration (CWE-79/CWE-116).",
+        "Never interpolate user-controlled values directly into HTML attribute values.",
+        "Use a proper HTML templating engine with context-aware escaping or a sanitizer.",
+        "Apply output encoding appropriate to the context (HTML attribute, URL, JS, CSS)."
+      ]
+    }
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// 17. WEB_POSTMESSAGE_WILDCARD — postMessage with wildcard targetOrigin
+// ---------------------------------------------------------------------------
+
+async function checkPostMessageWildcard(): Promise<Finding[]> {
+  const hits = await searchRepo({
+    query: String.raw`(?:postMessage|parent\.postMessage|window\.postMessage)\s*\([^,)]+,\s*['"]\*['"]`,
+    isRegex: true,
+    maxMatches: 200
+  });
+
+  if (hits.length === 0) return [];
+  return [
+    {
+      id: "WEB_POSTMESSAGE_WILDCARD",
+      title: "postMessage with wildcard targetOrigin '*' detected",
+      severity: "MEDIUM",
+      evidence: hits.slice(0, 15).map((m) => `${m.file}:${m.line}:${m.preview}`),
+      requiredActions: [
+        "postMessage with wildcard targetOrigin '*' — data sent to any listening origin (CWE-346).",
+        "Replace '*' with an explicit trusted origin (e.g. 'https://example.com').",
+        "Validate the sender's origin in the message receiver with event.origin checks."
+      ]
+    }
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// 18. WEB_CACHE_POISONING — X-Forwarded-Host or unkeyed header reflected
+// ---------------------------------------------------------------------------
+
+async function checkCachePoisoningHeaders(): Promise<Finding[]> {
+  const hits = await searchRepo({
+    query: String.raw`req\.headers\s*\[\s*['"]x-forwarded-host['"]]|req\.headers\.(?:host|x-forwarded-host|x-original-url)`,
+    isRegex: true,
+    maxMatches: 200
+  });
+
+  const suspicious = hits.filter(
+    (m) => !/allowlist|===.*TRUSTED_HOST|ALLOWED_HOSTS/.test(m.preview)
+  );
+
+  if (suspicious.length === 0) return [];
+  return [
+    {
+      id: "WEB_CACHE_POISONING",
+      title: "X-Forwarded-Host or unkeyed header reflected in response — cache poisoning risk",
+      severity: "MEDIUM",
+      evidence: suspicious.slice(0, 15).map((m) => `${m.file}:${m.line}:${m.preview}`),
+      requiredActions: [
+        "X-Forwarded-Host or unkeyed header reflected in response — web cache poisoning risk (CWE-444).",
+        "Validate X-Forwarded-Host against a strict allowlist of trusted hostnames before use.",
+        "Never reflect raw Host or X-Forwarded-Host headers into cached responses (e.g. URLs, redirects, links).",
+        "Configure your reverse proxy / CDN to strip or normalise forwarding headers before they reach the app."
+      ]
+    }
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// 19. WEB_MISSING_SRI — external scripts without Subresource Integrity
+// ---------------------------------------------------------------------------
+
+async function checkMissingSri(): Promise<Finding[]> {
+  const hits = await searchRepo({
+    query: String.raw`<script[^>]+src\s*=\s*['"]https?://(?!localhost|127\.)[^'"]+['"][^>]*>`,
+    isRegex: true,
+    maxMatches: 200
+  });
+
+  const suspicious = hits.filter((m) => !/integrity=/.test(m.preview));
+
+  if (suspicious.length === 0) return [];
+  return [
+    {
+      id: "WEB_MISSING_SRI",
+      title: "External script loaded without Subresource Integrity (SRI)",
+      severity: "MEDIUM",
+      evidence: suspicious.slice(0, 15).map((m) => `${m.file}:${m.line}:${m.preview}`),
+      requiredActions: [
+        "External script loaded without Subresource Integrity (SRI) — CDN compromise risk (CWE-829).",
+        "Add integrity and crossorigin attributes to all external <script> tags.",
+        "Generate SRI hashes at build time (e.g. using the SRI Hash Generator or webpack-subresource-integrity).",
+        "Consider self-hosting critical third-party scripts to eliminate CDN supply-chain risk."
+      ]
+    }
+  ];
+}
+
+// ---------------------------------------------------------------------------
 // Main export
 // ---------------------------------------------------------------------------
 
@@ -560,6 +677,10 @@ export async function checkWebNextjs(_: { changedFiles: string[] }): Promise<Fin
     checkGraphqlIntrospection,
     checkPathTraversal,
     checkLogPii,
-    checkSessionWeakConfig
+    checkSessionWeakConfig,
+    checkDanglingMarkup,
+    checkPostMessageWildcard,
+    checkCachePoisoningHeaders,
+    checkMissingSri
   ]);
 }

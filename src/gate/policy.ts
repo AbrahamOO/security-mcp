@@ -26,7 +26,7 @@ import { checkDlp } from "./checks/dlp.js";
 import { runSbomChecks } from "./checks/sbom.js";
 import { runPlaybookChecks } from "./checks/playbook.js";
 import { runAiRedteamChecks } from "./checks/ai-redteam.js";
-import { runRuntimeChecks } from "./checks/runtime.js";
+import { runRuntimeChecks, runDockerChecks } from "./checks/runtime.js";
 import { runCiPipelineChecks } from "./checks/ci-pipeline.js";
 import { runNucleiChecks } from "./checks/nuclei.js";
 import { getCommitHash, loadBaseline, saveBaseline, compareBaseline } from "./baseline.js";
@@ -116,7 +116,8 @@ async function resolveScopedFiles(opts: {
     const files = await fg(targets, {
       onlyFiles: true,
       dot: true,
-      ignore: SCOPE_IGNORE_GLOBS
+      ignore: SCOPE_IGNORE_GLOBS,
+      followSymbolicLinks: false
     });
     return Array.from(new Set(files)).sort((a, b) => a.localeCompare(b));
   }
@@ -125,7 +126,8 @@ async function resolveScopedFiles(opts: {
   const files = await fg(folderGlobs, {
     onlyFiles: true,
     dot: true,
-    ignore: SCOPE_IGNORE_GLOBS
+    ignore: SCOPE_IGNORE_GLOBS,
+    followSymbolicLinks: false
   });
   return Array.from(new Set(files)).sort((a, b) => a.localeCompare(b));
 }
@@ -308,6 +310,7 @@ async function runAllChecks(opts: {
     isApiOrWeb   ? checkAuthDeep({ changedFiles })                          : Promise.resolve([]),
     checkSupplyChainDeep({ changedFiles }),
     checkBusinessLogic({ changedFiles }),
+    runDockerChecks({ changedFiles }),
     runScanners({ surfaces, changedFiles })
   ]);
 

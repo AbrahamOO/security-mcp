@@ -6,6 +6,8 @@
  */
 import { Finding, sanitizeErrorMessage } from "../result.js";
 import { searchRepo } from "../../repo/search.js";
+import fg from "fast-glob";
+import { readFileSafe } from "../../repo/fs.js";
 
 const NON_CODE_RE = /\.(?:md|json|yaml|yml|txt|rst|toml|lock)$/i;
 
@@ -259,8 +261,11 @@ async function checkProcessExitWithWipe(): Promise<Finding | null> {
 }
 
 async function checkHiddenFileWrite(): Promise<Finding | null> {
+  // The negative lookahead is anchored to the exact dotfile name by requiring the exclusion
+  // token to be immediately followed by a quote or whitespace. Without this anchor, prefix
+  // matches like '.envrc' and '.environment' were incorrectly excluded (false negatives).
   const hits = await codeSearch(
-    String.raw`fs\.(?:writeFile|writeFileSync|appendFile|appendFileSync|createWriteStream)\s*\(\s*['"]\.[./]*(?!env|npmrc|gitignore|eslintrc|prettierrc)[a-zA-Z_-]{1,30}['"]`
+    String.raw`fs\.(?:writeFile|writeFileSync|appendFile|appendFileSync|createWriteStream)\s*\(\s*['"]\.[./]*(?!(?:env|npmrc|gitignore|eslintrc|prettierrc)['"\\s])[a-zA-Z_-]{1,30}['"]`
   );
   if (!hits.length) return null;
   return {
@@ -647,6 +652,183 @@ async function checkGithubActionsPinning(): Promise<Finding | null> {
   };
 }
 
+/**
+ * Dockerfile FROM uses a mutable tag without a SHA digest — base image supply chain risk.
+ * ATT&CK T1195.002 — an attacker can push a malicious image to a mutable tag.
+ */
+async function checkDockerUnpinnedDigest(): Promise<Finding | null> {
+  const dockerfiles = await fg(
+    ["**/Dockerfile", "**/Dockerfile.*", "**/*.dockerfile"],
+    { ignore: ["**/node_modules/**", "**/dist/**", "**/.git/**"], dot: true }
+  );
+  if (!dockerfiles.length) return null;
+
+  // FROM <image>[:<tag>] without @sha256: digest
+  // Excludes: FROM scratch (reserved keyword, has no digest)
+  const mutableTagRe = /^FROM\s+(?!scratch)(?!.*@sha256:)[^\s]+(?::latest|:[0-9a-zA-Z][^@\s]*)?\s*$/m;
+
+  const offendingFiles: string[] = [];
+  for (const file of dockerfiles) {
+    const content = await readFileSafe(file);
+    if (mutableTagRe.test(content)) {
+      offendingFiles.push(file);
+    }
+  }
+  if (!offendingFiles.length) return null;
+  return {
+    id: "DOCKER_UNPINNED_BASE_IMAGE",
+    title: "Dockerfile FROM uses mutable tag without SHA digest — base image supply chain risk (ATT&CK T1195.002)",
+    severity: "HIGH",
+    evidence: offendingFiles.slice(0, 10).map((f) => `${f}: FROM uses mutable tag (no @sha256: digest)`),
+    files: offendingFiles.slice(0, 10),
+    requiredActions: [
+      "Pin base images to an immutable SHA-256 digest: FROM node:20-alpine@sha256:<digest>",
+      "ATT&CK T1195.002 — a compromised or overwritten upstream tag silently changes the base image on every build.",
+      "Use 'docker inspect --format={{index .RepoDigests 0}} <image>:<tag>' to obtain the digest, then commit it to the Dockerfile."
+    ]
+  };
+}
+
+/**
+ * Python setup.py or install script fetches and executes remote content — supply chain backdoor.
+ * ATT&CK T1195.001 — attackers embed remote-fetch-and-exec in setup.py to compromise installs.
+ */
+async function checkPythonSetupExec(): Promise<Finding | null> {
+  const hitsA = await allSearch(
+    String.raw`(?:subprocess\.(?:call|run|Popen|check_output)|os\.system|os\.popen)\s*\([^)]*(?:curl|wget|http|requests)`
+  );
+  const hitsB = await allSearch(
+    String.raw`^\s*exec\s*\([^)]*(?:open|urlopen|requests)`
+  );
+  const hits = [...hitsA, ...hitsB];
+  if (!hits.length) return null;
+  return {
+    id: "PYTHON_SETUP_EXEC",
+    title: "Python setup.py or install script fetches and executes remote content — supply chain backdoor (ATT&CK T1195.001)",
+    severity: "CRITICAL",
+    evidence: toEvidence(hits),
+    files: toFiles(hits),
+    requiredActions: [
+      "Remove remote fetch-and-exec from setup.py or any install script. Bundle all required resources in the package.",
+      "ATT&CK T1195.001 — setup.py runs automatically during 'pip install'; any remote code execution here is a supply chain backdoor.",
+      "If external data is required at install time, fetch it lazily at runtime and verify a pinned hash before execution."
+    ]
+  };
+}
+
+/**
+ * pip install without --require-hashes — dependency substitution via compromised PyPI mirror.
+ * ATT&CK T1195.001 — hash-less installs allow a MitM or mirror compromise to swap packages.
+ */
+async function checkPipNoHashes(): Promise<Finding | null> {
+  const hits = await allSearch(
+    String.raw`pip(?:3)?\s+install(?!.*--require-hashes)(?!.*--no-deps).*requirements`
+  );
+  if (!hits.length) return null;
+  return {
+    id: "PIP_NO_HASH_CHECKING",
+    title: "pip install without --require-hashes — dependency substitution via compromised PyPI mirror possible (ATT&CK T1195.001)",
+    severity: "HIGH",
+    evidence: toEvidence(hits),
+    files: toFiles(hits),
+    requiredActions: [
+      "Add --require-hashes to all 'pip install -r requirements*.txt' invocations.",
+      "ATT&CK T1195.001 — without hash verification, a compromised PyPI mirror or index-url can serve a backdoored package.",
+      "Generate hashes with 'pip-compile --generate-hashes' (pip-tools) and commit the locked requirements file."
+    ]
+  };
+}
+
+/**
+ * pip.conf/.pypirc points to a non-official index, or .npmrc has always-auth=true — credential leakage risk.
+ */
+async function checkPipConfUntrusted(): Promise<Finding | null> {
+  const hitsA = await allSearch(
+    String.raw`(?:index-url|extra-index-url)\s*=\s*https?://(?!pypi\.org|files\.pythonhosted\.org)`
+  );
+  const hitsB = await allSearch(
+    String.raw`always-auth\s*=\s*true`
+  );
+  const hits = [...hitsA, ...hitsB];
+  if (!hits.length) return null;
+  return {
+    id: "PIP_CONF_UNTRUSTED_REGISTRY",
+    title: "pip.conf/.pypirc points to non-official index or .npmrc has always-auth=true — credential leakage to untrusted registries",
+    severity: "HIGH",
+    evidence: toEvidence(hits),
+    files: toFiles(hits),
+    requiredActions: [
+      "Restrict index-url/extra-index-url to pypi.org or a controlled private mirror over HTTPS with pinned certs.",
+      "always-auth=true in .npmrc sends credentials to every registry URL, including potential attacker-controlled mirrors.",
+      "Audit all pip.conf, .pypirc, and .npmrc files. Remove non-official indexes or gate them behind an authenticated internal proxy."
+    ]
+  };
+}
+
+/**
+ * Unscoped private package name resolvable on public npm registry — dependency confusion risk.
+ * ATT&CK T1195.001 — a public package with the same short name shadows the internal one.
+ */
+// Internal-sounding suffix patterns that shouldn't be public
+const DEP_CONFUSION_INTERNAL_RE = /-(?:internal|private|local|corp|company|utils|auth|api|core|lib|sdk|client|server|service|common|shared|helpers?)$/i;
+// Valid short unscoped name: lowercase, 3-20 chars, no @ prefix
+const DEP_CONFUSION_UNSCOPED_RE = /^[a-z][a-z0-9-]{2,19}$/;
+const DEP_SECTIONS = ["dependencies", "devDependencies", "peerDependencies"] as const;
+
+function collectConfusionHitsFromPkg(
+  file: string,
+  pkg: Record<string, unknown>
+): string[] {
+  const evidence: string[] = [];
+  for (const section of DEP_SECTIONS) {
+    const deps = pkg[section];
+    if (!deps || typeof deps !== "object") continue;
+    for (const name of Object.keys(deps)) {
+      if (name.startsWith("@")) continue;
+      if (!DEP_CONFUSION_UNSCOPED_RE.test(name)) continue;
+      if (!DEP_CONFUSION_INTERNAL_RE.test(name)) continue;
+      evidence.push(`${file}: "${name}" in ${section} — unscoped internal-looking package name`);
+    }
+  }
+  return evidence;
+}
+
+async function checkUnscopedDepConfusion(): Promise<Finding | null> {
+  const packageFiles = await fg(
+    ["**/package.json"],
+    { ignore: ["**/node_modules/**", "**/dist/**", "**/.git/**"], dot: true }
+  );
+  if (!packageFiles.length) return null;
+
+  const allEvidence: string[] = [];
+
+  for (const file of packageFiles) {
+    const raw = await readFileSafe(file);
+    let pkg: Record<string, unknown>;
+    try {
+      pkg = JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    allEvidence.push(...collectConfusionHitsFromPkg(file, pkg));
+  }
+  if (!allEvidence.length) return null;
+  // Derive unique file list from evidence entries (format: "<file>: ...")
+  const uniqueFiles = [...new Set(allEvidence.map((e) => e.split(":")[0]))].slice(0, 10);
+  return {
+    id: "DEP_CONFUSION_UNSCOPED",
+    title: "Unscoped private package name potentially resolvable on public npm registry — dependency confusion risk (ATT&CK T1195.001)",
+    severity: "HIGH",
+    evidence: allEvidence.slice(0, 10),
+    files: uniqueFiles,
+    requiredActions: [
+      "Scope all internal packages under a private namespace (e.g., @your-org/pkg-name) to prevent public npm resolution.",
+      "ATT&CK T1195.001 — dependency confusion attacks publish a higher-versioned public package with the same unscoped name to hijack installs.",
+      "Alternatively, register the unscoped names as empty placeholder packages on npmjs.com to block squatting."
+    ]
+  };
+}
+
 export async function checkSupplyChainDeep(_opts: { changedFiles: string[] }): Promise<Finding[]> {
   try {
     const results = await Promise.all([
@@ -679,6 +861,12 @@ export async function checkSupplyChainDeep(_opts: { changedFiles: string[] }): P
       checkHardcodedIpAddress(),
       // ── GitHub Actions supply chain ──
       checkGithubActionsPinning(),
+      // ── Docker / Python / pip supply chain ──
+      checkDockerUnpinnedDigest(),
+      checkPythonSetupExec(),
+      checkPipNoHashes(),
+      checkPipConfUntrusted(),
+      checkUnscopedDepConfusion(),
     ]);
     return results.filter((f): f is Finding => f !== null);
   } catch (err) {
