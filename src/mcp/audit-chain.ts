@@ -16,7 +16,7 @@
  * its parent hash is all-zeros.
  */
 
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -140,7 +140,7 @@ function computeChainHash(record: Omit<AttestationRecord, "chainHash" | "hmacSha
 // ---------------------------------------------------------------------------
 
 async function atomicWrite(targetPath: string, data: string): Promise<void> {
-  const tmpPath = join(tmpdir(), `audit-chain-${Date.now()}-${Math.random().toString(36).slice(2)}.tmp`);
+  const tmpPath = join(tmpdir(), `audit-chain-${Date.now()}-${randomBytes(8).toString("hex")}.tmp`);
   try {
     await writeFile(tmpPath, data, { encoding: "utf-8", mode: 0o600 });
     await rename(tmpPath, targetPath); // atomic on same filesystem

@@ -122,7 +122,9 @@ export function attemptAuth(token: string): {
 
   // Enforce lockout BEFORE any other check — including misconfiguration — so that
   // the short-secret path cannot bypass the three-strike limit (AUTH-001 / CWE-307).
-  if (remaining < 0) {
+  // Fix: use <= 0 (not < 0). With < 0, remaining==0 (i.e. _attempts==AUTH_MAX_ATTEMPTS)
+  // would still reach the HMAC comparison — granting one extra attempt beyond policy.
+  if (remaining <= 0) {
     setTimeout(() => process.exit(1), 200);
     return {
       success: false,

@@ -100,7 +100,7 @@ async function checkIdorDirect(): Promise<Finding[]> {
 
   // GraphQL resolver IDOR: resolve functions using args.id without context.user.id check
   const resolverHits = await codeSearch(
-    String.raw`resolve\s*:\s*(?:async\s*)?\([^)]*\)\s*=>\s*\{`
+    String.raw`resolve\s*:\s*(?:async\s)?\([^)]*\)\s*=>\s*\{`
   );
   const resolverIdorHits = resolverHits.filter((h) => {
     return /args\.\w+/.test(h.preview) && !safeRe.test(h.preview) && !/context\.user\.id/.test(h.preview);
@@ -529,6 +529,277 @@ async function checkStateMachineBypass(): Promise<Finding | null> {
   };
 }
 
+async function checkCurrencyConfusion(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`(?:currency|currencyCode|currency_code)\s*[:=]\s*(?:req\.|body\.|params\.|query\.)`
+  );
+  const safeRe = /allowedCurrencies|CURRENCY_ALLOWLIST|===.*'USD'/;
+  const unsafe = hits.filter((h) => !safeRe.test(h.preview));
+  if (!unsafe.length) return null;
+  return {
+    id: "BIZ_CURRENCY_CONFUSION",
+    title: "Payment currency sourced from client request — currency confusion enables 100 JPY instead of 100 USD payment (CWE-20)",
+    severity: "CRITICAL",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    requiredActions: [
+      "Never accept currency codes from client requests. Hard-code or allowlist acceptable currencies server-side.",
+      "CWE-20 — currency confusion allows an attacker to specify a low-value currency (JPY, CLP) to pay a fraction of the intended amount.",
+      "Fix: const currency = CURRENCY_ALLOWLIST.includes(req.body.currency) ? req.body.currency : 'USD';"
+    ]
+  };
+}
+
+async function checkDiscountStacking(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`(?:discount|coupon|promo)(?:s|List|Stack|Array|\[)`
+  );
+  const safeRe = /maxDiscounts|MAX_COUPONS|singleDiscount|onlyOne/;
+  const unsafe = hits.filter((h) => !safeRe.test(h.preview));
+  if (!unsafe.length) return null;
+  return {
+    id: "BIZ_DISCOUNT_STACKING",
+    title: "Discount/coupon list without stacking limit — attacker applies N codes to reduce price to zero (CWE-20)",
+    severity: "HIGH",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    requiredActions: [
+      "Enforce a maximum number of stackable discounts/coupons per order server-side.",
+      "CWE-20 — unlimited coupon stacking allows an attacker to chain enough codes to reduce any order total to zero.",
+      "Fix: if (coupons.length > MAX_COUPONS) throw new Error('Too many coupons applied');"
+    ]
+  };
+}
+
+async function checkOrderFulfillmentBypass(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`(?:status|paymentStatus|orderStatus|fulfillmentStatus)\s*[:=]\s*(?:req\.|body\.|params\.|query\.)`
+  );
+  const safeRe = /processor|stripe|braintree|paypal|PAYMENT_PROCESSOR/;
+  const unsafe = hits.filter((h) => !safeRe.test(h.preview));
+  if (!unsafe.length) return null;
+  return {
+    id: "BIZ_ORDER_FULFILLMENT_BYPASS",
+    title: "Order status sourced from client — attacker sets status=paid to bypass payment processor confirmation (CWE-602)",
+    severity: "CRITICAL",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    requiredActions: [
+      "Order and payment status must be set exclusively by your payment processor webhook or server-side logic, never from client input.",
+      "CWE-602 — accepting status from the client allows any user to set their order to 'paid' without completing payment.",
+      "Fix: const status = await stripe.paymentIntents.retrieve(paymentIntentId); // derive status from processor, not client"
+    ]
+  };
+}
+
+async function checkWebhookTimestamp(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`(?:stripe|webhook|payment).*(?:Signature|signature|sig)\s*[:=]`
+  );
+  const safeRe = /tolerance|timestamp|maxAge|t=|Date\.now|\d+\s*\*\s*1000/;
+  const unsafe = hits.filter((h) => !safeRe.test(h.preview));
+  if (!unsafe.length) return null;
+  return {
+    id: "BIZ_WEBHOOK_NO_TIMESTAMP",
+    title: "Webhook signature verified but timestamp tolerance not enforced — unlimited replay window (CWE-294)",
+    severity: "HIGH",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    requiredActions: [
+      "Enforce a timestamp tolerance (e.g., 5 minutes) when verifying webhook signatures to prevent replay attacks.",
+      "CWE-294 — without a replay window check, a captured webhook payload can be replayed indefinitely to re-trigger payment events.",
+      "Fix: stripe.webhooks.constructEvent(body, sig, secret, 300); // 300s = 5 minute tolerance"
+    ]
+  };
+}
+
+async function checkTaxShippingParamTamper(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`(?:taxAmount|tax_amount|shippingCost|shipping_cost|shippingFee)\s*[:=]\s*(?:req\.|body\.|params\.|query\.)`
+  );
+  if (!hits.length) return null;
+  return {
+    id: "BIZ_TAX_SHIPPING_TAMPER",
+    title: "Tax or shipping amount sourced from client — tamper to zero bypasses fees server-side (CWE-602)",
+    severity: "HIGH",
+    evidence: toEvidence(hits),
+    files: toFiles(hits),
+    requiredActions: [
+      "Calculate tax and shipping amounts server-side using cart contents and customer location. Never trust client-supplied fee values.",
+      "CWE-602 — accepting tax/shipping from the client allows any user to set these to zero, bypassing all fees.",
+      "Fix: const tax = calculateTax(cart, shippingAddress); // server-computed, not req.body.taxAmount"
+    ]
+  };
+}
+
+async function checkClientTotalAmount(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`(?:charge|createPaymentIntent|capturePayment|processPayment)\s*\([^)]*(?:req\.|body\.|params\.)(?:total|amount|chargeAmount|finalAmount)`
+  );
+  if (!hits.length) return null;
+  return {
+    id: "BIZ_CLIENT_SUPPLIED_TOTAL",
+    title: "Final charge amount sourced from client request — attacker sets amount=1 to pay $0.01 for any cart (CWE-602)",
+    severity: "CRITICAL",
+    evidence: toEvidence(hits),
+    files: toFiles(hits),
+    requiredActions: [
+      "Always compute the final charge amount server-side from authoritative cart/order data. Never use a client-supplied total for payment.",
+      "CWE-602 — passing a client-supplied amount directly to your payment processor allows purchasing any item for any price.",
+      "Fix: const amount = await computeCartTotal(userId); await stripe.paymentIntents.create({ amount, currency: 'usd' });"
+    ]
+  };
+}
+
+async function checkReferralAbuse(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`(?:referral|referrer|referralBonus|inviteCode|referral_code)\s*[:=]\s*(?:req\.|body\.|params\.|query\.)`
+  );
+  const safeRe = /deduplication|uniqueIP|deviceFingerprint|normalizeEmail/;
+  const unsafe = hits.filter((h) => !safeRe.test(h.preview));
+  if (!unsafe.length) return null;
+  return {
+    id: "BIZ_REFERRAL_ABUSE",
+    title: "Referral/signup bonus without multi-account deduplication — self-referral farming possible (CWE-20)",
+    severity: "HIGH",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    requiredActions: [
+      "Implement multi-account deduplication for referral bonuses using email normalization, IP velocity, and/or device fingerprinting.",
+      "CWE-20 — without deduplication, a single user can create unlimited accounts and self-refer to farm referral bonuses indefinitely.",
+      "Fix: const canonical = normalizeEmail(email); if (await db.user.findUnique({ where: { canonicalEmail: canonical } })) throw new Error('Duplicate account');"
+    ]
+  };
+}
+
+async function checkEmailNormalization(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`(?:email|emailAddress)\s*(?:===|==|LIKE)\s*(?:req\.|body\.|params\.|query\.)`
+  );
+  const safeRe = /toLowerCase|normalize|replace.*@|canonicalize/;
+  const unsafe = hits.filter((h) => !safeRe.test(h.preview));
+  if (!unsafe.length) return null;
+  return {
+    id: "BIZ_EMAIL_NORMALIZATION",
+    title: "Email uniqueness compared without normalization — u.s.e.r@gmail.com creates duplicate account (CWE-20)",
+    severity: "HIGH",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    requiredActions: [
+      "Normalize email addresses (lowercase, strip dots from Gmail local-part, handle + aliases) before uniqueness checks.",
+      "CWE-20 — unnormalized email comparison allows creating duplicate accounts with minor variations of the same address.",
+      String.raw`Fix: const canonical = email.toLowerCase().replace(/\.(?=[^@]*@)/g, ''); // then check uniqueness on canonical form`
+    ]
+  };
+}
+
+async function checkFeatureFlagBypass(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`(?:isPremium|isEnterprise|planTier|featureFlag|tier|subscription)\s*[:=]\s*(?:req\.|body\.|params\.|query\.)`
+  );
+  if (!hits.length) return null;
+  return {
+    id: "BIZ_FEATURE_FLAG_CLIENT",
+    title: "Feature entitlement sourced from client — attacker sets isPremium=true to unlock paid features (CWE-602)",
+    severity: "HIGH",
+    evidence: toEvidence(hits),
+    files: toFiles(hits),
+    requiredActions: [
+      "Derive feature entitlements exclusively from your database/subscription records, never from client-supplied request parameters.",
+      "CWE-602 — accepting tier or entitlement flags from the client allows any user to self-elevate to premium/enterprise tier.",
+      "Fix: const { plan } = await db.subscription.findUnique({ where: { userId: req.user.id } }); // never: req.body.isPremium"
+    ]
+  };
+}
+
+async function checkApiVersionBypass(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`(?:router|app)\.[a-z]+\(['"]\/?(api\/)?v[0-9]+\/`
+  );
+  if (!hits.length) return null;
+  const versions = new Set<string>();
+  for (const h of hits) {
+    const m = /v(\d+)\//.exec(h.preview);
+    if (m) versions.add(m[1]);
+  }
+  if (versions.size < 2) return null;
+  return {
+    id: "BIZ_API_VERSION_BYPASS",
+    title: "Multiple API versions detected — older versions may lack security controls added to current version (CWE-284)",
+    severity: "HIGH",
+    evidence: toEvidence(hits),
+    files: toFiles(hits),
+    requiredActions: [
+      "Audit all active API versions to ensure security controls (auth, rate limiting, validation) are consistently applied across every version.",
+      "CWE-284 — deprecated API versions that remain accessible may lack authentication or authorization controls added in newer versions.",
+      "Fix: retire old API versions or apply the same security middleware stack (auth, validation, rate-limiting) to all /vN routes."
+    ]
+  };
+}
+
+async function checkPaginationAbuse(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`(?:limit|offset|pageSize|perPage)\s*[:=]\s*(?:parseInt|Number)?\+?\s*(?:req\.|body\.|params\.|query\.)`
+  );
+  const safeRe = /Math\.min|MAX_PAGE_SIZE|maxLimit|\|\|\s*\d{2,3}/;
+  const unsafe = hits.filter((h) => !safeRe.test(h.preview));
+  if (!unsafe.length) return null;
+  return {
+    id: "BIZ_PAGINATION_UNBOUNDED",
+    title: "Pagination limit/offset sourced from client without upper bound — DoS via limit=1000000 or data leak (CWE-400)",
+    severity: "MEDIUM",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    requiredActions: [
+      "Cap pagination parameters to a maximum page size server-side to prevent DoS and bulk data exfiltration.",
+      "CWE-400 — an unbounded limit parameter allows fetching millions of records in a single request, enabling DoS or mass data extraction.",
+      "Fix: const limit = Math.min(parseInt(req.query.limit) || 20, MAX_PAGE_SIZE);"
+    ]
+  };
+}
+
+async function checkFreeTrialAbuse(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`(?:trial|freeTrial|trialPeriod|trialActive)\s*[:=]`
+  );
+  const safeRe = /velocity|fingerprint|BIN|paymentMethod|deduplication/;
+  const unsafe = hits.filter((h) => !safeRe.test(h.preview));
+  if (!unsafe.length) return null;
+  return {
+    id: "BIZ_FREE_TRIAL_ABUSE",
+    title: "Free trial creation without velocity/fingerprint check — unlimited trial acquisition with synthetic identities (CWE-20)",
+    severity: "HIGH",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    requiredActions: [
+      "Gate free trial creation with velocity limits, email normalization, and optionally payment method BIN checks or device fingerprinting.",
+      "CWE-20 — without controls, attackers use synthetic email addresses to acquire unlimited free trials at scale.",
+      "Fix: enforce max one trial per normalized email, per IP (velocity window), and optionally require a payment method for trial activation."
+    ]
+  };
+}
+
+async function checkDoubleSpendPayment(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`(?:confirmPayment|capturePayment|chargeCard|processCharge|paymentIntent\.confirm)\s*\(`
+  );
+  const safeRe = /mutex|lock|transaction|serializable|FOR UPDATE|idempotency/;
+  const unsafe = hits.filter((h) => !safeRe.test(h.preview));
+  if (!unsafe.length) return null;
+  return {
+    id: "BIZ_DOUBLE_SPEND_CONCURRENT",
+    title: "Payment capture without distributed lock — concurrent requests double-charge or double-decrement gift cards (CWE-362)",
+    severity: "CRITICAL",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    requiredActions: [
+      "Use idempotency keys, database transactions with serializable isolation, or a distributed mutex around payment capture operations.",
+      "CWE-362 — concurrent payment capture requests can double-charge customers or double-decrement gift card balances.",
+      "Fix: await stripe.paymentIntents.confirm(id, {}, { idempotencyKey: orderId }); // or wrap in a serializable DB transaction"
+    ]
+  };
+}
+
 export async function checkBusinessLogic(_opts: { changedFiles: string[] }): Promise<Finding[]> {
   try {
     const [
@@ -547,6 +818,19 @@ export async function checkBusinessLogic(_opts: { changedFiles: string[] }): Pro
       httpParamPollution,
       voucherReplay,
       stateMachineBypass,
+      currencyConfusion,
+      discountStacking,
+      orderFulfillmentBypass,
+      webhookTimestamp,
+      taxShippingParamTamper,
+      clientTotalAmount,
+      referralAbuse,
+      emailNormalization,
+      featureFlagBypass,
+      apiVersionBypass,
+      paginationAbuse,
+      freeTrialAbuse,
+      doubleSpendPayment,
     ] = await Promise.all([
       checkMassAssignment(),
       checkIdorDirect(),
@@ -563,9 +847,30 @@ export async function checkBusinessLogic(_opts: { changedFiles: string[] }): Pro
       checkHttpParamPollution(),
       checkVoucherReplay(),
       checkStateMachineBypass(),
+      checkCurrencyConfusion(),
+      checkDiscountStacking(),
+      checkOrderFulfillmentBypass(),
+      checkWebhookTimestamp(),
+      checkTaxShippingParamTamper(),
+      checkClientTotalAmount(),
+      checkReferralAbuse(),
+      checkEmailNormalization(),
+      checkFeatureFlagBypass(),
+      checkApiVersionBypass(),
+      checkPaginationAbuse(),
+      checkFreeTrialAbuse(),
+      checkDoubleSpendPayment(),
     ]);
 
-    const singles = [massAssignment, negativeAmount, hardcodedCreds, hardcodedDb, missingValidation, insecureUrl, intOverflow, missingAdminAuth, timingOracle, floatMonetary, httpParamPollution, voucherReplay, stateMachineBypass];
+    const singles = [
+      massAssignment, negativeAmount, hardcodedCreds, hardcodedDb, missingValidation,
+      insecureUrl, intOverflow, missingAdminAuth, timingOracle, floatMonetary,
+      httpParamPollution, voucherReplay, stateMachineBypass,
+      currencyConfusion, discountStacking, orderFulfillmentBypass, webhookTimestamp,
+      taxShippingParamTamper, clientTotalAmount, referralAbuse, emailNormalization,
+      featureFlagBypass, apiVersionBypass, paginationAbuse,
+      freeTrialAbuse, doubleSpendPayment,
+    ];
     return [
       ...singles.filter((f): f is Finding => f !== null),
       ...idorResults,

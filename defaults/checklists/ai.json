@@ -25,6 +25,20 @@
     { "id": "ai_adversarial_probe_multi_turn", "description": "Multi-turn adversarial probing complete: role-play escapes, many-shot jailbreaks, encoded payloads (base64, l33tspeak), goal hijacking across conversation resets — all documented with pass/fail", "critical": true },
     { "id": "ai_tool_sandboxing", "description": "AI agent tool execution sandboxed — filesystem, network, and shell access granted only via explicit allowlist; no ambient authority; each tool call requires declared capability", "critical": true },
     { "id": "ai_model_supply_chain", "description": "AI model provider and version verified — model hash or digest pinned in configuration; shadow model substitution would be detected; provider SLA and security posture documented", "critical": false },
-    { "id": "ai_output_length_limit", "description": "Model output length limits enforced at the API layer; unbounded generation that could exhaust context or enable token flooding is blocked; streaming responses have an abort timeout", "critical": true }
+    { "id": "ai_output_length_limit", "description": "Model output length limits enforced at the API layer; unbounded generation that could exhaust context or enable token flooding is blocked; streaming responses have an abort timeout", "critical": true },
+    { "id": "ai_indirect_injection_external", "title": "External content ingestion paths sanitize fetched content before LLM context injection", "severity": "critical", "automated": true },
+    { "id": "ai_markdown_exfil", "title": "LLM output stripped of markdown images and external links before rendering to clients", "severity": "critical", "automated": true },
+    { "id": "ai_memory_poisoning", "title": "Long-term memory writes validated; read-back treated as untrusted input with injection guards", "severity": "critical", "automated": true },
+    { "id": "ai_rag_corpus_poisoning", "title": "Documents ingested into vector store pass content validation and injection scanning before upsert", "severity": "high", "automated": true },
+    { "id": "ai_token_smuggling", "title": "User prompt inputs stripped of zero-width Unicode, invisible characters, and homoglyphs before processing", "severity": "high", "automated": true },
+    { "id": "ai_privilege_escalation", "title": "Agent tool list frozen at session initialization — no runtime tool registration permitted", "severity": "critical", "automated": true },
+    { "id": "ai_llm_judge_manipulation", "title": "LLM-as-judge evaluation pipelines use static server-controlled scoring criteria isolated from user input", "severity": "high", "automated": true },
+    { "id": "ai_idor_tool_calls", "title": "Agentic tool calls that accept resource IDs enforce per-request authorization before accessing the resource", "severity": "critical", "automated": true },
+    { "id": "ai_context_stuffing", "title": "Application enforces maximum input token budget per request before dispatching to LLM API", "severity": "high", "automated": true },
+    { "id": "ai_multimodal_injection", "title": "Multimodal inputs (images, PDFs, audio) passed to vision/multimodal LLMs scanned for embedded injection payloads", "severity": "critical", "automated": true },
+    { "id": "ai_vector_filter_bypass", "title": "Vector store tenant isolation uses mandatory hard filters (must/AND) not optional soft filters (should/OR)", "severity": "high", "automated": true },
+    { "id": "ai_stream_chunk_validation", "title": "Streaming LLM response chunks validated against expected SSE schema before forwarding", "severity": "high", "automated": true },
+    { "id": "ai_generated_code_audit_trail", "title": "Every execution of AI-generated code, SQL, or shell commands produces an audit log entry", "severity": "high", "automated": true },
+    { "id": "ai_embedding_inversion", "title": "Raw embedding vectors never exposed in API responses, logs, or client storage", "severity": "medium", "automated": true }
   ]
 }

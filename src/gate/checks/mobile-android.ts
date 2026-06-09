@@ -631,20 +631,439 @@ async function checkGradleSdkVersions(): Promise<Finding[]> {
 }
 
 // ---------------------------------------------------------------------------
+// Sub-checker: Root detection
+// MASVS-RESILIENCE-1
+// ---------------------------------------------------------------------------
+
+async function checkRootDetection(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+	const rootDetectionRe = /RootBeer|isRooted|checkForRoot|BuildConfig.*isRooted|PlayIntegrity|SafetyNet|checkSuBinary/i;
+	const sensitiveOpsRe = /Keystore|EncryptedSharedPreferences|BiometricPrompt/i;
+
+	const srcFiles = await findSourceFiles();
+	let hasRootDetection = false;
+	let hasSensitiveOps = false;
+
+	for (const src of srcFiles) {
+		const code = await readFileSafe(src).catch(() => "");
+		if (!code) continue;
+		if (rootDetectionRe.test(code)) hasRootDetection = true;
+		if (sensitiveOpsRe.test(code)) hasSensitiveOps = true;
+	}
+
+	if (!hasRootDetection && hasSensitiveOps) {
+		findings.push({
+			id: "ANDROID_NO_ROOT_DETECTION",
+			title: "Android app performs sensitive operations without root detection — Keystore/EncryptedSharedPreferences accessible on rooted devices (MASVS-RESILIENCE-1)",
+			severity: "MEDIUM",
+			requiredActions: [
+				"Integrate RootBeer or Play Integrity API to detect rooted devices before performing sensitive operations.",
+				"Block or warn users when root is detected, especially before accessing Keystore-backed keys or EncryptedSharedPreferences.",
+				"See MASVS-RESILIENCE-1 for guidance on runtime integrity checks."
+			]
+		});
+	}
+
+	return findings;
+}
+
+// ---------------------------------------------------------------------------
+// Sub-checker: Frida/Magisk/Xposed detection
+// MASVS-RESILIENCE-4
+// ---------------------------------------------------------------------------
+
+async function checkFridaMagiskDetection(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+	const fridaRe = /frida|gadget|magisk|xposed|EdXposed|LSPosed|anti.*frida|fridaDetek/i;
+	const highRiskRe = /Keystore|CertificatePinner|BiometricPrompt|EncryptedSharedPreferences/i;
+
+	const srcFiles = await findSourceFiles();
+	let hasFridaDetection = false;
+	let hasHighRiskOps = false;
+
+	for (const src of srcFiles) {
+		const code = await readFileSafe(src).catch(() => "");
+		if (!code) continue;
+		if (fridaRe.test(code)) hasFridaDetection = true;
+		if (highRiskRe.test(code)) hasHighRiskOps = true;
+	}
+
+	if (!hasFridaDetection && hasHighRiskOps) {
+		findings.push({
+			id: "ANDROID_NO_FRIDA_DETECTION",
+			title: "No Frida/Magisk/Xposed detection — runtime instrumentation attacks bypass certificate pinning and exfiltrate secrets silently (MASVS-RESILIENCE-4)",
+			severity: "MEDIUM",
+			requiredActions: [
+				"Implement Frida/Gadget port and library detection at runtime before sensitive operations.",
+				"Check for Magisk/Xposed module presence using integrity APIs or native checks.",
+				"Consider integrating a Runtime Application Self-Protection (RASP) library.",
+				"See MASVS-RESILIENCE-4 for anti-tampering and anti-instrumentation controls."
+			]
+		});
+	}
+
+	return findings;
+}
+
+// ---------------------------------------------------------------------------
+// Sub-checker: WebView SSL error proceed()
+// MASVS-NETWORK-3
+// ---------------------------------------------------------------------------
+
+async function checkWebViewSslErrorProceed(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+	const sslProceedRe = /onReceivedSslError[\s\S]{0,300}handler\.proceed\(\)/;
+	const files: string[] = [];
+	const evidence: string[] = [];
+
+	const allFiles = await fg(["**/*.kt", "**/*.java", "**/*.xml"], {
+		dot: true,
+		ignore: ["**/node_modules/**", "**/.git/**", "**/build/**", "**/dist/**"]
+	});
+
+	for (const src of allFiles) {
+		const code = await readFileSafe(src).catch(() => "");
+		if (!code) continue;
+		if (sslProceedRe.test(code)) {
+			files.push(src);
+			evidence.push(...grepLines(code, "handler.proceed()", 3).map(l => `${src}: ${l}`));
+		}
+	}
+
+	if (files.length > 0) {
+		findings.push({
+			id: "ANDROID_WEBVIEW_SSL_PROCEED",
+			title: "WebViewClient.onReceivedSslError calls proceed() — all TLS errors silently accepted, full MITM possible (MASVS-NETWORK-3)",
+			severity: "CRITICAL",
+			files: [...new Set(files)],
+			evidence: evidence.slice(0, 8),
+			requiredActions: [
+				"Remove handler.proceed() from onReceivedSslError entirely — always call handler.cancel() on SSL errors.",
+				"If a specific domain requires an exception, implement strict hostname and certificate validation instead.",
+				"See MASVS-NETWORK-3, CWE-295, and OWASP M3."
+			]
+		});
+	}
+
+	return findings;
+}
+
+// ---------------------------------------------------------------------------
+// Sub-checker: Firebase public rules
+// MASVS-STORAGE-4
+// ---------------------------------------------------------------------------
+
+async function checkFirebasePublicRules(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+	const publicRulesRe = /\.read.*true|\.write.*true|allow read.*if true|allow write.*if true/;
+	const ruleFiles = await fg(["**/database.rules.json", "**/firestore.rules", "**/*.rules"], {
+		dot: true,
+		ignore: ["**/node_modules/**", "**/.git/**", "**/build/**", "**/dist/**"]
+	});
+
+	const files: string[] = [];
+	const evidence: string[] = [];
+
+	for (const f of ruleFiles) {
+		const content = await readFileSafe(f).catch(() => "");
+		if (!content) continue;
+		if (publicRulesRe.test(content)) {
+			files.push(f);
+			evidence.push(...grepLinesRe(content, publicRulesRe, 3).map(l => `${f}: ${l}`));
+		}
+	}
+
+	if (files.length > 0) {
+		findings.push({
+			id: "ANDROID_FIREBASE_PUBLIC_RULES",
+			title: "Firebase rules allow unauthenticated read/write — entire database accessible by anyone with the project URL (MASVS-STORAGE-4)",
+			severity: "CRITICAL",
+			files: [...new Set(files)],
+			evidence: evidence.slice(0, 8),
+			requiredActions: [
+				"Replace permissive Firebase rules with authentication checks (auth != null) at minimum.",
+				"Use field-level rules and validate user ownership before allowing reads/writes.",
+				"Audit the Firebase console rules editor and enable App Check to restrict to your app only.",
+				"See MASVS-STORAGE-4 and Firebase Security Rules documentation."
+			]
+		});
+	}
+
+	return findings;
+}
+
+// ---------------------------------------------------------------------------
+// Sub-checker: Google Maps API key hardcoded
+// MASVS-STORAGE-2
+// ---------------------------------------------------------------------------
+
+async function checkGoogleMapsApiKey(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+	const mapsKeyRe = /AIza[0-9A-Za-z_-]{35}|com\.google\.android\.geo\.API_KEY/;
+	const targetFiles = await fg(["**/AndroidManifest.xml", "**/res/values/strings.xml"], {
+		dot: true,
+		ignore: ["**/node_modules/**", "**/.git/**", "**/build/**", "**/dist/**"]
+	});
+
+	const files: string[] = [];
+	const evidence: string[] = [];
+
+	for (const f of targetFiles) {
+		const content = await readFileSafe(f).catch(() => "");
+		if (!content) continue;
+		if (mapsKeyRe.test(content)) {
+			files.push(f);
+			evidence.push(...grepLinesRe(content, mapsKeyRe, 3).map(l => `${f}: ${l}`));
+		}
+	}
+
+	if (files.length > 0) {
+		findings.push({
+			id: "ANDROID_MAPS_API_KEY_HARDCODED",
+			title: "Google Maps API key hardcoded in manifest/resources — extractable from APK for billing fraud or geolocation abuse (MASVS-STORAGE-2)",
+			severity: "HIGH",
+			files: [...new Set(files)],
+			evidence: evidence.slice(0, 8),
+			requiredActions: [
+				"Move the Maps API key to a secrets manager and inject at build time via a non-committed local.properties file.",
+				"Restrict the key in Google Cloud Console to the specific Android app package name and SHA-1 fingerprint.",
+				"Rotate any exposed keys immediately. See MASVS-STORAGE-2 and OWASP M9."
+			]
+		});
+	}
+
+	return findings;
+}
+
+// ---------------------------------------------------------------------------
+// Sub-checker: Deep link path traversal
+// MASVS-PLATFORM-3
+// ---------------------------------------------------------------------------
+
+async function checkDeepLinkTraversal(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+	const pathAccessRe = /intent\.data\.getPath|uri\.getPath|data\.getLastPathSegment|intent\.getData\(\)\.getPath/;
+	const sanitizeRe = /sanitize|normalize|replace.*\.\.|startsWith|validate/;
+
+	const srcFiles = await findSourceFiles();
+	const files: string[] = [];
+	const evidence: string[] = [];
+
+	for (const src of srcFiles) {
+		const code = await readFileSafe(src).catch(() => "");
+		if (!code) continue;
+		if (!pathAccessRe.test(code)) continue;
+
+		const lines = grepLinesRe(code, pathAccessRe, 10);
+		const unsanitized = lines.filter(l => !sanitizeRe.test(l));
+		if (unsanitized.length > 0) {
+			files.push(src);
+			evidence.push(...unsanitized.map(l => `${src}: ${l}`));
+		}
+	}
+
+	if (files.length > 0) {
+		findings.push({
+			id: "ANDROID_DEEPLINK_PATH_TRAVERSAL",
+			title: "Deep link path parameters not sanitized before use — path traversal via ../.. in intent data URI (MASVS-PLATFORM-3)",
+			severity: "HIGH",
+			files: [...new Set(files)],
+			evidence: evidence.slice(0, 8),
+			requiredActions: [
+				"Validate and normalize URI paths obtained from intent data before using as file paths or query parameters.",
+				"Reject paths containing '..' sequences or absolute paths outside the expected prefix.",
+				"Use Uri.Builder and enforce scheme/authority/path whitelist checks. See MASVS-PLATFORM-3 and CWE-22."
+			]
+		});
+	}
+
+	return findings;
+}
+
+// ---------------------------------------------------------------------------
+// Sub-checker: SharedPreferences world-readable/writable mode
+// MASVS-STORAGE-1
+// ---------------------------------------------------------------------------
+
+async function checkSharedPrefsWorldMode(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+	const worldModeRe = /MODE_WORLD_READABLE|MODE_WORLD_WRITEABLE|Context\.MODE_WORLD/;
+
+	const srcFiles = await findSourceFiles();
+	const files: string[] = [];
+	const evidence: string[] = [];
+
+	for (const src of srcFiles) {
+		const code = await readFileSafe(src).catch(() => "");
+		if (!code) continue;
+		if (worldModeRe.test(code)) {
+			files.push(src);
+			evidence.push(...grepLinesRe(code, worldModeRe, 3).map(l => `${src}: ${l}`));
+		}
+	}
+
+	if (files.length > 0) {
+		findings.push({
+			id: "ANDROID_SHAREDPREFS_WORLD_MODE",
+			title: "SharedPreferences opened with MODE_WORLD_READABLE/WRITEABLE — readable/writable by any app on device (MASVS-STORAGE-1)",
+			severity: "CRITICAL",
+			files: [...new Set(files)],
+			evidence: evidence.slice(0, 8),
+			requiredActions: [
+				"Replace MODE_WORLD_READABLE / MODE_WORLD_WRITEABLE with MODE_PRIVATE (the default).",
+				"These modes have been deprecated since API 17 and throw a SecurityException on API 24+.",
+				"If cross-app data sharing is required, use a ContentProvider with explicit permissions instead.",
+				"See MASVS-STORAGE-1 and OWASP M2."
+			]
+		});
+	}
+
+	return findings;
+}
+
+// ---------------------------------------------------------------------------
+// Sub-checker: ContentProvider exported without permissions
+// MASVS-PLATFORM-1
+// ---------------------------------------------------------------------------
+
+async function checkContentProviderPermissions(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+	const providerExportedRe = /<provider[^>]*android:exported\s*=\s*"true"(?![^>]*android:readPermission)(?![^>]*android:writePermission)/;
+
+	const manifests = await findManifests();
+	const files: string[] = [];
+	const evidence: string[] = [];
+
+	for (const m of manifests) {
+		const xml = await readFileSafe(m).catch(() => "");
+		if (!xml) continue;
+		if (providerExportedRe.test(xml)) {
+			files.push(m);
+			const lines = grepLinesRe(xml, /<provider[^>]*android:exported\s*=\s*"true"/i, 5);
+			evidence.push(...lines.map(l => `${m}: ${l}`));
+		}
+	}
+
+	if (files.length > 0) {
+		findings.push({
+			id: "ANDROID_CONTENT_PROVIDER_NO_PERMISSIONS",
+			title: "ContentProvider exported=true without readPermission/writePermission — any app can query or modify provider data (MASVS-PLATFORM-1)",
+			severity: "HIGH",
+			files: [...new Set(files)],
+			evidence: evidence.slice(0, 8),
+			requiredActions: [
+				"Add android:readPermission and android:writePermission to every exported ContentProvider.",
+				'Use a signature-level permission (android:protectionLevel="signature") for providers only accessed internally.',
+				"If the provider must be public, validate all input and restrict exposed columns/operations.",
+				"See MASVS-PLATFORM-1 and OWASP M1."
+			]
+		});
+	}
+
+	return findings;
+}
+
+// ---------------------------------------------------------------------------
+// Sub-checker: Flutter insecure storage via shared_preferences
+// MASVS-STORAGE-1
+// ---------------------------------------------------------------------------
+
+async function checkFlutterSharedPrefs(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+	const dartFiles = await fg(["**/*.dart"], {
+		dot: true,
+		ignore: ["**/node_modules/**", "**/.git/**", "**/build/**", "**/dist/**", "**/.dart_tool/**"]
+	});
+
+	if (dartFiles.length === 0) return findings;
+
+	const sharedPrefsRe = /shared_preferences|SharedPreferences\.getInstance\(\)|prefs\.setString\s*\([^,]*(?:token|password|secret|key|auth)/i;
+	const secureStorageRe = /flutter_secure_storage|FlutterSecureStorage/;
+
+	const files: string[] = [];
+	const evidence: string[] = [];
+	for (const src of dartFiles) {
+		const code = await readFileSafe(src).catch(() => "");
+		if (!code) continue;
+		// Per-file check: only suppress if THIS file already uses flutter_secure_storage
+		if (sharedPrefsRe.test(code) && !secureStorageRe.test(code)) {
+			files.push(src);
+			evidence.push(...grepLinesRe(code, sharedPrefsRe, 3).map(l => `${src}: ${l}`));
+		}
+	}
+
+	if (files.length > 0) {
+		findings.push({
+			id: "FLUTTER_INSECURE_STORAGE",
+			title: "Flutter app stores sensitive data in shared_preferences — use flutter_secure_storage backed by iOS Keychain/Android Keystore instead (MASVS-STORAGE-1)",
+			severity: "HIGH",
+			files: [...new Set(files)],
+			evidence: evidence.slice(0, 8),
+			requiredActions: [
+				"Replace shared_preferences with flutter_secure_storage for any token, password, secret, or key values.",
+				"flutter_secure_storage uses iOS Keychain and Android Keystore, providing hardware-backed encryption.",
+				"Audit all prefs.setString / prefs.set* calls and migrate sensitive keys to FlutterSecureStorage.",
+				"See MASVS-STORAGE-1 and the flutter_secure_storage package documentation."
+			]
+		});
+	}
+
+	return findings;
+}
+
+// ---------------------------------------------------------------------------
 // Orchestrator — runs all sub-checkers and merges results
 // ---------------------------------------------------------------------------
 
 export async function checkMobileAndroid(_: { changedFiles: string[] }): Promise<Finding[]> {
-	const [manifestFindings, nscFindings, sourceFindings, providerFindings, gradleFindings] =
-		await Promise.all([
-			checkManifests(),
-			checkNetworkSecurityConfig(),
-			checkSourceFiles(),
-			checkProviderPathsAndTapjacking(true),
-			checkGradleSdkVersions()
-		]);
+	const [
+		manifestFindings,
+		nscFindings,
+		sourceFindings,
+		providerFindings,
+		gradleFindings,
+		rootDetectionFindings,
+		fridaMagiskFindings,
+		webViewSslFindings,
+		firebaseRulesFindings,
+		mapsApiKeyFindings,
+		deepLinkTraversalFindings,
+		sharedPrefsWorldFindings,
+		contentProviderPermFindings,
+		flutterSharedPrefsFindings
+	] = await Promise.all([
+		checkManifests(),
+		checkNetworkSecurityConfig(),
+		checkSourceFiles(),
+		checkProviderPathsAndTapjacking(true),
+		checkGradleSdkVersions(),
+		checkRootDetection(),
+		checkFridaMagiskDetection(),
+		checkWebViewSslErrorProceed(),
+		checkFirebasePublicRules(),
+		checkGoogleMapsApiKey(),
+		checkDeepLinkTraversal(),
+		checkSharedPrefsWorldMode(),
+		checkContentProviderPermissions(),
+		checkFlutterSharedPrefs()
+	]);
 
-	const findings = [...manifestFindings, ...nscFindings, ...sourceFindings, ...providerFindings, ...gradleFindings];
+	const findings = [
+		...manifestFindings,
+		...nscFindings,
+		...sourceFindings,
+		...providerFindings,
+		...gradleFindings,
+		...rootDetectionFindings,
+		...fridaMagiskFindings,
+		...webViewSslFindings,
+		...firebaseRulesFindings,
+		...mapsApiKeyFindings,
+		...deepLinkTraversalFindings,
+		...sharedPrefsWorldFindings,
+		...contentProviderPermFindings,
+		...flutterSharedPrefsFindings
+	];
 
 	// String resource check may augment the ANDROID_HARDCODED_SECRET finding already in the list
 	const resFindings = await checkStringResources(findings);

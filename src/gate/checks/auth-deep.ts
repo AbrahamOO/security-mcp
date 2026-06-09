@@ -813,6 +813,213 @@ async function checkLogRetentionConfig(): Promise<Finding[]> {
   return findings;
 }
 
+async function checkJwtKidInjection(): Promise<Finding | null> {
+  const headerKidHits = await codeSearch(
+    String.raw`(?:header\.kid|token\.header\.kid|decoded\.header\.kid)`
+  );
+  const unsafe1 = headerKidHits.filter(
+    (h) => !/allowlist|ALLOWED_KIDS|path\.join.*validateKid|parameterized|sanitize/.test(h.preview)
+  );
+  const rawQueryHits = await codeSearch(
+    String.raw`SELECT[^;]*\$\{[^}]*kid|readFileSync[^)]*kid`
+  );
+  const combined = [...unsafe1, ...rawQueryHits];
+  const seen = new Set<string>();
+  const deduped = combined.filter((h) => {
+    const key = `${h.file}:${h.line}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  if (!deduped.length) return null;
+  return {
+    id: "JWT_KID_INJECTION",
+    title: "JWT kid header used for DB lookup or filesystem read without sanitization — SQL/path-traversal injection (CWE-89/CWE-22)",
+    severity: "CRITICAL",
+    evidence: toEvidence(deduped),
+    files: toFiles(deduped),
+    requiredActions: [
+      "Validate the kid header against a strict allowlist before using it in any DB query or filesystem read.",
+      "CWE-89 — unsanitized kid in SQL interpolation enables SQL injection; CWE-22 — unsanitized kid in readFileSync enables path traversal.",
+      "Fix: const key = ALLOWED_KIDS[decoded.header.kid]; if (!key) throw new Error('Unknown kid');"
+    ]
+  };
+}
+
+async function checkJwksUriOverride(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`(?:jwksUri|jwks_uri|JwksClient|createRemoteJWKSet|getSigningKey.*jwks)`
+  );
+  const unsafe = hits.filter(
+    (h) => !/allowlist|JWKS_URI|staticKeys|hardcoded|process\.env\.JWKS/.test(h.preview)
+  );
+  if (!unsafe.length) return null;
+  return {
+    id: "JWT_JWKS_URI_OVERRIDE",
+    title: "JWKS endpoint fetched dynamically — attacker can override jwks_uri to serve their own keys (CWE-295)",
+    severity: "CRITICAL",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    requiredActions: [
+      "Pin the JWKS URI to a hardcoded or environment-variable-controlled value; never derive it from the token or request.",
+      "CWE-295 — a dynamic jwks_uri allows an attacker to point key resolution at their own server and sign arbitrary tokens.",
+      "Fix: const client = new JwksClient({ jwksUri: process.env.JWKS_URI }); // JWKS_URI set at deploy time, never at runtime from user input"
+    ]
+  };
+}
+
+async function checkOauthClientSecretPublic(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`(?:client_secret|clientSecret)\s*[:=]\s*['"][a-zA-Z0-9_\-]{8,}['"]`
+  );
+  if (!hits.length) return null;
+  return {
+    id: "OAUTH_CLIENT_SECRET_HARDCODED",
+    title: "OAuth client_secret hardcoded in source — public client credentials extractable from bundle (CWE-798)",
+    severity: "CRITICAL",
+    evidence: toEvidence(hits),
+    files: toFiles(hits),
+    requiredActions: [
+      "Move client_secret to a server-side environment variable or secrets manager; never embed it in frontend bundles.",
+      "CWE-798 — hardcoded OAuth secrets are extractable from git history, Docker layers, and compiled bundles.",
+      "Fix: clientSecret: process.env.OAUTH_CLIENT_SECRET"
+    ]
+  };
+}
+
+async function checkSessionTokenInUrl(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`req\.query\.(?:sessionid|session_id|sid|jsessionid|auth_token|session_token)`
+  );
+  if (!hits.length) return null;
+  return {
+    id: "SESSION_TOKEN_IN_URL",
+    title: "Session token transmitted in URL query parameter — logged in server access logs and browser history (CWE-598)",
+    severity: "HIGH",
+    evidence: toEvidence(hits),
+    files: toFiles(hits),
+    requiredActions: [
+      "Transmit session tokens exclusively in cookies or the Authorization header, never in query parameters.",
+      "CWE-598 — query parameters appear in server access logs, browser history, Referer headers, and CDN logs in plaintext.",
+      "Fix: const sessionId = req.cookies['session']; // never req.query.session_id"
+    ]
+  };
+}
+
+async function checkTokenEntropyTooLow(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`crypto\.randomBytes\s*\(\s*([1-9]|1[0-5])\s*\)`
+  );
+  if (!hits.length) return null;
+  return {
+    id: "TOKEN_ENTROPY_TOO_LOW",
+    title: "crypto.randomBytes() called with fewer than 16 bytes (<128 bits entropy) — tokens brute-forceable (CWE-331)",
+    severity: "HIGH",
+    evidence: toEvidence(hits),
+    files: toFiles(hits),
+    requiredActions: [
+      "Use crypto.randomBytes(32) or larger to generate tokens with at least 256 bits of entropy.",
+      "CWE-331 — tokens generated with fewer than 128 bits of entropy are vulnerable to brute-force enumeration.",
+      "Fix: const token = crypto.randomBytes(32).toString('hex'); // 256-bit entropy"
+    ]
+  };
+}
+
+async function checkRememberMeNoRotation(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`(?:rememberMe|remember_me|persistent.*token|rememberToken|keepLoggedIn|staySignedIn)`
+  );
+  const unsafe = hits.filter(
+    (h) => !/rotate|revoke|invalidate|delete.*token|tokenFamily/.test(h.preview)
+  );
+  if (!unsafe.length) return null;
+  return {
+    id: "REMEMBER_ME_NO_ROTATION",
+    title: "Persistent remember-me token without rotation — stolen token grants indefinite access (CWE-613)",
+    severity: "HIGH",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    requiredActions: [
+      "Rotate remember-me tokens on each use: invalidate the presented token and issue a fresh one.",
+      "CWE-613 — a static persistent token that is never rotated or revoked grants indefinite access if stolen.",
+      "Fix: await db.rememberTokens.delete(oldToken); const newToken = crypto.randomBytes(32).toString('hex'); await db.rememberTokens.create({ userId, token: newToken, expiresAt });"
+    ]
+  };
+}
+
+async function checkPasswordResetSingleUse(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`(?:resetToken|reset_token|passwordResetToken|forgotToken)\s*(?:===|==)\s*(?:req\.|body\.|params\.)`
+  );
+  const unsafe = hits.filter(
+    (h) => !/delete|update.*null|set.*null|invalidate|revoke|markUsed|usedAt/.test(h.preview)
+  );
+  if (!unsafe.length) return null;
+  return {
+    id: "PASSWORD_RESET_NOT_SINGLE_USE",
+    title: "Password reset token validated but not deleted/invalidated after use — token reuse attack possible (CWE-640)",
+    severity: "HIGH",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    requiredActions: [
+      "Delete or null out the reset token immediately after successful verification.",
+      "CWE-640 — a reset token that remains valid after use can be replayed to reset the password again.",
+      "Fix: await db.users.update({ where: { id: user.id }, data: { resetToken: null, resetTokenExpiry: null } });"
+    ]
+  };
+}
+
+async function checkAccountEnumeration(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`(?:user|account|email).*not.*found|no.*user.*(?:found|exists)|User.*does.*not.*exist|unknown.*(?:email|user|account)`
+  );
+  const safeRe = /\/\/|expect\s*\(|toBe|toEqual|console\.log|logger\.(debug|info|warn)|\.test\s*\(/;
+  const unsafe = hits.filter((h) => !safeRe.test(h.preview));
+  if (!unsafe.length) return null;
+  return {
+    id: "ACCOUNT_ENUMERATION",
+    title: "Distinct error message reveals whether username/email exists — enables account enumeration (CWE-203)",
+    severity: "MEDIUM",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    requiredActions: [
+      "Return the same generic error message for both 'user not found' and 'wrong password' scenarios.",
+      "CWE-203 — distinct error messages for unknown vs wrong-password allow attackers to enumerate valid accounts.",
+      "Fix: throw new Error('Invalid credentials'); // same message regardless of whether user exists"
+    ]
+  };
+}
+
+async function checkBcryptCostFactor(): Promise<Finding | null> {
+  const hashHits = await codeSearch(
+    String.raw`bcrypt\.(?:hash|hashSync)\s*\([^,]+,\s*([1-9])\s*[,)]`
+  );
+  const saltHits = await codeSearch(
+    String.raw`genSalt\s*\(\s*([1-9])\s*\)`
+  );
+  const combined = [...hashHits, ...saltHits];
+  const seen = new Set<string>();
+  const deduped = combined.filter((h) => {
+    const key = `${h.file}:${h.line}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  if (!deduped.length) return null;
+  return {
+    id: "BCRYPT_COST_TOO_LOW",
+    title: "bcrypt cost factor below 10 — password hashes crackable with GPU (OWASP PBKDF guidance)",
+    severity: "HIGH",
+    evidence: toEvidence(deduped),
+    files: toFiles(deduped),
+    requiredActions: [
+      "Set the bcrypt cost factor to at least 10 (OWASP recommends 12 for new systems).",
+      "OWASP PBKDF guidance — a cost factor below 10 allows GPU-accelerated brute-force cracking of password hashes.",
+      "Fix: await bcrypt.hash(password, 12); // or bcrypt.genSalt(12)"
+    ]
+  };
+}
+
 export async function checkAuthDeep(_opts: { changedFiles: string[] }): Promise<Finding[]> {
   try {
     const [
@@ -839,6 +1046,15 @@ export async function checkAuthDeep(_opts: { changedFiles: string[] }): Promise<
       accountLockout,
       missingStructuredLoggingFindings,
       logRetentionFindings,
+      jwtKidInjection,
+      jwksUriOverride,
+      oauthClientSecretPublic,
+      sessionTokenInUrl,
+      tokenEntropyTooLow,
+      rememberMeNoRotation,
+      passwordResetSingleUse,
+      accountEnumeration,
+      bcryptCostFactor,
     ] = await Promise.all([
       checkJwtAlgNone(),
       checkSessionFixation(),
@@ -863,6 +1079,15 @@ export async function checkAuthDeep(_opts: { changedFiles: string[] }): Promise<
       checkAccountLockout(),
       checkMissingStructuredLogging(),
       checkLogRetentionConfig(),
+      checkJwtKidInjection(),
+      checkJwksUriOverride(),
+      checkOauthClientSecretPublic(),
+      checkSessionTokenInUrl(),
+      checkTokenEntropyTooLow(),
+      checkRememberMeNoRotation(),
+      checkPasswordResetSingleUse(),
+      checkAccountEnumeration(),
+      checkBcryptCostFactor(),
     ]);
 
     const singleFindings = [
@@ -882,6 +1107,15 @@ export async function checkAuthDeep(_opts: { changedFiles: string[] }): Promise<
       cookieSecureFlags,
       refreshTokenNotRotated,
       accountLockout,
+      jwtKidInjection,
+      jwksUriOverride,
+      oauthClientSecretPublic,
+      sessionTokenInUrl,
+      tokenEntropyTooLow,
+      rememberMeNoRotation,
+      passwordResetSingleUse,
+      accountEnumeration,
+      bcryptCostFactor,
     ].filter((f): f is Finding => f !== null);
 
     return [

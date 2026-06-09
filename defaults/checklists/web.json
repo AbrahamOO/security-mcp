@@ -30,6 +30,11 @@
     { "id": "web_cache_poisoning", "description": "Web cache poisoning prevented — unkeyed headers (X-Forwarded-Host, X-Original-URL, X-Rewrite-URL) are not reflected in cached responses or redirects", "critical": true },
     { "id": "web_websocket_auth", "description": "WebSocket upgrade validates authentication independently (token in first message or query param signed); does not rely solely on session cookies which bypass CORS", "critical": true },
     { "id": "web_postmessage_origin", "description": "postMessage listeners validate event.origin against an explicit allowlist before processing any message data — no wildcard '*' as trusted origin", "critical": true },
-    { "id": "web_dangling_markup", "description": "Dangling markup injection reviewed — no user-controlled partial HTML tags output across multi-step page generation; prevents attribute-injection data exfiltration", "critical": false }
+    { "id": "web_dangling_markup", "description": "Dangling markup injection reviewed — no user-controlled partial HTML tags output across multi-step page generation; prevents attribute-injection data exfiltration", "critical": false },
+    { "id": "web_css_injection", "title": "User input not written into CSS style attributes, CSS-in-JS template literals, or <style> blocks", "severity": "high", "automated": true },
+    { "id": "web_dangling_markup_check", "title": "Dangling markup injection prevention — no user-controlled partial HTML tags in server-rendered output", "severity": "high", "automated": true },
+    { "id": "web_postmessage_wildcard", "title": "postMessage sender does not use wildcard '*' as targetOrigin for sensitive data", "severity": "medium", "automated": true },
+    { "id": "web_cache_poisoning_headers", "title": "Unkeyed headers (X-Forwarded-Host, X-Original-URL) not reflected in cached responses or redirects", "severity": "medium", "automated": true },
+    { "id": "web_missing_sri", "title": "All external scripts and stylesheets loaded with Subresource Integrity (SRI) integrity= attribute", "severity": "medium", "automated": true }
   ]
 }

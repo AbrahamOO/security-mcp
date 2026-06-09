@@ -571,6 +571,237 @@ function checkNetworkLoggerProduction(ctx: ScanContext): Finding | null {
 	};
 }
 
+/** CHECK 20: Sensitive data written to NSTemporaryDirectory. MASVS-STORAGE-1 */
+function checkNsTempDirSensitive(ctx: ScanContext): Finding | null {
+	const TEMP_DIR_RE = /NSTemporaryDirectory\(\)|FileManager\.default\.temporaryDirectory/;
+	const SENSITIVE_RE = /(?:token|password|secret|credential|auth|key)/i;
+	const files = filesWithMatch(ctx.allNativeSources, TEMP_DIR_RE).filter(
+		(f) => SENSITIVE_RE.test(ctx.allNativeSources.get(f) ?? "")
+	);
+	if (files.length === 0) return null;
+	return {
+		id: "IOS_TEMP_DIR_SENSITIVE",
+		title: "iOS sensitive data written to NSTemporaryDirectory — not guaranteed cleanup, accessible on jailbroken devices (MASVS-STORAGE-1)",
+		severity: "HIGH",
+		files: files.slice(0, 10),
+		evidence: evidenceLines(ctx.allNativeSources, TEMP_DIR_RE),
+		requiredActions: [
+			"Do not write credential-class data (tokens, passwords, secrets) to NSTemporaryDirectory — the OS does not guarantee timely cleanup.",
+			"Use the iOS Keychain for credentials. If temporary scratch files are needed, write to a sub-directory of the app's Documents folder with NSURLIsExcludedFromBackupKey and NSFileProtectionComplete.",
+			"MASVS-STORAGE-1: temp files are accessible on jailbroken devices and can survive across app restarts."
+		]
+	};
+}
+
+/** CHECK 21: NSFileProtectionNone set on file — readable when device is locked. MASVS-STORAGE-1 */
+function checkNsFileProtectionNone(ctx: ScanContext): Finding | null {
+	const PROTECTION_NONE_RE = /NSFileProtectionNone|\.noProtection|FileProtectionType\.none/;
+	const files = filesWithMatch(ctx.allNativeSources, PROTECTION_NONE_RE);
+	if (files.length === 0) return null;
+	return {
+		id: "IOS_FILE_PROTECTION_NONE",
+		title: "NSFileProtectionNone set on file — readable when device is locked or powered off (MASVS-STORAGE-1)",
+		severity: "CRITICAL",
+		files: files.slice(0, 10),
+		evidence: evidenceLines(ctx.allNativeSources, PROTECTION_NONE_RE),
+		requiredActions: [
+			"Replace NSFileProtectionNone with NSFileProtectionComplete for all sensitive files.",
+			"Use NSFileProtectionCompleteUnlessOpen only when the file must be accessible while the device is locked for a specific background task.",
+			"MASVS-STORAGE-1 / CWE-311: NSFileProtectionNone means the file is readable in any device state, including when locked or seized."
+		]
+	};
+}
+
+/** CHECK 22: @AppStorage used for sensitive data — backed by UserDefaults. MASVS-STORAGE-1 */
+function checkAppStorageSensitive(ctx: ScanContext): Finding | null {
+	const APPSTORAGE_RE = /@AppStorage\s*\([^)]*(?:token|password|secret|credential|auth|key)/i;
+	const files = filesWithMatch(ctx.allNativeSources, APPSTORAGE_RE);
+	if (files.length === 0) return null;
+	return {
+		id: "IOS_APPSTORAGE_SENSITIVE",
+		title: "@AppStorage used for sensitive data — backed by UserDefaults, unencrypted, included in iTunes backups (MASVS-STORAGE-1)",
+		severity: "HIGH",
+		files: files.slice(0, 10),
+		evidence: evidenceLines(ctx.allNativeSources, APPSTORAGE_RE),
+		requiredActions: [
+			"Replace @AppStorage for credential-class keys with a Keychain wrapper property wrapper.",
+			"@AppStorage is syntactic sugar over UserDefaults — it is unencrypted and included in iCloud/iTunes backups by default.",
+			"MASVS-STORAGE-1 / CWE-312: tokens and passwords in UserDefaults are trivially readable on jailbroken devices."
+		]
+	};
+}
+
+/** CHECK 23: iOS SQLite database without SQLCipher encryption. MASVS-STORAGE-1 */
+function checkSqliteUnencrypted(ctx: ScanContext): Finding | null {
+	const SQLITE_RE = /import FMDB|import SQLite|FMDatabase\s*\(|Connection\s*\([^)]*\.db/;
+	const CIPHER_RE = /SQLCipher|sqlite3_key|PRAGMA key/;
+	const files = filesWithMatch(ctx.allNativeSources, SQLITE_RE).filter(
+		(f) => !CIPHER_RE.test(ctx.allNativeSources.get(f) ?? "")
+	);
+	if (files.length === 0) return null;
+	return {
+		id: "IOS_SQLITE_UNENCRYPTED",
+		title: "iOS SQLite database without SQLCipher encryption — readable on jailbroken devices (MASVS-STORAGE-1)",
+		severity: "HIGH",
+		files: files.slice(0, 10),
+		evidence: evidenceLines(ctx.allNativeSources, SQLITE_RE),
+		requiredActions: [
+			"Replace FMDB/SQLite.swift with a SQLCipher-backed variant and set a strong database key via sqlite3_key.",
+			"Derive the database key from the user's passphrase + device-bound secret using PBKDF2 or Argon2 — do not hardcode it.",
+			"MASVS-STORAGE-1: plaintext SQLite files are trivially copied and opened on jailbroken devices or via physical acquisition."
+		]
+	};
+}
+
+/** CHECK 24: WKWebView loading http:// URLs with JavaScript enabled. MASVS-NETWORK-1 */
+function checkWkWebviewHttpLoad(ctx: ScanContext): Finding | null {
+	const WEBVIEW_RE = /WKWebView/;
+	const HTTP_LOAD_RE = /loadRequest.*http:|load.*URLRequest.*http:/i;
+	const JS_BRIDGE_RE = /javaScriptEnabled\s*=\s*true/;
+	const files = filesWithMatch(ctx.allNativeSources, WEBVIEW_RE).filter((f) => {
+		const content = ctx.allNativeSources.get(f) ?? "";
+		return (HTTP_LOAD_RE.test(content) || JS_BRIDGE_RE.test(content)) && /http:\/\//.test(content);
+	});
+	if (files.length === 0) return null;
+	return {
+		id: "IOS_WEBVIEW_HTTP_LOAD",
+		title: "WKWebView with JavaScript enabled loading http:// — full MITM enables JS bridge injection (MASVS-NETWORK-1)",
+		severity: "CRITICAL",
+		files: files.slice(0, 10),
+		evidence: evidenceLines(ctx.allNativeSources, HTTP_LOAD_RE),
+		requiredActions: [
+			"Always load WKWebView content over https:// — enforce this in ATS and in the URL construction logic.",
+			"If http:// is required for a legacy endpoint, disable JavaScript (config.preferences.javaScriptEnabled = false) and remove all WKScriptMessageHandler registrations.",
+			"MASVS-NETWORK-1 / CWE-319: a MITM attacker on http:// can inject arbitrary JavaScript that communicates with any registered native bridge handler."
+		]
+	};
+}
+
+/** CHECK 25: Universal Links configured — verify AASA served over HTTPS. MASVS-PLATFORM-3 */
+function checkUniversalLinkConfig(ctx: ScanContext): Finding | null {
+	const APPLINKS_RE = /applinks:|webcredentials:|NSUserActivityTypes/;
+	const allSources = new Map<string, string>([
+		...ctx.allNativeSources,
+		...new Map(ctx.infoPlistEntries)
+	]);
+	const files = filesWithMatch(allSources, APPLINKS_RE);
+	if (files.length === 0) return null;
+	return {
+		id: "IOS_UNIVERSAL_LINK_CONFIG",
+		title: "Universal Links configured — verify AASA served over HTTPS with restrictive path patterns (MASVS-PLATFORM-3)",
+		severity: "HIGH",
+		files: files.slice(0, 10),
+		evidence: evidenceLines(allSources, APPLINKS_RE),
+		requiredActions: [
+			"Ensure the apple-app-site-association (AASA) file is served over HTTPS with no redirects and a valid TLS certificate.",
+			"Restrict path patterns in the AASA file — avoid catch-all paths like \"/*\"; use the most specific paths possible.",
+			"Validate all incoming NSUserActivity URLs in application(_:continue:restorationHandler:) before acting on parameters.",
+			"MASVS-PLATFORM-3 / CWE-939: over-broad AASA paths allow attackers to hijack deep links by serving a malicious AASA from a sibling domain."
+		]
+	};
+}
+
+/** CHECK 26: React Native AsyncStorage used for sensitive data. MASVS-STORAGE-1 */
+async function checkRnAsyncStorageSensitive(): Promise<Finding | null> {
+	const JS_EXTENSIONS = ["**/*.js", "**/*.ts", "**/*.jsx", "**/*.tsx"];
+	const jsIgnore = ["**/node_modules/**", "**/.git/**"];
+	const jsSources = await readFileMap(JS_EXTENSIONS, jsIgnore);
+	const ASYNC_STORAGE_RE = /AsyncStorage\.setItem\s*\([^,]*(?:token|password|secret|auth|key)/i;
+	const files = filesWithMatch(jsSources, ASYNC_STORAGE_RE);
+	if (files.length === 0) return null;
+	return {
+		id: "RN_ASYNC_STORAGE_SENSITIVE",
+		title: "React Native AsyncStorage used for sensitive data — unencrypted, readable on rooted devices (MASVS-STORAGE-1)",
+		severity: "HIGH",
+		files: files.slice(0, 10),
+		evidence: evidenceLines(jsSources, ASYNC_STORAGE_RE),
+		requiredActions: [
+			"Replace AsyncStorage with react-native-keychain or @react-native-community/encrypted-storage for credential-class data.",
+			"AsyncStorage is backed by unencrypted SQLite on Android and unencrypted files on iOS — readable on rooted/jailbroken devices.",
+			"MASVS-STORAGE-1: tokens, passwords, and secrets must be stored in the platform keystore (iOS Keychain / Android Keystore)."
+		]
+	};
+}
+
+/** CHECK 27: React Native CodePush OTA without bundle signing. MASVS-RESILIENCE-3 */
+async function checkCodePushIntegrity(): Promise<Finding | null> {
+	const JS_EXTENSIONS = ["**/*.js", "**/*.ts", "**/*.jsx", "**/*.tsx"];
+	const jsIgnore = ["**/node_modules/**", "**/.git/**"];
+	const jsSources = await readFileMap(JS_EXTENSIONS, jsIgnore);
+	const CODEPUSH_RE = /CodePush\.sync|codePush\.sync|import.*code-push/i;
+	const INTEGRITY_RE = /publicKey|mandatory.*true|rollbackRetryOptions/;
+	const files = filesWithMatch(jsSources, CODEPUSH_RE).filter(
+		(f) => !INTEGRITY_RE.test(jsSources.get(f) ?? "")
+	);
+	if (files.length === 0) return null;
+	return {
+		id: "RN_CODEPUSH_NO_INTEGRITY",
+		title: "React Native CodePush OTA without bundle signing — compromised CDN deploys malicious JS (MASVS-RESILIENCE-3)",
+		severity: "HIGH",
+		files: files.slice(0, 10),
+		evidence: evidenceLines(jsSources, CODEPUSH_RE),
+		requiredActions: [
+			"Enable CodePush bundle signing: generate an RSA key pair and pass the public key via CodePushPublicKey in Info.plist.",
+			"Set mandatory: true for critical security patches to prevent users from running outdated bundles.",
+			"MASVS-RESILIENCE-3: without signing, a compromised or malicious CDN update can replace the entire JS bundle with attacker code."
+		]
+	};
+}
+
+/** CHECK 28: Expo AsyncStorage for credentials instead of SecureStore. MASVS-STORAGE-1 */
+async function checkExpoAsyncStorage(): Promise<Finding | null> {
+	const JS_EXTENSIONS = ["**/*.js", "**/*.ts", "**/*.jsx", "**/*.tsx"];
+	const jsIgnore = ["**/node_modules/**", "**/.git/**"];
+
+	const pkgText = await readFileSafe("package.json").catch(() => "");
+	if (!/"expo"/.test(pkgText)) return null;
+
+	const jsSources = await readFileMap(JS_EXTENSIONS, jsIgnore);
+	const ASYNC_SENSITIVE_RE = /AsyncStorage.*(?:token|secret|password|auth)/i;
+	const SECURE_STORE_RE = /SecureStore\.setItemAsync/;
+	const files = filesWithMatch(jsSources, ASYNC_SENSITIVE_RE).filter(
+		(f) => !SECURE_STORE_RE.test(jsSources.get(f) ?? "")
+	);
+	if (files.length === 0) return null;
+	return {
+		id: "EXPO_ASYNC_STORAGE_SENSITIVE",
+		title: "Expo AsyncStorage for credentials instead of SecureStore — not backed by iOS Keychain or Android Keystore (MASVS-STORAGE-1)",
+		severity: "HIGH",
+		files: files.slice(0, 10),
+		evidence: evidenceLines(jsSources, ASYNC_SENSITIVE_RE),
+		requiredActions: [
+			"Replace AsyncStorage with expo-secure-store (SecureStore.setItemAsync) for all credential-class data.",
+			"expo-secure-store uses iOS Keychain and Android Keystore under the hood — AsyncStorage uses unencrypted flat files.",
+			"MASVS-STORAGE-1: secrets in AsyncStorage are trivially readable on jailbroken iOS or rooted Android devices."
+		]
+	};
+}
+
+/** CHECK 29: Certificate Transparency enforcement not configured. MASVS-NETWORK-2 */
+function checkCertificateTransparency(ctx: ScanContext): Finding | null {
+	const PINNING_RE = /didReceive.*challenge|TrustKit|ServerTrustManager|ServerTrustPolicy|pinnedCertificates|NSPinnedDomains/i;
+	const hasPinning =
+		filesWithMatch(ctx.allNativeSources, PINNING_RE).length > 0 ||
+		ctx.infoPlistEntries.some(([, t]) => PINNING_RE.test(t));
+	if (!hasPinning) return null;
+
+	const CT_RE = /NSRequiresCertificateTransparency|certificateTransparencyEnabled|CTPolicy/;
+	const hasCT =
+		filesWithMatch(ctx.allNativeSources, CT_RE).length > 0 ||
+		ctx.infoPlistEntries.some(([, t]) => CT_RE.test(t));
+	if (hasCT) return null;
+	return {
+		id: "MOBILE_NO_CERT_TRANSPARENCY",
+		title: "Certificate Transparency enforcement not configured — misissued CA certificates can MITM without appearing in CT logs (MASVS-NETWORK-2)",
+		severity: "MEDIUM",
+		requiredActions: [
+			"Set NSRequiresCertificateTransparency to true in your ATS dictionary in Info.plist.",
+			"When using TrustKit, set kTSKRequireCertificateTransparency: true in the TrustKit configuration.",
+			"MASVS-NETWORK-2: without CT enforcement, a misissued certificate from any trusted CA can intercept TLS traffic without appearing in public CT logs."
+		]
+	};
+}
+
 // ── orchestrator ──────────────────────────────────────────────────────────────
 
 export async function checkMobileIos(_: { changedFiles: string[] }): Promise<Finding[]> {
@@ -603,7 +834,17 @@ export async function checkMobileIos(_: { changedFiles: string[] }): Promise<Fin
 			checkDebugFlagProduction(ctx),
 			checkCoreDataUnencrypted(ctx),
 			checkNetworkLoggerProduction(ctx),
-			await checkLogSensitive(ctx)
+			checkNsTempDirSensitive(ctx),
+			checkNsFileProtectionNone(ctx),
+			checkAppStorageSensitive(ctx),
+			checkSqliteUnencrypted(ctx),
+			checkWkWebviewHttpLoad(ctx),
+			checkUniversalLinkConfig(ctx),
+			checkCertificateTransparency(ctx),
+			await checkLogSensitive(ctx),
+			await checkRnAsyncStorageSensitive(),
+			await checkCodePushIntegrity(),
+			await checkExpoAsyncStorage()
 		];
 
 		for (const c of candidates) {

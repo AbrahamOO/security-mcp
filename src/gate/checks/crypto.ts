@@ -328,6 +328,144 @@ async function checkTlsConfig(): Promise<Finding[]> {
 	return findings;
 }
 
+async function checkZeroFilledIv(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+
+	const zeroIvHits = await searchRepo({
+		query: String.raw`(?:Buffer\.alloc\s*\(\s*(?:8|12|16|24|32)\s*\)|new\s+Uint8Array\s*\(\s*(?:8|12|16|24|32)\s*\))[^\n]*(?:iv|IV|nonce|Nonce)`,
+		isRegex: true,
+		maxMatches: 200
+	});
+
+	const zeroIvAssignHits = await searchRepo({
+		query: String.raw`(?:iv|nonce)\s*=\s*Buffer\.alloc\s*\(`,
+		isRegex: true,
+		maxMatches: 200
+	});
+
+	const combined = [
+		...zeroIvHits,
+		...zeroIvAssignHits.filter((h) => !zeroIvHits.some((l) => l.file === h.file && l.line === h.line))
+	];
+
+	if (combined.length > 0) {
+		findings.push({
+			id: "CRYPTO_ZERO_IV",
+			title: "Zero-filled IV or nonce (Buffer.alloc creates all-zeros) — deterministic IV breaks cipher security (CWE-330)",
+			severity: "CRITICAL",
+			evidence: combined.slice(0, 10).map((m) => `${m.file}:${m.line}:${m.preview}`),
+			files: [...new Set(combined.slice(0, 10).map((m) => m.file))],
+			requiredActions: [
+				"Replace Buffer.alloc(n) with crypto.randomBytes(n) for IV/nonce generation.",
+				"A zero-filled IV is equivalent to a hardcoded IV — every encryption with the same key produces the same ciphertext."
+			]
+		});
+	}
+
+	return findings;
+}
+
+async function checkWeakRsaKeySize(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+
+	const weakRsaHits = await searchRepo({
+		query: String.raw`modulusLength\s*:\s*(?:512|768|1536)`,
+		isRegex: true,
+		maxMatches: 200
+	});
+
+	if (weakRsaHits.length > 0) {
+		findings.push({
+			id: "CRYPTO_RSA_WEAK_KEY",
+			title: "RSA key size 512/768/1536 bits — sub-2048 keys factorable with commodity hardware (CWE-326)",
+			severity: "CRITICAL",
+			evidence: weakRsaHits.slice(0, 10).map((m) => `${m.file}:${m.line}:${m.preview}`),
+			files: [...new Set(weakRsaHits.slice(0, 10).map((m) => m.file))],
+			requiredActions: [
+				"Use a minimum modulusLength of 2048; prefer 4096 for long-lived keys.",
+				"Keys below 2048 bits can be factored with commodity hardware and are prohibited by NIST SP 800-131A Rev 2."
+			]
+		});
+	}
+
+	return findings;
+}
+
+async function checkWeakDhParams(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+
+	const weakDhSizeHits = await searchRepo({
+		query: String.raw`createDiffieHellman\s*\(\s*(?:[0-9]{1,3}|1[0-9]{3}|[5-9][0-9]{2})\s*[,)]`,
+		isRegex: true,
+		maxMatches: 200
+	});
+
+	const weakDhGroupHits = await searchRepo({
+		query: String.raw`createDiffieHellmanGroup\s*\(\s*['"]modp(?:1|2|5)['"]`,
+		isRegex: true,
+		maxMatches: 200
+	});
+
+	const combined = [
+		...weakDhSizeHits,
+		...weakDhGroupHits.filter((h) => !weakDhSizeHits.some((l) => l.file === h.file && l.line === h.line))
+	];
+
+	if (combined.length > 0) {
+		findings.push({
+			id: "CRYPTO_WEAK_DH_PARAMS",
+			title: "DH parameters below 2048 bits or weak group (modp1/2/5) — vulnerable to Logjam precomputation (CWE-326)",
+			severity: "HIGH",
+			evidence: combined.slice(0, 10).map((m) => `${m.file}:${m.line}:${m.preview}`),
+			files: [...new Set(combined.slice(0, 10).map((m) => m.file))],
+			requiredActions: [
+				"Use createDiffieHellmanGroup('modp14') or higher (modp14 = 2048-bit), or prefer ECDH with P-256 or P-384.",
+				"modp1/2/5 and DH groups below 2048 bits are broken by Logjam-style precomputation attacks."
+			]
+		});
+	}
+
+	return findings;
+}
+
+async function checkMissingForwardSecrecy(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+
+	const weakCipherSuiteHits = await searchRepo({
+		query: String.raw`ciphers\s*:\s*['"][^'"]*(?:TLS_RSA_WITH|RC4|NULL|EXPORT|!ECDHE|!DHE)[^'"]*['"]`,
+		isRegex: true,
+		maxMatches: 200
+	});
+
+	const honorCipherOrderHits = await searchRepo({
+		query: String.raw`honorCipherOrder\s*:\s*false`,
+		isRegex: true,
+		maxMatches: 200
+	});
+
+	const combined = [
+		...weakCipherSuiteHits,
+		...honorCipherOrderHits.filter((h) => !weakCipherSuiteHits.some((l) => l.file === h.file && l.line === h.line))
+	];
+
+	if (combined.length > 0) {
+		findings.push({
+			id: "CRYPTO_NO_FORWARD_SECRECY",
+			title: "TLS cipher suite config without forward secrecy (no ECDHE/DHE) — retroactive decryption possible (PCI DSS 4.0)",
+			severity: "HIGH",
+			evidence: combined.slice(0, 10).map((m) => `${m.file}:${m.line}:${m.preview}`),
+			files: [...new Set(combined.slice(0, 10).map((m) => m.file))],
+			requiredActions: [
+				"Configure ciphers to prefer ECDHE or DHE key exchange (e.g. 'ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-GCM-SHA256').",
+				"Set honorCipherOrder: true so the server's cipher preference (which should list ECDHE first) takes effect.",
+				"Without forward secrecy, a compromised private key retroactively decrypts all recorded sessions (PCI DSS 4.0 requirement 4.2.1)."
+			]
+		});
+	}
+
+	return findings;
+}
+
 export async function checkCrypto(_opts: { changedFiles: string[] }): Promise<Finding[]> {
 	const findings: Finding[] = [];
 
@@ -569,6 +707,22 @@ export async function checkCrypto(_opts: { changedFiles: string[] }): Promise<Fi
 		// 14. TLS configuration weaknesses
 		const tlsFindings = await checkTlsConfig();
 		findings.push(...tlsFindings);
+
+		// 15. Zero-filled IV/nonce
+		const zeroIvFindings = await checkZeroFilledIv();
+		findings.push(...zeroIvFindings);
+
+		// 16. Weak RSA key sizes (512/768/1536)
+		const weakRsaKeyFindings = await checkWeakRsaKeySize();
+		findings.push(...weakRsaKeyFindings);
+
+		// 17. Weak DH parameters or named groups
+		const weakDhFindings = await checkWeakDhParams();
+		findings.push(...weakDhFindings);
+
+		// 18. Missing forward secrecy in TLS cipher config
+		const forwardSecrecyFindings = await checkMissingForwardSecrecy();
+		findings.push(...forwardSecrecyFindings);
 	} catch (err) {
 		console.warn("[checkCrypto] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));
 	}

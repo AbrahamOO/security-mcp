@@ -366,6 +366,18 @@ export async function checkDependencies(_: { changedFiles: string[] }): Promise<
 	const threatIntel = await checkCveExploitation();
 	findings.push(...threatIntel);
 
+	const goSum = await checkGoSumMissing();
+	findings.push(...goSum);
+
+	const cargoLock = await checkCargoLockMissing();
+	findings.push(...cargoLock);
+
+	const lockfileSync = await checkLockfileSync();
+	findings.push(...lockfileSync);
+
+	const maintainerRisk = await checkMaintainerRisk();
+	findings.push(...maintainerRisk);
+
 	return findings;
 }
 
@@ -851,6 +863,267 @@ async function checkTyposquatting(): Promise<Finding[]> {
 		}
 	} catch (err) {
 		console.warn("[checkTyposquatting] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));
+	}
+
+	return findings;
+}
+
+// ─── Go module integrity ────────────────────────────────────────────────────
+
+async function checkGoSumMissing(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+
+	try {
+		const goModFiles = await fg(["**/go.mod"], {
+			dot: true,
+			ignore: ["**/node_modules/**", "**/dist/**", "**/.git/**"]
+		});
+
+		const missing: string[] = [];
+
+		for (const goModPath of goModFiles) {
+			const dir = goModPath.replace(/\/go\.mod$/, "") || ".";
+			const goSumPath = dir === "." ? "go.sum" : `${dir}/go.sum`;
+			try {
+				const content = await readFileSafe(goSumPath);
+				if (!content) {
+					missing.push(goModPath);
+				}
+			} catch {
+				missing.push(goModPath);
+			}
+		}
+
+		if (missing.length > 0) {
+			findings.push({
+				id: "GO_SUM_MISSING",
+				title: `${missing.length} go.mod file(s) present without a corresponding go.sum — Go module integrity unverified`,
+				severity: "HIGH",
+				evidence: missing.slice(0, 10),
+				requiredActions: [
+					"go.mod present without go.sum — Go module integrity unverified, compromised proxy can serve any content (ATT&CK T1195.001)",
+					"Run `go mod tidy` to generate go.sum, then commit it alongside go.mod.",
+					"Without go.sum, the Go toolchain cannot verify cryptographic hashes of downloaded modules."
+				]
+			});
+		}
+	} catch (err) {
+		console.warn("[checkGoSumMissing] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));
+	}
+
+	return findings;
+}
+
+// ─── Cargo lock integrity ───────────────────────────────────────────────────
+
+function isBinaryCrate(tomlContent: string): boolean {
+	const hasBinSection = /^\[\[bin\]\]/m.test(tomlContent);
+	const hasLibSection = /^\[lib\]/m.test(tomlContent);
+	const hasPackageSection = /^\[package\]/m.test(tomlContent);
+	return hasBinSection || (hasPackageSection && !hasLibSection);
+}
+
+async function cargoLockMissingForToml(cargoTomlPath: string): Promise<boolean> {
+	let tomlContent = "";
+	try {
+		tomlContent = await readFileSafe(cargoTomlPath);
+	} catch {
+		return false;
+	}
+	if (!tomlContent || !isBinaryCrate(tomlContent)) return false;
+
+	const dir = cargoTomlPath.replace(/\/Cargo\.toml$/, "") || ".";
+	const cargoLockPath = dir === "." ? "Cargo.lock" : `${dir}/Cargo.lock`;
+	try {
+		const lockContent = await readFileSafe(cargoLockPath);
+		return !lockContent;
+	} catch {
+		return true;
+	}
+}
+
+async function checkCargoLockMissing(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+
+	try {
+		const cargoTomlFiles = await fg(["**/Cargo.toml"], {
+			dot: true,
+			ignore: ["**/node_modules/**", "**/dist/**", "**/.git/**"]
+		});
+
+		const results = await Promise.all(cargoTomlFiles.map(async (p) => ({ path: p, missing: await cargoLockMissingForToml(p) })));
+		const missing = results.filter((r) => r.missing).map((r) => r.path);
+
+		if (missing.length > 0) {
+			findings.push({
+				id: "CARGO_LOCK_MISSING",
+				title: `${missing.length} Cargo.toml binary crate(s) present without Cargo.lock — Rust dependency resolution unverified`,
+				severity: "MEDIUM",
+				evidence: missing.slice(0, 10),
+				requiredActions: [
+					"Cargo.toml without Cargo.lock — Rust binary crate dependency resolution unverified (ATT&CK T1195.001)",
+					"Run `cargo generate-lockfile` to create Cargo.lock and commit it to version control.",
+					"Cargo.lock ensures reproducible builds and prevents silent dependency upgrades."
+				]
+			});
+		}
+	} catch (err) {
+		console.warn("[checkCargoLockMissing] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));
+	}
+
+	return findings;
+}
+
+// ─── Lockfile sync check ────────────────────────────────────────────────────
+
+function parsePkgDeps(content: string): Record<string, string> | null {
+	try {
+		const pkg = JSON.parse(content) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
+		return { ...pkg.dependencies, ...pkg.devDependencies };
+	} catch {
+		return null;
+	}
+}
+
+function parseLockPackages(content: string): Record<string, unknown> | null {
+	try {
+		const lock = JSON.parse(content) as { packages?: Record<string, unknown> };
+		return lock.packages ?? {};
+	} catch {
+		return null;
+	}
+}
+
+function findOutOfSyncDeps(allDeps: Record<string, string>, lockPackages: Record<string, unknown>): string[] {
+	const outOfSync: string[] = [];
+	for (const depName of Object.keys(allDeps)) {
+		// package-lock.json v2/v3 stores entries as "node_modules/<name>"
+		const key = `node_modules/${depName}`;
+		if (!(key in lockPackages) && !(depName in lockPackages)) {
+			outOfSync.push(depName);
+		}
+	}
+	return outOfSync;
+}
+
+async function checkLockfileSyncForPkg(pkgPath: string): Promise<string[]> {
+	const dir = pkgPath.replace(/\/package\.json$/, "") || ".";
+	const lockPath = dir === "." ? "package-lock.json" : `${dir}/package-lock.json`;
+
+	let pkgContent = "";
+	try {
+		pkgContent = await readFileSafe(pkgPath);
+	} catch {
+		return [];
+	}
+	if (!pkgContent) return [];
+
+	const allDeps = parsePkgDeps(pkgContent);
+	if (!allDeps || Object.keys(allDeps).length === 0) return [];
+
+	let lockContent = "";
+	try {
+		lockContent = await readFileSafe(lockPath);
+	} catch {
+		return [];
+	}
+	if (!lockContent) return [];
+
+	const lockPackages = parseLockPackages(lockContent);
+	if (!lockPackages) return [];
+
+	return findOutOfSyncDeps(allDeps, lockPackages);
+}
+
+async function checkLockfileSync(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+
+	try {
+		const pkgFiles = await fg(["**/package.json"], {
+			dot: true,
+			ignore: ["**/node_modules/**", "**/dist/**", "**/.git/**"]
+		});
+
+		for (const pkgPath of pkgFiles) {
+			const outOfSync = await checkLockfileSyncForPkg(pkgPath);
+			if (outOfSync.length > 0) {
+				findings.push({
+					id: "LOCKFILE_OUT_OF_SYNC",
+					title: `${pkgPath}: ${outOfSync.length} dependency(ies) in package.json not present in package-lock.json`,
+					severity: "HIGH",
+					evidence: outOfSync.slice(0, 15),
+					requiredActions: [
+						"package.json has dependencies not present in package-lock.json — lockfile out of sync (ATT&CK T1195.001)",
+						"Run `npm install` to regenerate package-lock.json and commit the updated lockfile.",
+						"Use `npm ci` in CI/CD pipelines — it fails if package-lock.json is out of sync with package.json."
+					]
+				});
+			}
+		}
+	} catch (err) {
+		console.warn("[checkLockfileSync] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));
+	}
+
+	return findings;
+}
+
+// ─── Known supply-chain incident packages ──────────────────────────────────
+
+const KNOWN_INCIDENT_PACKAGES = new Set([
+	"node-ipc",
+	"event-stream",
+	"ua-parser-js",
+	"faker",
+	"colors",
+	"left-pad"
+]);
+
+function flaggedIncidentDeps(allDeps: Record<string, string>): string[] {
+	return Object.keys(allDeps).filter((name) => KNOWN_INCIDENT_PACKAGES.has(name));
+}
+
+async function maintainerRiskForPkg(pkgPath: string): Promise<string[]> {
+	let pkgContent = "";
+	try {
+		pkgContent = await readFileSafe(pkgPath);
+	} catch {
+		return [];
+	}
+	if (!pkgContent) return [];
+
+	const allDeps = parsePkgDeps(pkgContent);
+	if (!allDeps) return [];
+
+	return flaggedIncidentDeps(allDeps);
+}
+
+async function checkMaintainerRisk(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+
+	try {
+		const pkgFiles = await fg(["**/package.json"], {
+			dot: true,
+			ignore: ["**/node_modules/**", "**/dist/**", "**/.git/**"]
+		});
+
+		for (const pkgPath of pkgFiles) {
+			const flagged = await maintainerRiskForPkg(pkgPath);
+			if (flagged.length > 0) {
+				findings.push({
+					id: "DEP_MAINTAINER_RISK",
+					title: `${pkgPath}: ${flagged.length} dependency(ies) with known supply-chain incident history detected`,
+					severity: "MEDIUM",
+					evidence: flagged.slice(0, 10),
+					requiredActions: [
+						"Dependency with known supply-chain incident history detected — review and pin to safe version (ATT&CK T1195.001)",
+						"Audit each flagged package: verify the current maintainer, review recent publish history on npmjs.com, and pin to a specific safe version.",
+						"Consider replacing abandoned or historically-compromised packages with actively-maintained alternatives."
+					]
+				});
+			}
+		}
+	} catch (err) {
+		console.warn("[checkMaintainerRisk] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));
 	}
 
 	return findings;

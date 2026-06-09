@@ -96,6 +96,54 @@ const FUNC_DESC_CONCAT_RE = /description\s*:\s*['"][^'"]*['"]\s*\+\s*(?:user|req
 const AI_OUTPUT_DIRECT_RE = /(?:completion|response|message)\.content.*res\.(?:json|send|write)/i;
 const CONTENT_FILTER_RE = /moderate|moderation|content.?filter|openai\.moderations|guardrail|shield/i;
 
+// ─── AI_INDIRECT_PROMPT_INJECTION ────────────────────────────────────────────
+const EXTERNAL_FETCH_RE = /(?:fetch|axios\.get|got\.get|request\.get|nodemailer|imapflow|cheerio\.load|parseHTML|pdf\.extract|mammoth\.extract)/i;
+const PROMPT_BUILD_NEARBY_RE = /(?:messages|prompt|systemPrompt|userMessage|content)\s*(?:=|\+=|\.push)/i;
+
+// ─── AI_MARKDOWN_EXFIL_RISK ───────────────────────────────────────────────────
+const MARKDOWN_RENDER_RE = /(?:dangerouslySetInnerHTML|innerHTML\s*=|marked\.parse|showdown|remark|unified)\s*\(/i;
+
+// ─── AI_MEMORY_POISONING ──────────────────────────────────────────────────────
+const MEMORY_WRITE_RE = /(?:memory\.add|memory\.save|memory\.set|memoryStore\.write|redis\.set)\s*\([^)]*(?:summary|context|history|assistant)/i;
+
+// ─── AI_RAG_CORPUS_POISONING ──────────────────────────────────────────────────
+const VECTOR_UPSERT_RE = /(?:upsert|addDocuments|add_documents|indexDocuments|ingestDocument|vectorStore\.add|\.from_documents)\s*\([^)]*(?:userInput|req\.body|req\.file|formData|upload)/i;
+
+// ─── AI_TOKEN_SMUGGLING ───────────────────────────────────────────────────────
+const ZERO_WIDTH_RE = /[\u200b\u200c\u200d\u200e\u200f\u2060\ufeff\u202e\u202f\u2028\u2029\u00ad]/;
+
+// ─── AI_AGENTIC_PRIVILEGE_ESCALATION ─────────────────────────────────────────
+const TOOL_REGISTER_RE = /(?:tools\.push|tools\.add|registerTool|addTool|extend_tools|capabilities\.push)\s*\([^)]*(?:response|output|completion|llm|agent)/i;
+
+// ─── AI_LLM_JUDGE_MANIPULATION ───────────────────────────────────────────────
+const LLM_JUDGE_RE = /(?:judge|evaluator|llm_eval|scoreWith|evaluate_with_llm|llmJudge|grader)\s*\(/i;
+const JUDGE_USER_INPUT_RE = /(?:criteria|rubric|instruction)\s*[:=][^\n]*(?:userInput|req\.body|input\.|body\.)/i;
+
+// ─── AI_IDOR_TOOL_CALLS ───────────────────────────────────────────────────────
+const TOOL_IDOR_RE = /(?:toolCall|tool_call|toolHandler|function_call)\s*\([^)]*(?:args|arguments|params)\.[a-zA-Z]*[Ii][dD]/i;
+const AUTHZ_CHECK_RE = /(?:authorize|checkPermission|hasAccess|enforceAuth|userId\s*===|ownedBy)/i;
+
+// ─── AI_CONTEXT_STUFFING ──────────────────────────────────────────────────────
+const INPUT_TOKEN_LIMIT_RE = /(?:maxTokens|max_tokens|tokenCount|countTokens|truncate.*tokens)/i;
+
+// ─── AI_MULTIMODAL_INJECTION ──────────────────────────────────────────────────
+const MULTIMODAL_RE = /(?:image_url|vision|file_content|image\/(?:jpeg|png|gif|webp)|application\/pdf|audio\/)/i;
+const MESSAGES_ARRAY_RE = /messages\s*(?:=|\+=|\.push)\s*\[?/i;
+
+// ─── AI_VECTOR_FILTER_BYPASS ──────────────────────────────────────────────────
+const VECTOR_SOFT_FILTER_RE = /(?:similarity_search|vectorSearch|\.search\s*\()[^)]*(?:should|\$or|match_any)/i;
+
+// ─── AI_STREAM_CHUNK_INJECTION ────────────────────────────────────────────────
+const STREAM_FORWARD_RE = /(?:stream\.on\s*\(['"]data|for await.*chunk)[^\n]*(?:res\.write|socket\.send|push\(|emit\()/i;
+const STREAM_VALIDATION_RE = /sanitize|validate|strip|encode|escape|DOMPurify/i;
+
+// ─── AI_GENERATED_CODE_NO_AUDIT ───────────────────────────────────────────────
+const AI_CODE_EXEC_RE = /(?:eval|exec|execSync|spawn|db\.query|prisma\.\$queryRaw|knex\.raw)\s*\([^)]*(?:response|completion|output|generated|llm|model)/i;
+const AUDIT_LOG_RE = /audit(?:Log|log|\.log)|logger\.(?:info|warn|security)|logEvent|securityLog/i;
+
+// ─── AI_EMBEDDING_INVERSION ───────────────────────────────────────────────────
+const EMBEDDING_EXPOSE_RE = /(?:embedding|embeddings|vector)\.(?:data|values)\s*[,;)][^\n]*(?:res\.json|res\.send|JSON\.stringify|localStorage|log\s*\()/i;
+
 // ─── Glob ignore list ─────────────────────────────────────────────────────────
 const GLOB_IGNORE = [
   "**/node_modules/**",
@@ -128,6 +176,20 @@ type FileEvidence = {
   fineTunePiiFiles: string[];
   funcDescUserInputFiles: string[];
   contentFilterMissingFiles: string[];
+  indirectPromptInjectionFiles: string[];
+  markdownExfilFiles: string[];
+  memoryPoisoningFiles: string[];
+  ragCorpusPoisoningFiles: string[];
+  tokenSmugglingFiles: string[];
+  agenticPrivEscFiles: string[];
+  llmJudgeManipFiles: string[];
+  idorToolCallFiles: string[];
+  contextStuffingFiles: string[];
+  multimodalInjectionFiles: string[];
+  vectorFilterBypassFiles: string[];
+  streamChunkInjectionFiles: string[];
+  aiGeneratedCodeNoAuditFiles: string[];
+  embeddingInversionFiles: string[];
   schemaDetected: boolean;
 };
 
@@ -152,6 +214,20 @@ function makeEvidence(): FileEvidence {
     fineTunePiiFiles: [],
     funcDescUserInputFiles: [],
     contentFilterMissingFiles: [],
+    indirectPromptInjectionFiles: [],
+    markdownExfilFiles: [],
+    memoryPoisoningFiles: [],
+    ragCorpusPoisoningFiles: [],
+    tokenSmugglingFiles: [],
+    agenticPrivEscFiles: [],
+    llmJudgeManipFiles: [],
+    idorToolCallFiles: [],
+    contextStuffingFiles: [],
+    multimodalInjectionFiles: [],
+    vectorFilterBypassFiles: [],
+    streamChunkInjectionFiles: [],
+    aiGeneratedCodeNoAuditFiles: [],
+    embeddingInversionFiles: [],
     schemaDetected: false
   };
 }
@@ -250,6 +326,65 @@ function scanModelsAndSupply(file: string, text: string, lines: string[], ev: Fi
   }
 }
 
+function scanNewAiThreats(file: string, text: string, lines: string[], ev: FileEvidence): void {
+  // AI_INDIRECT_PROMPT_INJECTION: external data fetch near prompt construction
+  if (EXTERNAL_FETCH_RE.test(text) && windowMatch(lines, EXTERNAL_FETCH_RE, PROMPT_BUILD_NEARBY_RE, 20)) {
+    ev.indirectPromptInjectionFiles.push(file);
+  }
+  // AI_MARKDOWN_EXFIL_RISK: markdown renderer called on LLM output variables
+  if (MARKDOWN_RENDER_RE.test(text) && AI_SDK_CALL_RE.test(text)) {
+    ev.markdownExfilFiles.push(file);
+  }
+  // AI_MEMORY_POISONING: unsanitized data written to memory/session store
+  if (MEMORY_WRITE_RE.test(text)) {
+    ev.memoryPoisoningFiles.push(file);
+  }
+  // AI_RAG_CORPUS_POISONING: user-supplied data upserted directly into vector store
+  if (VECTOR_UPSERT_RE.test(text)) {
+    ev.ragCorpusPoisoningFiles.push(file);
+  }
+  // AI_TOKEN_SMUGGLING: zero-width / invisible Unicode characters in source
+  if (ZERO_WIDTH_RE.test(text)) {
+    ev.tokenSmugglingFiles.push(file);
+  }
+  // AI_AGENTIC_PRIVILEGE_ESCALATION: tools registered from LLM output
+  if (TOOL_REGISTER_RE.test(text)) {
+    ev.agenticPrivEscFiles.push(file);
+  }
+  // AI_LLM_JUDGE_MANIPULATION: LLM judge with user-controlled criteria/rubric
+  if (LLM_JUDGE_RE.test(text) && JUDGE_USER_INPUT_RE.test(text)) {
+    ev.llmJudgeManipFiles.push(file);
+  }
+  // AI_IDOR_TOOL_CALLS: tool handler resolves an ID from args without authz check
+  if (TOOL_IDOR_RE.test(text) && !windowMatch(lines, TOOL_IDOR_RE, AUTHZ_CHECK_RE, 15)) {
+    ev.idorToolCallFiles.push(file);
+  }
+  // AI_CONTEXT_STUFFING: AI SDK call with no token limit / truncation nearby
+  if (AI_SDK_CALL_RE.test(text) && !windowMatch(lines, AI_SDK_CALL_RE, INPUT_TOKEN_LIMIT_RE, 20)) {
+    ev.contextStuffingFiles.push(file);
+  }
+  // AI_MULTIMODAL_INJECTION: multimodal content fed directly into messages array
+  if (MULTIMODAL_RE.test(text) && windowMatch(lines, MULTIMODAL_RE, MESSAGES_ARRAY_RE, 10)) {
+    ev.multimodalInjectionFiles.push(file);
+  }
+  // AI_VECTOR_FILTER_BYPASS: soft/optional vector filter without hard tenant guard
+  if (VECTOR_SOFT_FILTER_RE.test(text)) {
+    ev.vectorFilterBypassFiles.push(file);
+  }
+  // AI_STREAM_CHUNK_INJECTION: stream chunks forwarded to client without sanitization
+  if (STREAM_FORWARD_RE.test(text) && !windowMatch(lines, STREAM_FORWARD_RE, STREAM_VALIDATION_RE, 10)) {
+    ev.streamChunkInjectionFiles.push(file);
+  }
+  // AI_GENERATED_CODE_NO_AUDIT: AI-generated code executed without audit log
+  if (AI_CODE_EXEC_RE.test(text) && !windowMatch(lines, AI_CODE_EXEC_RE, AUDIT_LOG_RE, 15)) {
+    ev.aiGeneratedCodeNoAuditFiles.push(file);
+  }
+  // AI_EMBEDDING_INVERSION: raw embeddings/vectors serialised in API response or logs
+  if (EMBEDDING_EXPOSE_RE.test(text)) {
+    ev.embeddingInversionFiles.push(file);
+  }
+}
+
 /** Single-pass per-file scanner — delegates to focused helpers. */
 function scanFile(file: string, text: string, ev: FileEvidence): void {
   const lines = text.split("\n");
@@ -258,6 +393,7 @@ function scanFile(file: string, text: string, ev: FileEvidence): void {
   scanRateLimitAndContent(file, text, ev);
   scanContextAndLoop(file, text, lines, ev);
   scanModelsAndSupply(file, text, lines, ev);
+  scanNewAiThreats(file, text, lines, ev);
 }
 
 // ─── Finding builders (split to keep checkAi cognitive complexity low) ─────────
@@ -522,6 +658,191 @@ function buildSupplyChainFindings(ev: FileEvidence, findings: Finding[]): void {
   }
 }
 
+function buildNewAiThreatFindings(ev: FileEvidence, findings: Finding[]): void {
+  if (ev.indirectPromptInjectionFiles.length > 0) {
+    findings.push({
+      id: "AI_INDIRECT_PROMPT_INJECTION",
+      title: "External data fetched and inserted into LLM prompt without sanitization — indirect prompt injection risk",
+      severity: "CRITICAL",
+      evidence: ev.indirectPromptInjectionFiles,
+      requiredActions: [
+        "Treat all externally fetched content (web pages, emails, PDFs, APIs) as untrusted — sanitize and delimit it before inserting into any prompt (CWE-77, MITRE ATLAS AML.T0051).",
+        "Use clearly-marked content boundaries (e.g., XML tags or structured separators) so the model can distinguish instructions from data.",
+        "Apply an LLM-input firewall or content-isolation layer that strips control-plane instructions from user-sourced text before prompt construction."
+      ]
+    });
+  }
+  if (ev.markdownExfilFiles.length > 0) {
+    findings.push({
+      id: "AI_MARKDOWN_EXFIL_RISK",
+      title: "LLM output rendered as Markdown/HTML without sanitization — data exfiltration via link injection risk",
+      severity: "CRITICAL",
+      evidence: ev.markdownExfilFiles,
+      requiredActions: [
+        "Sanitize all LLM-generated Markdown/HTML with a strict allowlist renderer (e.g., DOMPurify) before rendering client-side (CWE-79, MITRE ATLAS AML.T0054).",
+        "Disable auto-link and image rendering in the Markdown parser — these are the primary exfiltration vectors.",
+        "Apply a Content-Security-Policy that blocks external image/script loads to prevent pixel-tracking and data exfiltration even if sanitization is bypassed."
+      ]
+    });
+  }
+  if (ev.memoryPoisoningFiles.length > 0) {
+    findings.push({
+      id: "AI_MEMORY_POISONING",
+      title: "Data written to agent memory store without validation — memory poisoning risk",
+      severity: "CRITICAL",
+      evidence: ev.memoryPoisoningFiles,
+      requiredActions: [
+        "Validate and sanitize all content before persisting to memory/session stores — attacker-controlled summaries can shape future model behavior (MITRE ATLAS AML.T0051.000, CWE-20).",
+        "Apply per-user memory namespacing and enforce write authorization so one user cannot poison another's context.",
+        "Implement memory integrity checks: hash-and-verify stored entries on read; alert on unexpected modifications."
+      ]
+    });
+  }
+  if (ev.ragCorpusPoisoningFiles.length > 0) {
+    findings.push({
+      id: "AI_RAG_CORPUS_POISONING",
+      title: "User-supplied content upserted directly into vector store — RAG corpus poisoning risk",
+      severity: "HIGH",
+      evidence: ev.ragCorpusPoisoningFiles,
+      requiredActions: [
+        "Never index user-uploaded content without human or automated review — poisoned documents retrieved at query time can hijack agent behavior (MITRE ATLAS AML.T0020, CWE-349).",
+        "Quarantine and scan ingested documents through a moderation pipeline before they are made retrievable.",
+        "Isolate tenant corpora using vector DB namespaces or collection-level ACLs to prevent cross-tenant retrieval poisoning."
+      ]
+    });
+  }
+  if (ev.tokenSmugglingFiles.length > 0) {
+    findings.push({
+      id: "AI_TOKEN_SMUGGLING",
+      title: "Zero-width or invisible Unicode characters detected in source files — token smuggling risk",
+      severity: "HIGH",
+      evidence: ev.tokenSmugglingFiles,
+      requiredActions: [
+        "Audit all source files containing zero-width characters (U+200B–U+200F, U+2060, U+FEFF, U+202E–U+202F, U+2028–U+2029, U+00AD) — these can encode hidden instructions invisible to reviewers (CWE-116, MITRE ATLAS AML.T0051).",
+        "Add a pre-commit hook (e.g., rg '[\\u200b-\\u200f\\u2060\\ufeff\\u202e\\u202f\\u2028\\u2029\\u00ad]') that rejects files containing homoglyph/zero-width characters.",
+        "Normalize all user-supplied strings via Unicode NFC + strip non-printable characters before tokenization or storage."
+      ]
+    });
+  }
+  if (ev.agenticPrivEscFiles.length > 0) {
+    findings.push({
+      id: "AI_AGENTIC_PRIVILEGE_ESCALATION",
+      title: "Agent tool registry modified from LLM output — privilege escalation via tool injection risk",
+      severity: "CRITICAL",
+      evidence: ev.agenticPrivEscFiles,
+      requiredActions: [
+        "Never register tools from LLM completions, API responses, or any runtime-generated data — tool definitions must be static and code-reviewed (MITRE ATLAS AML.T0054, CWE-284).",
+        "Enforce a tool allowlist at startup; reject any attempt to add, modify, or extend tools at runtime.",
+        "Apply principle of least privilege to all registered tools — each tool should have only the permissions required for its declared function."
+      ]
+    });
+  }
+  if (ev.llmJudgeManipFiles.length > 0) {
+    findings.push({
+      id: "AI_LLM_JUDGE_MANIPULATION",
+      title: "LLM-as-judge evaluator accepts user-controlled criteria or rubric — judge manipulation risk",
+      severity: "HIGH",
+      evidence: ev.llmJudgeManipFiles,
+      requiredActions: [
+        "Define evaluation criteria and rubrics as static, server-controlled constants — never interpolate user input into judge instructions (MITRE ATLAS AML.T0051, CWE-77).",
+        "Run LLM judges in a separate trust domain with no access to production tools or data stores.",
+        "Log all judge inputs and outputs for audit; flag evaluations where the criteria field contains unusual formatting or injection-like patterns."
+      ]
+    });
+  }
+  if (ev.idorToolCallFiles.length > 0) {
+    findings.push({
+      id: "AI_IDOR_TOOL_CALLS",
+      title: "Tool call handler resolves a resource ID from arguments without authorization check — IDOR risk",
+      severity: "CRITICAL",
+      evidence: ev.idorToolCallFiles,
+      requiredActions: [
+        "Enforce ownership/authorization checks on every ID extracted from tool call arguments before accessing the resource (CWE-639, MITRE ATLAS AML.T0054).",
+        "Never rely on the LLM to supply or validate IDs for sensitive operations — resolve them from the authenticated session context instead.",
+        "Apply object-level authorization (OLA) middleware that binds resource IDs to the requesting user's identity before tool execution."
+      ]
+    });
+  }
+  if (ev.contextStuffingFiles.length > 0) {
+    findings.push({
+      id: "AI_CONTEXT_STUFFING",
+      title: "AI SDK call detected without input token limit or truncation — context stuffing / cost-exhaustion risk",
+      severity: "HIGH",
+      evidence: ev.contextStuffingFiles,
+      requiredActions: [
+        "Enforce a maxTokens / max_tokens cap on every LLM call and truncate inputs that exceed the budget before sending (CWE-400, MITRE ATLAS AML.T0057).",
+        "Count tokens client-side before submission using tiktoken or the provider's token-counting API and reject oversized inputs early.",
+        "Set per-user and per-session token budgets with alerting to detect context-stuffing abuse patterns."
+      ]
+    });
+  }
+  if (ev.multimodalInjectionFiles.length > 0) {
+    findings.push({
+      id: "AI_MULTIMODAL_INJECTION",
+      title: "Multimodal content (image/PDF/audio) fed into messages array — multimodal prompt injection risk",
+      severity: "CRITICAL",
+      evidence: ev.multimodalInjectionFiles,
+      requiredActions: [
+        "Validate and sanitize all multimodal inputs before including them in the messages array — images and PDFs can encode hidden text instructions that override system prompts (MITRE ATLAS AML.T0051, CWE-20).",
+        "Apply file-type verification (magic bytes, not extension) and size limits to all uploaded multimodal assets before forwarding to the LLM.",
+        "Consider a two-stage pipeline: extract text from multimodal content first, sanitize the extracted text, then pass as clearly delimited user content."
+      ]
+    });
+  }
+  if (ev.vectorFilterBypassFiles.length > 0) {
+    findings.push({
+      id: "AI_VECTOR_FILTER_BYPASS",
+      title: "Vector search uses soft/optional filter (should/$or/match_any) — filter bypass and cross-tenant data leak risk",
+      severity: "HIGH",
+      evidence: ev.vectorFilterBypassFiles,
+      requiredActions: [
+        "Replace soft/optional filters (should, $or, match_any) with hard mandatory filters (must, $and, match_all) for tenant and ownership constraints in all vector searches (CWE-285, MITRE ATLAS AML.T0025).",
+        "Test that vector search results never return documents outside the authenticated user's namespace even under adversarial query conditions.",
+        "Apply defense-in-depth: combine vector DB ACLs with application-layer result filtering before injecting retrieved documents into the prompt."
+      ]
+    });
+  }
+  if (ev.streamChunkInjectionFiles.length > 0) {
+    findings.push({
+      id: "AI_STREAM_CHUNK_INJECTION",
+      title: "LLM stream chunks forwarded to client without validation — stream chunk injection risk",
+      severity: "HIGH",
+      evidence: ev.streamChunkInjectionFiles,
+      requiredActions: [
+        "Validate and sanitize each stream chunk before forwarding to the client — malicious chunks can contain XSS payloads, HTML injection, or embedded instructions (CWE-79, MITRE ATLAS AML.T0054).",
+        "Apply an incremental sanitizer (e.g., streaming DOMPurify or a custom strip function) on the server-side stream pipeline.",
+        "Add a maximum chunk-rate limit and total-response-size cap to prevent stream-based resource exhaustion."
+      ]
+    });
+  }
+  if (ev.aiGeneratedCodeNoAuditFiles.length > 0) {
+    findings.push({
+      id: "AI_GENERATED_CODE_NO_AUDIT",
+      title: "AI-generated or LLM-completion output passed to code execution without audit logging",
+      severity: "HIGH",
+      evidence: ev.aiGeneratedCodeNoAuditFiles,
+      requiredActions: [
+        "Log every instance of AI-generated code execution with the full input prompt, generated output, execution context, and actor identity before running (CWE-778, MITRE ATLAS AML.T0054).",
+        "Require a human-in-the-loop approval step or cryptographic signing before any AI-generated code is executed in production.",
+        "Scope execution to a sandboxed environment (WASM, Firecracker, e2b) with strict capability restrictions and no access to production credentials."
+      ]
+    });
+  }
+  if (ev.embeddingInversionFiles.length > 0) {
+    findings.push({
+      id: "AI_EMBEDDING_INVERSION",
+      title: "Raw embedding vectors serialised into API response, logs, or client storage — inversion / data reconstruction risk",
+      severity: "MEDIUM",
+      evidence: ev.embeddingInversionFiles,
+      requiredActions: [
+        "Never expose raw embedding vectors to clients or write them to accessible logs — embeddings can be partially inverted to reconstruct the original text (CWE-200, MITRE ATLAS AML.T0025).",
+        "If embeddings must be stored client-side, apply dimensionality reduction (PCA, quantization) and add calibrated noise before transmission.",
+        "Audit all API responses and log pipelines for accidental embedding leakage; add a data-type filter that strips float arrays from response payloads."
+      ]
+    });
+  }
+}
+
 // ─── Main export ───────────────────────────────────────────────────────────────
 export async function checkAi(_: { changedFiles: string[] }): Promise<Finding[]> {
   const findings: Finding[] = [];
@@ -562,6 +883,7 @@ export async function checkAi(_: { changedFiles: string[] }): Promise<Finding[]>
   buildAccessFindings(ev, findings);
   buildRuntimeFindings(ev, findings);
   buildSupplyChainFindings(ev, findings);
+  buildNewAiThreatFindings(ev, findings);
 
   return findings;
 }
