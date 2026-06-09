@@ -594,6 +594,40 @@ export async function getModelForTask(taskType: TaskType, _opts?: {
 
   const rationale = buildRationale(taskType, requiredTier, chosen, failoverUsed, preferred);
 
+  // Determine whether all providers were circuit-open (best-effort fallback path).
+  const allProviders: Provider[] = ["anthropic", "openai", "google", "cohere", "local"];
+  const allCircuitsOpen = allProviders.every((p) => isCircuitOpen(health.providers[p]));
+
+  // ISO 42001 §9.1 — emit structured audit log for every routing decision.
+  let routingReason: "circuit_open_fallback" | "capability_match" | "cost_optimized";
+  if (allCircuitsOpen) {
+    routingReason = "circuit_open_fallback";
+  } else if (failoverUsed) {
+    routingReason = "capability_match";
+  } else {
+    routingReason = "cost_optimized";
+  }
+  console.log(JSON.stringify({
+    event: "MODEL_ROUTING_DECISION",
+    timestamp: new Date().toISOString(),
+    taskType,
+    selectedModel: chosen.modelId,
+    selectedProvider: chosen.provider,
+    reason: routingReason,
+    circuitState: allCircuitsOpen ? "FALLBACK" : "NORMAL",
+  }));
+
+  // Additional high-severity audit entry for the circuit-breaker fallback path.
+  if (allCircuitsOpen) {
+    console.warn(JSON.stringify({
+      event: "MODEL_ROUTING_CIRCUIT_FALLBACK",
+      timestamp: new Date().toISOString(),
+      reason: "ALL_PROVIDERS_CIRCUIT_OPEN",
+      fallbackModel: chosen.modelId,
+      severity: "HIGH",
+    }));
+  }
+
   return {
     model: chosen.modelId,
     provider: chosen.provider,

@@ -166,6 +166,7 @@ async function loadStore(): Promise<PatternsStore> {
       const hashMatch = storedBuf.length === actualBuf.length && timingSafeEqual(storedBuf, actualBuf);
       if (!hashMatch) {
         console.warn("[security-mcp] Agent memory patterns.json may have been tampered with. Resetting to empty state.");
+        console.log(JSON.stringify({ event: 'LEARNING_INTEGRITY_VIOLATION', severity: 'CRITICAL', timestamp: new Date().toISOString() }));
         return { version: 1, updatedAt: new Date().toISOString(), patterns: {} };
       }
     } catch (hashErr: any) {
@@ -212,6 +213,7 @@ export async function recordOutcome(outcome: Outcome): Promise<{ recorded: boole
   if (validated.falsePositive) {
     const rlCheck = checkFalsePositiveRateLimit(validated.findingId);
     if (!rlCheck.allowed) {
+      console.log(JSON.stringify({ event: 'LEARNING_FP_RATE_LIMITED', findingId: validated.findingId, timestamp: new Date().toISOString() }));
       return {
         recorded: false,
         pattern: {} as PatternRecord,
@@ -301,6 +303,7 @@ export async function recordOutcome(outcome: Outcome): Promise<{ recorded: boole
     ).length;
     if (suppressedCount >= MAX_SUPPRESSED_FINDING_TYPES) {
       console.error(`[security-mcp] SECURITY_ALERT: Global suppression cap reached. ${suppressedCount} finding types already suppressed. Rejecting FP update for ${validated.findingId}. Possible learning-system attack.`);
+      console.log(JSON.stringify({ event: 'LEARNING_SUPPRESSION_DEACTIVATED', findingId: validated.findingId, reason: 'GLOBAL_SUPPRESSION_CAP_EXCEEDED', timestamp: new Date().toISOString() }));
       return {
         recorded: false,
         pattern: updated,
@@ -309,8 +312,15 @@ export async function recordOutcome(outcome: Outcome): Promise<{ recorded: boole
     }
   }
 
+  const wasAlreadySuppressed = existing.falsePositiveRate > 0.8 && existing.sampleSize >= MIN_SAMPLE_SIZE;
   store.patterns[validated.findingId] = updated;
   await saveStore(store);
+
+  // Emit structured audit event when a finding type enters suppressed state for the first time.
+  const isNowSuppressed = updated.falsePositiveRate > 0.8 && updated.sampleSize >= MIN_SAMPLE_SIZE;
+  if (isNowSuppressed && !wasAlreadySuppressed) {
+    console.log(JSON.stringify({ event: 'LEARNING_SUPPRESSION_ACTIVATED', findingId: validated.findingId, falsePositiveRate: updated.falsePositiveRate, sampleSize: updated.sampleSize, timestamp: new Date().toISOString() }));
+  }
 
   // Anomaly detection: flag unusually high false-positive rate for this finding.
   let warning: string | undefined;
