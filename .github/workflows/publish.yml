@@ -5,13 +5,18 @@ on:
     tags:
       - 'v*.*.*'
 
+concurrency:
+  group: npm-publish-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: ubuntu-latest
-    # TODO: add `environment: npm-publish` once the environment is created in
-    # GitHub → Settings → Environments with required-reviewers protection.
-    # Without it, any maintainer who can push a v* tag can trigger npm publish
-    # unilaterally. The environment acts as a second approval gate.
+    # environment: npm-publish gates the NPM_TOKEN release behind a required-reviewer
+    # approval. Create this environment in GitHub → Settings → Environments with at
+    # least one required reviewer before enabling it. Until then this serves as the
+    # intent declaration; the concurrency guard above prevents duplicate publish runs.
+    environment: npm-publish
     permissions:
       contents: read
       id-token: write

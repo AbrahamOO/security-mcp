@@ -17,7 +17,7 @@ Works with **Claude Code, GitHub Copilot, Cursor, Codex, Replit**, and any MCP-c
 
 ## Table of Contents
 
-- [What's New in 1.1.5](#whats-new-in-115)
+- [What's New in v1.3.0](#whats-new-in-v130)
 - [What Problem Does This Solve?](#what-problem-does-this-solve)
 - [Who Is This For?](#who-is-this-for)
 - [Two Modes - Pick Your Depth](#two-modes---pick-your-depth)
@@ -38,53 +38,103 @@ Works with **Claude Code, GitHub Copilot, Cursor, Codex, Replit**, and any MCP-c
 
 ---
 
-## What's New in 1.1.5
+## What's New in v1.3.0
 
-### Malicious Code & Repo Poisoning Detection (NEW)
+v1.3.0 delivers **104 new blindspot detection checks** across 7 threat domains, discovered by running a full 8-agent CISO Orchestrator pass followed by an adversarial pentest verification round. It also closes 5 critical security vulnerabilities in the gate engine itself.
 
-**`checkSupplyChainDeep`** — 16 new patterns that detect attacks a bad actor would embed to poison your repository or compromise developer workstations and CI pipelines:
+### 42 Deep Injection Patterns (was 15)
 
-| Pattern | ATT&CK Technique | What It Catches |
+`checkInjectionDeep` now covers 42 detection patterns:
+
+| Added in v1.3.0 | ATT&CK | What It Catches |
 | --- | --- | --- |
-| **Destructive commands** | T1485 | `rm -rf`, `dd if=/dev/zero`, recursive `fs.rm` — wiper malware |
-| **Keyloggers** | T1056.001 | `addEventListener('keydown')` combined with `fetch`/`sendBeacon` exfiltration |
-| **Credential exfiltration** | T1555 | `localStorage`/`sessionStorage`/`document.cookie` read + HTTP POST to external URL |
-| **Reverse shells** | T1059 | `net.createConnection` + `spawn('/bin/bash')`, `nc -e`, `bash -i` patterns |
-| **Environment variable theft** | T1552.001 | `process.env` sent to external HTTP endpoint — postinstall exfiltration pattern |
-| **Malicious postinstall** | T1195.002 | npm lifecycle scripts executing `curl`, `wget`, `bash -c`, or `eval()` |
-| **Dynamic require()** | T1059.007 | `require(userInput)` or `require(process.env.X)` — arbitrary module loading |
-| **Base64 obfuscated exec** | T1027 | `Buffer.from(..., 'base64')` decoded and passed to `eval`/`exec`/`spawn` |
-| **Cryptomining** | T1496 | CoinHive, XMRig, stratum+tcp, and 10+ mining library signatures |
-| **Sensitive file reads** | T1552 | `/etc/passwd`, `~/.ssh/id_rsa`, `.aws/credentials`, `.npmrc` reads |
-| **Unpinned dependencies** | T1195.002 | `*`, `latest`, `>=0.0.0` version ranges — supply chain compromise vector |
-| **process.exit + wipe** | T1485 + T1070 | Exit combined with deletion — anti-forensics / wiper pattern |
-| **Hidden file writes** | T1564.001 | Writing to non-standard dotfiles for persistence or concealment |
-| **DNS exfiltration** | T1048.003 | DNS lookups with encoded/derived hostnames — bypasses HTTP egress controls |
-| **Clipboard monitoring** | T1115 | `navigator.clipboard.read()` + network send — password manager attacks |
-| **Obfuscated DOM injection** | T1027 | `innerHTML +=` with `atob()`/`unescape()`/`\x`-encoded payloads |
+| **SSTI (Java/PHP)** | T1059 | FreeMarker, Thymeleaf, Velocity, Twig, Smarty template injection |
+| **SpEL / OGNL injection** | T1059 | Spring Expression Language and OGNL via user-controlled string eval |
+| **Pickle / Java deserialization** | T1059.001 | Unsafe `pickle.loads`, `ObjectInputStream`, `readObject` on untrusted data |
+| **Second-order injection** | T1059 | Data stored to DB then later executed — two-pass file-correlation check |
+| **CSS injection** | T1059 | User content reflected inside `<style>` or `style=` without sanitization |
+| **Elasticsearch injection** | T1059 | Dynamic query construction in Elasticsearch DSL with user input |
+| **WebSocket injection** | T1059 | User-controlled data in `ws.send()` without validation |
+| **SSE-CRLF** | T1059 | CRLF in Server-Sent Events `data:` field hijacking the SSE stream |
+| **PDF / document injection** | T1059 | User input in PDF field generation without escaping |
+| **HTTP response splitting** | T1059 | CRLF in HTTP header values |
+| **Bracket-notation prototype pollution** | T1203 | `obj[key] = value` with user-controlled keys |
 
-### Business Logic Security Checks (NEW)
+Plus all original patterns: XXE, SSTI multiline, LDAP, XPath, JNDI/Log4Shell, MongoDB `$where`, prototype pollution, CRLF, unsafe YAML, deserialization, path traversal, log injection, SSRF, command injection, ReDoS, SQL/ORM (Prisma, Sequelize, Knex, TypeORM), Redis `EVAL`, HTTP header injection.
 
-**`checkBusinessLogic`** — 8 patterns that catch IDOR, mass assignment, race conditions, and logic-layer vulnerabilities that injection scanners miss:
+### 43 Deep Auth Patterns (was 16)
 
-- **Mass assignment** — `req.body` spread directly into database models without field allowlist (CWE-915)
-- **IDOR** — direct object lookup from user-supplied IDs without ownership verification (CWE-639 / OWASP API1)
-- **Negative amount bypass** — financial amounts not validated as strictly positive (CWE-20)
-- **Race conditions** — read-then-write on balance/quota/inventory without atomic operations (CWE-362)
-- **Hardcoded credentials** — credential literals that aren't environment variables (CWE-798)
-- **Missing input validation** — POST/PUT handlers writing `req.body` to the database without schema parsing (CWE-20)
-- **Unrestricted export endpoints** — `/export`, `/download`, `/backup` routes without authentication middleware (CWE-284)
-- **Integer overflow** — parsed user integers used in arithmetic without bounds checking (CWE-190)
+`checkAuthDeep` now covers 43 detection patterns:
+
+| Added in v1.3.0 | CWE | What It Catches |
+| --- | --- | --- |
+| **JWT `kid` injection** | CWE-20 | `kid` header used as file path or SQL expression for key material |
+| **JWKS URI override** | CWE-20 | Attacker-controlled `jku` / `x5u` headers pointing to external key stores |
+| **OAuth client secret in repo** | CWE-798 | `client_secret` literals or env defaults checked into source |
+| **Session token in URL** | CWE-598 | Session IDs in query parameters — logged by every proxy |
+| **Low-entropy token** | CWE-330 | Token / secret generated with `Math.random()` or timestamp-seeded RNG |
+| **Remember-me no rotation** | CWE-613 | Persistent login tokens never rotated on use |
+| **Password reset single-use** | CWE-640 | Reset tokens reusable after initial redemption |
+| **Account enumeration** | CWE-204 | Different error messages for valid vs. invalid usernames |
+| **Bcrypt cost factor** | CWE-916 | `bcrypt.hash(pw, N)` where N < 12 |
+
+Plus all original patterns: JWT alg:none/HS-RS confusion, session fixation, OAuth state/redirect_uri/PKCE, hardcoded JWT secret, rate limit on auth, plaintext password compare, SAML signature bypass, insecure cookie flags, refresh token rotation, API key in URL, reset token expiry, admin route without authz, timing oracle.
+
+### 31 Business Logic Patterns (was 8)
+
+`checkBusinessLogic` now catches 31 patterns including 13 new e-commerce and payment abuse vectors:
+
+- **Currency confusion** — mixed-currency arithmetic without normalization
+- **Discount stacking** — coupon codes combined with promotions without stack limits
+- **Order fulfillment bypass** — status transitions that skip required payment/verification steps
+- **Webhook timestamp** — missing replay-window check on webhook signature verification
+- **Tax / shipping parameter tamper** — client-supplied tax and shipping totals accepted server-side
+- **Client-side total** — final order amount derived from a browser-supplied value
+- **Referral abuse** — self-referral detection absent from referral credit logic
+- **Email normalization** — `user+tag@domain.com` not normalized when enforcing unique accounts
+- **Feature flag bypass** — feature flags controllable via client-supplied headers or query params
+- **API version bypass** — security controls on v2 routes not enforced on legacy v1 endpoints
+- **Double-spend payment** — concurrent payment requests without idempotency key enforcement
+- **Free trial abuse** — trial period enforced only by client-supplied start date
+- **Pagination abuse** — unlimited page size parameter enabling full-table data dump
+
+### 32 Supply Chain Deep Patterns (was 16)
+
+`checkSupplyChainDeep` now covers 32 patterns. New additions detect obfuscated payloads, malicious package scripts, and exfiltration channels that bypass standard SAST tools — including keyloggers, reverse shells, cryptomining signatures, DNS exfiltration, clipboard monitoring, and more.
+
+### Critical Security Fixes
+
+| ID | Severity | Fix |
+| --- | --- | --- |
+| **VULN-001** | CRITICAL | Dead multiline regex in `checkSecondOrderInjection` silently nulled the entire injection-deep module — replaced with two-pass file-correlation |
+| **VULN-002** | HIGH | Symlink traversal in `policy.ts` glob calls — `followSymbolicLinks: false` enforced |
+| **VULN-003** | HIGH | Evidence previews leaked secret values — `redactSecrets()` added to `search.ts` |
+| **AUTH-OBO-01** | HIGH | Lockout off-by-one in `auth.ts` allowed 4 attempts instead of 3 |
+| **META-01/03/04** | MEDIUM | Prompt injection vectors in MCP server — `_notice` framing and `sanitizePromptParam()` added |
+
+### Also in v1.2.1
+
+- OWASP Top 10 now **10/10 covered** — A09 (Security Logging and Monitoring Failures) fully completed
+- NIST AU-11 / PCI Req 10 log retention detection added to `checkAuthDeep`
+- ISO 42001 §9.1 routing decision audit log added to model router
+- `runScanners` (gitleaks / semgrep / trivy / checkov / osv-scanner) wired into the gate — was implemented but never called since v1.0; now active check 27
+
+### Also in v1.2.0
+
+- **Secrets** — dotfiles glob, base64/hex decode pre-pass, 10 new token formats (Vercel, PlanetScale, Databricks, Linear, Railway, npmrc, HuggingFace, ARM, Twilio), gitleaks history scan, split-string heuristic
+- **Injection** — SQL/ORM detection (Prisma `$queryRaw`, Sequelize, Knex, TypeORM), JNDI/Log4Shell, LDAP, XPath, Redis `EVAL`, ReDoS static catastrophic-backtracking patterns
+- **Cryptography** — AES-CBC-without-HMAC (+ split-string evasion fix), GCM nonce reuse and timestamp IV, RSA PKCS#1v1.5, SHA-256-as-password-hash, hardcoded PBKDF2 salt, `rejectUnauthorized: false`, weak TLS min version
+- **Checklists** — all 6 surface checklists updated with `automated: true` entries for every new check ID
 
 ### MCP Caller Authentication
 
-Protect the MCP server channel against rogue processes that obtain stdio access without being the intended AI agent:
+Protect the MCP server channel against rogue processes that obtain stdio access:
 
 ```bash
 export SECURITY_MCP_SHARED_SECRET="$(openssl rand -hex 32)"
 ```
 
-When set, every tool call is blocked until the AI agent calls `security.authenticate` with the matching token. Uses constant-time HMAC comparison (CWE-208 protection), 3-strike lockout, and minimum 16-byte secret enforcement. Backwards-compatible: when the variable is absent, all tools are immediately available.
+When set, every tool call is blocked until the AI agent calls `security.authenticate` with the matching token. Uses constant-time HMAC comparison (CWE-208), 3-strike lockout, and minimum 16-byte secret enforcement. Backwards-compatible — when unset, all tools are immediately available.
 
 ### Policy HMAC Integrity Signing
 
@@ -95,55 +145,7 @@ export SECURITY_POLICY_HMAC_KEY="$(openssl rand -hex 32)"
 npx security-mcp sign-policy
 ```
 
-When `SECURITY_POLICY_HMAC_KEY` is set, the gate rejects any policy file whose HMAC sidecar (`.hmac`) does not match — making it impossible to quietly change `severity_block: ["HIGH","CRITICAL"]` to `[]` without detection.
-
-### 25 New Checklist Items Across All Surfaces
-
-Release checklists now cover 25 additional threat vectors:
-
-- **Web** — DOM clobbering, web cache poisoning, WebSocket authentication, postMessage origin validation, dangling markup injection
-- **API** — GraphQL introspection disabled, replay protection, command injection prevention, file upload validation, constant-time equality
-- **Infra** — IMDSv2 enforcement (blocks SSRF to cloud metadata), egress filtering, Kubernetes pod security standards, secret rotation policy, runtime threat detection
-- **AI** — per-user context session isolation, multi-turn adversarial probing, tool sandboxing, model supply chain verification, output length limits
-- **Mobile** — tapjacking prevention, memory zeroing for sensitive data, anti-debugging controls
-- **Payments** — Magecart/digital skimming prevention (SRI + DOM mutation monitoring), EMV 3DS 2.2+ enforcement
-
-### Expanded Deep Injection Patterns (15 → 4 more)
-
-`checkInjectionDeep` now covers 15 patterns including 4 new additions:
-
-- **Command injection** (CWE-78) — `child_process.exec/spawn` with user-controlled input or `shell:true`
-- **ReDoS** (CWE-1333) — `new RegExp(userInput)` causing catastrophic backtracking in the event loop
-- **JSONP callback injection** (CWE-79) — unvalidated callback parameter rendered in response
-- **Eval with encoded payload** (CWE-95) — `eval(atob(...))` / `eval(Buffer.from(...,'base64'))` obfuscated execution
-
-### Expanded Deep Auth Patterns (12 → 4 more)
-
-`checkAuthDeep` now covers 16 patterns including 4 new additions:
-
-- **API key in URL** (CWE-598) — tokens transmitted in query parameters, logged in plaintext by every proxy
-- **Password reset without expiry** (CWE-640) — reset tokens valid indefinitely after database breach
-- **Admin routes without authorization** (CWE-862) — `/admin`, `/internal`, `/debug` paths missing role middleware
-- **Timing oracle on security codes** (CWE-208) — OTP/PIN/token compared with `===` instead of `timingSafeEqual`
-
-### Coverage Completeness Protocol (§0)
-
-Every security review runs a mandatory 5-step protocol before reporting results:
-
-1. **Complete file inventory** — all source files enumerated; no attack class is CLEAN without checking every file
-2. **Taint tracking** — every user-controlled input traced to all downstream sinks (SAFE / UNSAFE / UNRESOLVED)
-3. **Negative assertions** — per attack class: `ATTACK CLASS: {name} | FILES: N/N | PATTERNS: {list} | RESULT: CLEAN`
-4. **Fix verification loop** — after every fix, re-run the check and confirm it no longer fires before advancing
-5. **All-or-nothing mandate** — every HIGH/CRITICAL is either FIXED (verified clean) or BLOCKED with a written remediation plan
-
----
-
-## What's New in 1.1.4
-
-- `checkInjectionDeep` — 11 patterns: XXE, SSTI, prototype pollution, open redirect, NoSQL injection, CRLF, unsafe YAML load, unsafe deserialization, path traversal, log injection, SSRF
-- `checkAuthDeep` — 12 patterns: JWT alg:none, session fixation, OAuth missing state, OAuth redirect_uri open redirect, PKCE not enforced, hardcoded JWT secret, missing rate limit on auth, plaintext password compare, SAML signature disabled, insecure cookie flags, refresh token not rotated, JWT HS/RS confusion
-- Windsurf editor support added to the installer
-- `doctor` command for installation health checks
+When set, the gate rejects any policy file whose HMAC sidecar (`.hmac`) does not match — making it impossible to quietly change `severity_block: ["HIGH","CRITICAL"]` to `[]` without detection.
 
 ---
 
@@ -445,10 +447,10 @@ The gate runs **24 check modules in parallel** against your diff:
 | **AI red-team** | Static + optional dynamic probes against AI endpoints |
 | **Exceptions** | Validates any active security exceptions are non-expired and properly approved |
 | **Baseline regression** | Detects when previously-satisfied controls go missing (BASELINE_REGRESSION HIGH finding injected on regression) |
-| **Deep injection** | 15 patterns — XXE, SSTI, prototype pollution, open redirect, NoSQL injection, CRLF, unsafe YAML load, deserialization, path traversal, log injection, SSRF, command injection, ReDoS, JSONP injection, eval+base64 |
-| **Deep auth** | 16 patterns — JWT alg confusion, session fixation, OAuth missing state, redirect_uri open redirect, PKCE not enforced, hardcoded JWT secret, missing rate limit, plaintext password compare, SAML signature disabled, insecure cookie flags, refresh token not rotated, JWT HS/RS confusion, API key in URL, reset token no expiry, admin route without authz, timing oracle |
-| **Supply chain deep** | 16 patterns — keyloggers, reverse shells, destructive commands (rm -rf, wipers), process.exit+wipe, credential exfiltration, env variable theft, malicious postinstall scripts, dynamic require(), base64-obfuscated exec, cryptomining, sensitive file reads, unpinned dependencies, hidden file writes, DNS exfiltration, clipboard monitoring, obfuscated DOM injection |
-| **Business logic** | 8 patterns — IDOR without ownership check, mass assignment, negative amount bypass, race conditions on balance/quota, hardcoded credentials, missing input validation, unrestricted export endpoints, integer overflow |
+| **Deep injection** | 42 patterns — XXE, SSTI (Java/PHP), SpEL/OGNL, prototype pollution, second-order injection, NoSQL/MongoDB/Redis/LDAP/XPath injection, JNDI/Log4Shell, CRLF, WebSocket injection, CSS injection, SSE-CRLF, PDF injection, HTTP response splitting, unsafe YAML, deserialization (pickle/Java), path traversal, log injection, SSRF, command injection, ReDoS, SQL/ORM (Prisma/Sequelize/Knex/TypeORM), and more |
+| **Deep auth** | 43 patterns — JWT alg confusion/kid injection/JWKS override, session fixation, OAuth state/redirect_uri/PKCE/client secret, hardcoded JWT secret, rate limit, plaintext compare, SAML signature, cookie flags, token rotation, HS/RS confusion, API key in URL, reset expiry/single-use, admin route without authz, timing oracle, account enumeration, session token in URL, low-entropy token, bcrypt cost factor, and more |
+| **Supply chain deep** | 32 patterns — keyloggers, reverse shells, destructive commands, credential exfiltration, env variable theft, malicious postinstall scripts, dynamic require(), base64-obfuscated exec, cryptomining, sensitive file reads, unpinned dependencies, hidden file writes, DNS exfiltration, clipboard monitoring, obfuscated DOM injection, and more |
+| **Business logic** | 31 patterns — IDOR without ownership check, mass assignment, race conditions, integer overflow, currency confusion, discount stacking, order fulfillment bypass, webhook replay, tax/shipping tamper, client-side total, referral abuse, email normalization, feature flag bypass, API version bypass, double-spend, free trial abuse, pagination abuse, and more |
 
 ### Customize the Gate Policy
 
@@ -615,13 +617,15 @@ app.use(helmet({
 ┌──────────────────────────────────────────────────────────────┐
 │               Policy Gate Engine  (src/gate/policy.ts)       │
 │                                                              │
-│  20 checks run in parallel:                                  │
+│  28 checks run in parallel:                                  │
 │  checkSecrets    checkDependencies   checkApi    checkInfra  │
 │  checkCrypto     checkMobileIos      checkMobileAndroid      │
 │  checkAi         checkGraphQL        checkKubernetes         │
 │  checkDatabase   checkDlp            checkWebNextjs          │
 │  runSbomChecks   runAiRedteamChecks  runRuntimeChecks        │
-│  checkInjectionDeep (11 patterns)  checkAuthDeep (12 patterns)│
+│  runCiPipelineChecks  runDockerChecks  runScanners           │
+│  checkInjectionDeep (42 patterns)  checkAuthDeep (43 patterns)│
+│  checkSupplyChainDeep (32)  checkBusinessLogic (31)         │
 │                                                              │
 │  Surface detection -> Control catalog -> Exception handling ->  │
 │  Coverage manifest -> Taint map -> Confidence scoring -> PASS / FAIL │
@@ -658,7 +662,7 @@ User: /senior-security-engineer
   security.run_pr_gate(runId, mode, targets)
     ├── git diff / glob targets -> changed files list
     ├── detectSurfaces()  ->  web? api? infra? mobile? ai?
-    ├── 20 checks in parallel (incl. deep injection + deep auth)
+    ├── 28 checks in parallel (incl. deep injection + deep auth)
     ├── apply exceptions from .mcp/exceptions/
     ├── compute confidence score
     └── returns PASS/FAIL + findings[]

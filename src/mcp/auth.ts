@@ -72,12 +72,19 @@ export function isAuthenticated(): boolean {
 }
 
 /**
- * Explicitly log out the current session. Resets authentication state and
- * timestamp so the next tool call will require re-authentication.
+ * Explicitly log out the current session. Resets authentication state,
+ * timestamp, and attempt counter so the next tool call may re-authenticate
+ * without being immediately locked out by a prior failed-attempt count.
+ *
+ * Resetting _attempts on logout is safe: the lockout is per-session (process
+ * lifetime). An attacker who already authenticated and then logged out has
+ * already passed the auth gate; preventing a legitimate re-auth after logout
+ * constitutes a self-inflicted denial of service (CWE-613-adjacent).
  */
 export function logout(): void {
   _authenticated = false;
   _authenticatedAt = null;
+  _attempts = 0;
 }
 
 /**
@@ -150,14 +157,6 @@ export function attemptAuth(token: string): {
   const provided = createHmac("sha256", token).update(HMAC_DOMAIN, "utf-8").digest();
 
   if (!timingSafeEqual(expected, provided)) {
-    if (remaining <= 0) {
-      // Schedule exit after a short delay so the error response can be sent.
-      setTimeout(() => process.exit(1), 200);
-      return {
-        success: false,
-        reason: "Authentication failed."
-      };
-    }
     return {
       success: false,
       // Do not expose attempt count to avoid targeted last-attempt attacks (AUTH-004 / CWE-204).

@@ -137,6 +137,23 @@
       "approver": "ciso-review-board",
       "approval_role": "SecurityLead",
       "expires_on": "2027-06-07"
+    },
+    {
+      "id": "self-scan-skills-doc-and-agent-output",
+      "finding_ids": [
+        "INFRA_IMDSV1_ACCESSIBLE",
+        "INFRA_LAMBDA_URL_NO_AUTH",
+        "INFRA_CLOUDTRAIL_NOT_MULTIREGION",
+        "INFRA_AZURE_PUBLIC_NETWORK_ACCESS",
+        "INFRA_GUARDDUTY_MISSING",
+        "CRYPTO_NO_FORWARD_SECRECY"
+      ],
+      "justification": "False positives from two sources: (1) SKILL.md files in skills/ that contain intentional vulnerability examples for educational/detection-testing purposes (e.g., skills/aws-penetration-tester/SKILL.md contains `http_tokens = optional`, `authorization_type = NONE`, `is_multi_region_trail = false` as attack patterns for pentesters to recognize — not infrastructure config). (2) .mcp/agent-runs/ JSON output files that contain finding IDs and evidence strings from previous CISO Orchestrator runs — scanning stored findings data inevitably matches patterns those findings describe. CRYPTO_NO_FORWARD_SECRECY was matched in a stored crypto-findings.json agent output, not in application TLS configuration. security-mcp has no cloud infrastructure, no Lambda functions, no CloudTrail, and no Azure resources.",
+      "ticket": "internal/skills-doc-agent-output-false-positives",
+      "owner": "security-mcp-team",
+      "approver": "ciso-review-board",
+      "approval_role": "SecurityLead",
+      "expires_on": "2027-01-01"
     }
   ]
 }

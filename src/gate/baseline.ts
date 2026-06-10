@@ -5,7 +5,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { join } from "node:path";
 import { GateResult, Finding } from "./result.js";
 
@@ -119,7 +119,7 @@ export async function saveBaseline(
   const safehash = commitHash.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64);
   const targetPath = join(BASELINE_DIR, `${safehash}.json`);
   const latestPath = join(BASELINE_DIR, "latest.json");
-  const tmpPath = `${targetPath}.tmp`;
+  const tmpPath = `${targetPath}.${randomBytes(8).toString("hex")}.tmp`;
 
   try {
     await writeFile(tmpPath, envelope, "utf-8");
@@ -130,7 +130,7 @@ export async function saveBaseline(
   }
 
   // Update latest (best-effort atomic)
-  const latestTmp = `${latestPath}.tmp`;
+  const latestTmp = `${latestPath}.${randomBytes(8).toString("hex")}.tmp`;
   try {
     await writeFile(latestTmp, envelope, "utf-8");
     await rename(latestTmp, latestPath);

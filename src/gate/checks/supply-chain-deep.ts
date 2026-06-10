@@ -659,7 +659,7 @@ async function checkGithubActionsPinning(): Promise<Finding | null> {
 async function checkDockerUnpinnedDigest(): Promise<Finding | null> {
   const dockerfiles = await fg(
     ["**/Dockerfile", "**/Dockerfile.*", "**/*.dockerfile"],
-    { ignore: ["**/node_modules/**", "**/dist/**", "**/.git/**"], dot: true }
+    { ignore: ["**/node_modules/**", "**/dist/**", "**/.git/**"], dot: true, followSymbolicLinks: false }
   );
   if (!dockerfiles.length) return null;
 
@@ -796,7 +796,7 @@ function collectConfusionHitsFromPkg(
 async function checkUnscopedDepConfusion(): Promise<Finding | null> {
   const packageFiles = await fg(
     ["**/package.json"],
-    { ignore: ["**/node_modules/**", "**/dist/**", "**/.git/**"], dot: true }
+    { ignore: ["**/node_modules/**", "**/dist/**", "**/.git/**"], dot: true, followSymbolicLinks: false }
   );
   if (!packageFiles.length) return null;
 

