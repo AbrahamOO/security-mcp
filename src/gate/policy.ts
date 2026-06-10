@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { createHmac, timingSafeEqual, randomUUID } from "node:crypto";
 import fg from "fast-glob";
-import { GateResult, Finding, FindingSeverity, ControlCoverage } from "./result.js";
+import { GateResult, Finding, FindingSeverity, ControlCoverage, sanitizeErrorMessage } from "./result.js";
 import { getChangedFiles } from "./diff.js";
 import { detectSurfaces } from "./findings.js";
 import { checkRequiredArtifacts } from "./checks/required-artifacts.js";
@@ -164,6 +164,19 @@ export async function loadPolicy(policyPath: string): Promise<Policy> {
 
   // POC-8: verify HMAC when a key is configured
   const hmacKey = getPolicyHmacKey();
+  // TM-001: warn when HMAC protection is absent so operators know the policy file
+  // can be silently tampered (e.g. severity_block cleared) without detection.
+  // Non-blocking — allows operation without the key — but makes the risk visible.
+  // Only warn in non-gate contexts — in gate mode stdout is JSON and mixing
+  // stderr into the output file (via 2>&1 hooks) would corrupt JSON parsing.
+  if (!hmacKey && !process.env["SECURITY_GATE_POLICY"]) {
+    console.warn(
+      "[loadPolicy] WARNING: SECURITY_POLICY_HMAC_KEY is not set. " +
+      "Policy file integrity is NOT verified — a local attacker could silently edit " +
+      `"${policyPath}" (e.g. clear severity_block) without detection. ` +
+      "Set SECURITY_POLICY_HMAC_KEY (≥32 bytes) and run `security-mcp sign-policy` to enable tamper protection."
+    );
+  }
   if (hmacKey) {
     let storedSig: string | null = null;
     try {
@@ -322,7 +335,11 @@ async function runAllChecks(opts: {
       findings.push(...r.value);
     } else {
       const checkName = CHECK_NAMES[i] ?? `check-${i}`;
-      const errorMessage = r.reason instanceof Error ? r.reason.message : String(r.reason);
+      // CWE-200: sanitize error message before embedding in gate findings —
+      // raw Error.message can contain absolute filesystem paths that reveal
+      // internal directory structure to callers of the gate result.
+      const rawErrorMessage = r.reason instanceof Error ? r.reason.message : String(r.reason);
+      const errorMessage = sanitizeErrorMessage(rawErrorMessage);
       findings.push({
         id: "GATE_CHECK_CRASHED",
         title: "Security check module crashed — coverage gap",

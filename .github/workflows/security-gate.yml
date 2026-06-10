@@ -64,10 +64,13 @@ jobs:
         with:
           config: "p/owasp-top-ten"
 
-      # 4) IaC scan — only runs (and gates) when IaC files are present in the repo.
-      #    continue-on-error removed: when IaC files exist, Checkov failures now block merges.
+      # 4) IaC scan — only runs (and gates) when real IaC files are present.
+      #    '**/*.yaml' was intentionally dropped from the condition: it matched
+      #    .checkov.yaml and workflow files, making the guard always-true. The
+      #    fixture Terraform under fixtures/ is excluded via .checkov.yaml skip-path,
+      #    so this condition correctly fires only when real IaC is added to the repo.
       - name: Checkov
-        if: hashFiles('**/*.tf', '**/*.yaml', 'k8s/**') != ''
+        if: hashFiles('**/*.tf', 'k8s/**') != ''
         uses: bridgecrewio/checkov-action@4048c972aae68d0b983a48bb3479aab2d877b898  # bridgecrewio/checkov-action@v12
         with:
           directory: .
