@@ -1018,7 +1018,7 @@
       "detect": {
         "target": "terraform",
         "resourceType": "azurerm_cosmosdb_account",
-        "require": "local_authentication_disabled\\s*=\\s*true"
+        "forbid": "local_authentication_enabled\\s*=\\s*true"
       },
       "remediate": {
         "strategy": "set-attr",
@@ -1521,6 +1521,158 @@
       },
       "requiredActions": [
         "Set remote_debugging_enabled = false in site_config on the azurerm_linux_web_app."
+      ]
+    },
+    {
+      "ruleId": "AZURE_STORAGE_NETWORK_DEFAULT_DENY",
+      "threat": "A storage account whose network rules default to Allow is reachable from any network; only a default-Deny posture with explicit allowances actually restricts the blob/file endpoints.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 3.7",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Storage account network rules must default to Deny",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_storage_account",
+        "require": "default_action\\s*=\\s*\"Deny\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add network_rules { default_action = \"Deny\", ... } (with explicit ip_rules / virtual_network_subnet_ids) to the azurerm_storage_account. Choosing the allowlist requires review."
+      },
+      "requiredActions": [
+        "Set network_rules.default_action = \"Deny\" on the azurerm_storage_account and add explicit allowances."
+      ]
+    },
+    {
+      "ruleId": "AZURE_VM_ENCRYPTION_AT_HOST",
+      "threat": "Without encryption-at-host, the temp disk and VM cache are written to the Azure host unencrypted, exposing data to a host-level compromise.",
+      "frameworks": [
+        "Microsoft Cloud Security Benchmark DP-4"
+      ],
+      "severity": "MEDIUM",
+      "title": "Linux VM should enable encryption at host",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_linux_virtual_machine",
+        "require": "encryption_at_host_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "encryption_at_host_enabled": "true"
+        }
+      },
+      "requiredActions": [
+        "Set encryption_at_host_enabled = true on the azurerm_linux_virtual_machine (the feature must be registered on the subscription)."
+      ]
+    },
+    {
+      "ruleId": "AZURE_AKS_DISK_ENCRYPTION_SET",
+      "threat": "An AKS cluster without a disk encryption set encrypts OS/data disks with platform-managed keys only, leaving no customer-controlled key revocation.",
+      "frameworks": [
+        "Microsoft Cloud Security Benchmark DP-5"
+      ],
+      "severity": "MEDIUM",
+      "title": "AKS cluster should use a customer-managed disk encryption set",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_kubernetes_cluster",
+        "require": "disk_encryption_set_id"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set disk_encryption_set_id to an azurerm_disk_encryption_set (backed by a Key Vault key) on the azurerm_kubernetes_cluster."
+      },
+      "requiredActions": [
+        "Set disk_encryption_set_id (a customer-managed key) on the azurerm_kubernetes_cluster."
+      ]
+    },
+    {
+      "ruleId": "AZURE_AKS_HOST_ENCRYPTION",
+      "threat": "An AKS node pool without host encryption writes the node's temp disk and cache to the Azure host unencrypted, exposing workload data to a host-level compromise.",
+      "frameworks": [
+        "Microsoft Cloud Security Benchmark DP-4"
+      ],
+      "severity": "MEDIUM",
+      "title": "AKS node pool should enable host encryption",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_kubernetes_cluster",
+        "require": "(enable_host_encryption|host_encryption_enabled)\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set default_node_pool { enable_host_encryption = true } on the azurerm_kubernetes_cluster (the EncryptionAtHost feature must be registered)."
+      },
+      "requiredActions": [
+        "Set enable_host_encryption = true on the azurerm_kubernetes_cluster node pools."
+      ]
+    },
+    {
+      "ruleId": "AZURE_KV_KEY_EXPIRY",
+      "threat": "A Key Vault key with no expiration date never rotates, so a key that is silently exfiltrated stays valid indefinitely.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.1"
+      ],
+      "severity": "LOW",
+      "title": "Key Vault key must set an expiration date",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_key_vault_key",
+        "require": "expiration_date"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set expiration_date (RFC3339) on the azurerm_key_vault_key and establish a rotation policy."
+      },
+      "requiredActions": [
+        "Set expiration_date on the azurerm_key_vault_key."
+      ]
+    },
+    {
+      "ruleId": "AZURE_STORAGE_SAS_EXPIRY",
+      "threat": "Without a SAS expiration policy, account SAS tokens can be minted with unbounded lifetimes; one leaked token is standing access to the storage account.",
+      "frameworks": [
+        "Microsoft Cloud Security Benchmark IM-8"
+      ],
+      "severity": "LOW",
+      "title": "Storage account should set a SAS expiration policy",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_storage_account",
+        "require": "sas_policy"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add sas_policy { expiration_period = \"01.00:00:00\" } to the azurerm_storage_account to bound SAS token lifetimes."
+      },
+      "requiredActions": [
+        "Add a sas_policy with a bounded expiration_period to the azurerm_storage_account."
+      ]
+    },
+    {
+      "ruleId": "AZURE_SERVICEBUS_LOCAL_AUTH_DISABLED",
+      "threat": "A Service Bus namespace with local (SAS key) auth enabled lets a leaked shared access key bypass Entra ID/RBAC entirely.",
+      "frameworks": [
+        "Microsoft Cloud Security Benchmark IM-1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Service Bus namespace should disable local authentication",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_servicebus_namespace",
+        "require": "local_auth_enabled\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "local_auth_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set local_auth_enabled = false on the azurerm_servicebus_namespace (confirm clients use Entra ID)."
       ]
     },
     {
@@ -2468,6 +2620,4581 @@
       },
       "requiredActions": [
         "Add a networkRuleSet (or set publicNetworkAccess: 'disabled')."
+      ]
+    },
+    {
+      "ruleId": "BICEP_PG_FLEX_NO_PUBLIC",
+      "threat": "A Bicep PostgreSQL flexible server with public network access is reachable from the internet.",
+      "frameworks": ["CIS Azure Foundations Benchmark 4.3", "Microsoft Cloud Security Benchmark NS-2"],
+      "severity": "HIGH",
+      "title": "Bicep PostgreSQL flexible server must disable public network access",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.DBforPostgreSQL/flexibleServers",
+        "require": "publicNetworkAccess\\s*:\\s*'Disabled'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.network.publicNetworkAccess: 'Disabled' on the flexible server and use private access (VNet integration)."
+      },
+      "requiredActions": [
+        "Set publicNetworkAccess: 'Disabled' on the Microsoft.DBforPostgreSQL/flexibleServers resource."
+      ]
+    },
+    {
+      "ruleId": "BICEP_MYSQL_FLEX_NO_PUBLIC",
+      "threat": "A Bicep MySQL flexible server with public network access is reachable from the internet.",
+      "frameworks": ["Microsoft Cloud Security Benchmark NS-2"],
+      "severity": "HIGH",
+      "title": "Bicep MySQL flexible server must disable public network access",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.DBforMySQL/flexibleServers",
+        "require": "publicNetworkAccess\\s*:\\s*'Disabled'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.network.publicNetworkAccess: 'Disabled' on the flexible server and use private access (VNet integration)."
+      },
+      "requiredActions": [
+        "Set publicNetworkAccess: 'Disabled' on the Microsoft.DBforMySQL/flexibleServers resource."
+      ]
+    },
+    {
+      "ruleId": "BICEP_AKS_DISK_ENCRYPTION",
+      "threat": "A Bicep AKS cluster without a disk encryption set uses platform-managed keys only, leaving no customer-controlled key revocation for node disks.",
+      "frameworks": ["Microsoft Cloud Security Benchmark DP-5"],
+      "severity": "MEDIUM",
+      "title": "Bicep AKS cluster should use a disk encryption set",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.ContainerService/managedClusters",
+        "require": "diskEncryptionSetID"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.diskEncryptionSetID to a customer-managed disk encryption set on the managed cluster."
+      },
+      "requiredActions": [
+        "Set properties.diskEncryptionSetID on the Microsoft.ContainerService/managedClusters resource."
+      ]
+    },
+    {
+      "ruleId": "BICEP_VM_ENCRYPTION_AT_HOST",
+      "threat": "A Bicep VM without encryption-at-host writes its temp disk and cache to the Azure host unencrypted, exposing data to a host-level compromise.",
+      "frameworks": ["Microsoft Cloud Security Benchmark DP-4"],
+      "severity": "MEDIUM",
+      "title": "Bicep VM should enable encryption at host",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Compute/virtualMachines",
+        "require": "encryptionAtHost\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.securityProfile.encryptionAtHost: true (the feature must be registered on the subscription)."
+      },
+      "requiredActions": [
+        "Set properties.securityProfile.encryptionAtHost: true on the Microsoft.Compute/virtualMachines resource."
+      ]
+    },
+    {
+      "ruleId": "BICEP_STORAGE_NETWORK_DENY",
+      "threat": "A Bicep storage account whose network ACLs default to Allow is reachable from any network, regardless of private endpoints.",
+      "frameworks": ["CIS Azure Foundations Benchmark 3.7"],
+      "severity": "MEDIUM",
+      "title": "Bicep storage account network ACLs must default to Deny",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Storage/storageAccounts",
+        "require": "defaultAction\\s*:\\s*'Deny'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.networkAcls.defaultAction: 'Deny' and add explicit ipRules / virtualNetworkRules."
+      },
+      "requiredActions": [
+        "Set properties.networkAcls.defaultAction: 'Deny' on the storage account."
+      ]
+    },
+    {
+      "ruleId": "BICEP_KEYVAULT_RBAC",
+      "threat": "A Bicep Key Vault using legacy access policies instead of RBAC spreads authorization across per-vault policy lists that are easy to over-grant and hard to audit centrally.",
+      "frameworks": ["CIS Azure Foundations Benchmark 8.x"],
+      "severity": "LOW",
+      "title": "Bicep Key Vault should use RBAC authorization",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.KeyVault/vaults",
+        "require": "enableRbacAuthorization\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.enableRbacAuthorization: true on the Key Vault and assign RBAC roles instead of access policies."
+      },
+      "requiredActions": [
+        "Set properties.enableRbacAuthorization: true on the Microsoft.KeyVault/vaults resource."
+      ]
+    },
+    {
+      "ruleId": "BICEP_AKS_HOST_ENCRYPTION",
+      "threat": "A Bicep AKS node pool without host encryption writes node temp disk and cache to the Azure host unencrypted.",
+      "frameworks": ["Microsoft Cloud Security Benchmark DP-4"],
+      "severity": "MEDIUM",
+      "title": "Bicep AKS node pool should enable host encryption",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.ContainerService/managedClusters",
+        "require": "enableEncryptionAtHost\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set enableEncryptionAtHost: true on the agentPoolProfiles (the EncryptionAtHost feature must be registered)."
+      },
+      "requiredActions": [
+        "Set enableEncryptionAtHost: true on the managed cluster agent pools."
+      ]
+    },
+    {
+      "ruleId": "BICEP_SERVICEBUS_LOCAL_AUTH",
+      "threat": "A Bicep Service Bus namespace with local auth enabled lets a leaked SAS key bypass Entra ID/RBAC.",
+      "frameworks": ["Microsoft Cloud Security Benchmark IM-1"],
+      "severity": "MEDIUM",
+      "title": "Bicep Service Bus namespace should disable local auth",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.ServiceBus/namespaces",
+        "require": "disableLocalAuth\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.disableLocalAuth: true on the namespace (confirm clients use Entra ID)."
+      },
+      "requiredActions": [
+        "Set properties.disableLocalAuth: true on the Microsoft.ServiceBus/namespaces resource."
+      ]
+    },
+    {
+      "ruleId": "BICEP_EVENTHUB_LOCAL_AUTH",
+      "threat": "A Bicep Event Hub namespace with local auth enabled lets a leaked SAS key bypass Entra ID/RBAC.",
+      "frameworks": ["Microsoft Cloud Security Benchmark IM-1"],
+      "severity": "MEDIUM",
+      "title": "Bicep Event Hub namespace should disable local auth",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.EventHub/namespaces",
+        "require": "disableLocalAuth\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.disableLocalAuth: true on the namespace (confirm clients use Entra ID)."
+      },
+      "requiredActions": [
+        "Set properties.disableLocalAuth: true on the Microsoft.EventHub/namespaces resource."
+      ]
+    },
+    {
+      "ruleId": "BICEP_STORAGE_SAS_EXPIRY",
+      "threat": "A Bicep storage account without a SAS expiration policy can mint unbounded-lifetime SAS tokens; one leaked token is standing access.",
+      "frameworks": ["Microsoft Cloud Security Benchmark IM-8"],
+      "severity": "LOW",
+      "title": "Bicep storage account should set a SAS expiration policy",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Storage/storageAccounts",
+        "require": "sasExpirationPeriod"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.sasPolicy.sasExpirationPeriod (e.g. '1.00:00:00') on the storage account."
+      },
+      "requiredActions": [
+        "Set properties.sasPolicy.sasExpirationPeriod on the storage account."
+      ]
+    },
+    {
+      "ruleId": "BICEP_APP_CONFIG_LOCAL_AUTH",
+      "threat": "A Bicep App Configuration store with local auth enabled lets a leaked access key bypass Entra ID/RBAC.",
+      "frameworks": ["Microsoft Cloud Security Benchmark IM-1"],
+      "severity": "MEDIUM",
+      "title": "Bicep App Configuration should disable local auth",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.AppConfiguration/configurationStores",
+        "require": "disableLocalAuth\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.disableLocalAuth: true on the configuration store (confirm clients use Entra ID)."
+      },
+      "requiredActions": [
+        "Set properties.disableLocalAuth: true on the Microsoft.AppConfiguration/configurationStores resource."
+      ]
+    },
+    {
+      "ruleId": "BICEP_KEYVAULT_NETWORK_DENY",
+      "threat": "A Bicep Key Vault whose network ACLs default to Allow is reachable from any network, one leaked token from secret exfiltration.",
+      "frameworks": ["CIS Azure Foundations Benchmark 8.x"],
+      "severity": "MEDIUM",
+      "title": "Bicep Key Vault network ACLs must default to Deny",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.KeyVault/vaults",
+        "require": "defaultAction\\s*:\\s*'Deny'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.networkAcls.defaultAction: 'Deny' and add explicit ipRules / virtualNetworkRules."
+      },
+      "requiredActions": [
+        "Set properties.networkAcls.defaultAction: 'Deny' on the Microsoft.KeyVault/vaults resource."
+      ]
+    },
+    {
+      "ruleId": "AZURE_STORAGE_QUEUE_LOGGING",
+      "threat": "Without queue-service logging, an attacker who gains a storage key can read, enqueue, or delete messages and there is no audit trail to detect or reconstruct the abuse.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 3.x",
+        "Microsoft Cloud Security Benchmark LT-4"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable storage account queue logging",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_storage_account",
+        "require": "queue_properties"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a queue_properties block with a logging sub-block enabling read, write and delete logging with a retention_policy_days value."
+      },
+      "requiredActions": [
+        "Add queue_properties { logging { delete = true read = true write = true version = \"1.0\" } } to the storage account."
+      ]
+    },
+    {
+      "ruleId": "AZURE_STORAGE_SFTP_DISABLED",
+      "threat": "Leaving SFTP enabled on a storage account exposes an additional credential-based remote file-transfer surface that attackers can brute-force or abuse to exfiltrate blob data.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 3.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable SFTP on storage accounts",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_storage_account",
+        "forbid": "sftp_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "sftp_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set sftp_enabled = false unless SFTP is an explicitly reviewed requirement."
+      ]
+    },
+    {
+      "ruleId": "AZURE_STORAGE_NETWORK_RULES_DENY",
+      "threat": "A storage account network rule set that defaults to Allow leaves blob, file, queue and table endpoints reachable from the public internet, enabling data theft if keys or SAS tokens leak.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 3.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "HIGH",
+      "title": "Default-deny on storage account network rules",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_storage_account_network_rules",
+        "forbid": "default_action\\s*=\\s*\"Allow\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "default_action": "\"Deny\""
+        }
+      },
+      "requiredActions": [
+        "Set default_action = \"Deny\" and explicitly allowlist required subnets and IP ranges."
+      ]
+    },
+    {
+      "ruleId": "AZURE_MSSQL_DB_LEDGER",
+      "threat": "Without ledger enabled, a privileged attacker or insider can tamper with database records and erase evidence of the change, defeating forensic and integrity guarantees.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.x",
+        "Microsoft Cloud Security Benchmark DP-7"
+      ],
+      "severity": "LOW",
+      "title": "Enable ledger on SQL databases",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_mssql_database",
+        "require": "ledger_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "ledger_enabled": "true"
+        }
+      },
+      "requiredActions": [
+        "Set ledger_enabled = true for tamper-evident integrity on sensitive databases."
+      ]
+    },
+    {
+      "ruleId": "AZURE_MSSQL_SECURITY_ALERT_POLICY",
+      "threat": "Without a server security alert policy (Advanced Threat Protection), SQL injection, anomalous access and brute-force login attempts go undetected, giving attackers a quiet foothold.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.x",
+        "Microsoft Cloud Security Benchmark LT-1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Configure SQL server threat detection alert policy",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_mssql_server",
+        "requireCompanionType": "azurerm_mssql_server_security_alert_policy"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add an azurerm_mssql_server_security_alert_policy with state = \"Enabled\" referencing the server."
+      },
+      "requiredActions": [
+        "Create an azurerm_mssql_server_security_alert_policy with state Enabled for the SQL server."
+      ]
+    },
+    {
+      "ruleId": "AZURE_MSSQL_VULNERABILITY_ASSESSMENT",
+      "threat": "Without a vulnerability assessment, misconfigurations and excessive permissions in the SQL server persist unnoticed, widening the attack surface for data exfiltration.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.x",
+        "Microsoft Cloud Security Benchmark PV-5"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable SQL server vulnerability assessment",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_mssql_server",
+        "requireCompanionType": "azurerm_mssql_server_vulnerability_assessment"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add an azurerm_mssql_server_vulnerability_assessment referencing the server security alert policy with recurring scans enabled."
+      },
+      "requiredActions": [
+        "Create an azurerm_mssql_server_vulnerability_assessment with recurring scans for the SQL server."
+      ]
+    },
+    {
+      "ruleId": "AZURE_POSTGRES_LOG_CHECKPOINTS",
+      "threat": "With log_checkpoints off, the PostgreSQL server omits checkpoint records that aid in detecting tampering and reconstructing activity after a breach.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.x",
+        "Microsoft Cloud Security Benchmark LT-4"
+      ],
+      "severity": "LOW",
+      "title": "Enable log_checkpoints on PostgreSQL",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_postgresql_configuration",
+        "forbid": "name\\s*=\\s*\"log_checkpoints\"[\\s\\S]*?value\\s*=\\s*\"off\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set the log_checkpoints server parameter value to \"on\"."
+      },
+      "requiredActions": [
+        "Set the log_checkpoints PostgreSQL configuration value to on."
+      ]
+    },
+    {
+      "ruleId": "AZURE_POSTGRES_LOG_CONNECTIONS",
+      "threat": "With log_connections off, successful and failed authentication attempts are not recorded, hiding brute-force and credential-stuffing activity against the database.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.x",
+        "Microsoft Cloud Security Benchmark LT-4"
+      ],
+      "severity": "LOW",
+      "title": "Enable log_connections on PostgreSQL",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_postgresql_configuration",
+        "forbid": "name\\s*=\\s*\"log_connections\"[\\s\\S]*?value\\s*=\\s*\"off\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set the log_connections server parameter value to \"on\"."
+      },
+      "requiredActions": [
+        "Set the log_connections PostgreSQL configuration value to on."
+      ]
+    },
+    {
+      "ruleId": "AZURE_POSTGRES_LOG_DISCONNECTIONS",
+      "threat": "With log_disconnections off, session termination events are not recorded, making it harder to correlate the duration and scope of an attacker's database session.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.x",
+        "Microsoft Cloud Security Benchmark LT-4"
+      ],
+      "severity": "LOW",
+      "title": "Enable log_disconnections on PostgreSQL",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_postgresql_configuration",
+        "forbid": "name\\s*=\\s*\"log_disconnections\"[\\s\\S]*?value\\s*=\\s*\"off\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set the log_disconnections server parameter value to \"on\"."
+      },
+      "requiredActions": [
+        "Set the log_disconnections PostgreSQL configuration value to on."
+      ]
+    },
+    {
+      "ruleId": "AZURE_POSTGRES_CONNECTION_THROTTLING",
+      "threat": "Without connection throttling, an attacker can mount unthrottled brute-force authentication attempts against the PostgreSQL server.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.x",
+        "Microsoft Cloud Security Benchmark IM-6"
+      ],
+      "severity": "LOW",
+      "title": "Enable connection_throttling on PostgreSQL",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_postgresql_configuration",
+        "forbid": "name\\s*=\\s*\"connection_throttling\"[\\s\\S]*?value\\s*=\\s*\"off\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set the connection_throttling server parameter value to \"on\"."
+      },
+      "requiredActions": [
+        "Set the connection_throttling PostgreSQL configuration value to on."
+      ]
+    },
+    {
+      "ruleId": "AZURE_MYSQL_FLEX_SECURE_TRANSPORT",
+      "threat": "If require_secure_transport is OFF, MySQL flexible server accepts plaintext connections, letting an on-path attacker intercept credentials and query data.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.x",
+        "Microsoft Cloud Security Benchmark DP-3"
+      ],
+      "severity": "HIGH",
+      "title": "Require secure transport on MySQL flexible server",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_mysql_flexible_server_configuration",
+        "forbid": "name\\s*=\\s*\"require_secure_transport\"[\\s\\S]*?value\\s*=\\s*\"OFF\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set the require_secure_transport server parameter value to \"ON\"."
+      },
+      "requiredActions": [
+        "Set the require_secure_transport MySQL flexible server parameter to ON."
+      ]
+    },
+    {
+      "ruleId": "AZURE_MYSQL_TLS_VERSION",
+      "threat": "Allowing TLS versions below 1.2 on MySQL lets an attacker downgrade the connection and exploit weak cipher suites to intercept traffic.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.x",
+        "Microsoft Cloud Security Benchmark DP-3"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enforce TLS 1.2 on MySQL flexible server",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_mysql_flexible_server_configuration",
+        "forbid": "name\\s*=\\s*\"tls_version\"[\\s\\S]*?value\\s*=\\s*\"[^\"]*TLSv1(\\.0|\\.1|,)"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set the tls_version server parameter value to \"TLSv1.2\"."
+      },
+      "requiredActions": [
+        "Set the tls_version MySQL parameter to TLSv1.2 only."
+      ]
+    },
+    {
+      "ruleId": "AZURE_KV_CERT_EXPIRY",
+      "threat": "A Key Vault certificate without an expiry-bounded lifetime can outlive its safe rotation window, letting a stolen private key remain valid indefinitely.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.x",
+        "Microsoft Cloud Security Benchmark DP-7"
+      ],
+      "severity": "MEDIUM",
+      "title": "Set validity bounds on Key Vault certificates",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_key_vault_certificate",
+        "require": "validity_in_months"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Specify validity_in_months within the certificate_policy x509_certificate_properties block."
+      },
+      "requiredActions": [
+        "Set validity_in_months on the certificate policy to bound certificate lifetime."
+      ]
+    },
+    {
+      "ruleId": "AZURE_AKS_PRIVATE_CLUSTER",
+      "threat": "An AKS cluster with a public API server exposes the Kubernetes control plane to internet-based credential and exploit attacks against the management endpoint.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "HIGH",
+      "title": "Enable private cluster on AKS",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_kubernetes_cluster",
+        "require": "private_cluster_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "private_cluster_enabled": "true"
+        }
+      },
+      "requiredActions": [
+        "Set private_cluster_enabled = true so the API server is reachable only over the private network."
+      ]
+    },
+    {
+      "ruleId": "AZURE_AKS_OIDC_ISSUER",
+      "threat": "Without the OIDC issuer enabled, AKS cannot use workload identity federation, forcing long-lived static credentials that attackers can steal and reuse.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.x",
+        "Microsoft Cloud Security Benchmark IM-3"
+      ],
+      "severity": "LOW",
+      "title": "Enable OIDC issuer on AKS",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_kubernetes_cluster",
+        "require": "oidc_issuer_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "oidc_issuer_enabled": "true"
+        }
+      },
+      "requiredActions": [
+        "Set oidc_issuer_enabled = true to support federated workload identity."
+      ]
+    },
+    {
+      "ruleId": "AZURE_AKS_WORKLOAD_IDENTITY",
+      "threat": "Without workload identity, pods rely on shared node credentials or mounted secrets, expanding the blast radius when a single pod is compromised.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.x",
+        "Microsoft Cloud Security Benchmark IM-3"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable workload identity on AKS",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_kubernetes_cluster",
+        "require": "workload_identity_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "workload_identity_enabled": "true"
+        }
+      },
+      "requiredActions": [
+        "Set workload_identity_enabled = true and assign scoped federated identities to pods."
+      ]
+    },
+    {
+      "ruleId": "AZURE_AKS_KEY_VAULT_SECRETS_PROVIDER",
+      "threat": "Without the Key Vault secrets provider, secrets are stored in Kubernetes objects rather than a managed vault, making them easier for an attacker who reaches the cluster to harvest.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.x",
+        "Microsoft Cloud Security Benchmark DP-8"
+      ],
+      "severity": "LOW",
+      "title": "Enable Key Vault secrets provider on AKS",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_kubernetes_cluster",
+        "require": "key_vault_secrets_provider"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a key_vault_secrets_provider block with secret_rotation_enabled = true."
+      },
+      "requiredActions": [
+        "Add a key_vault_secrets_provider block with secret_rotation_enabled = true."
+      ]
+    },
+    {
+      "ruleId": "AZURE_AKS_DEFENDER",
+      "threat": "Without Microsoft Defender integration, runtime threats and malicious container behavior in the cluster go undetected, letting an attacker operate without triggering alerts.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.x",
+        "Microsoft Cloud Security Benchmark LT-1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable Microsoft Defender on AKS",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_kubernetes_cluster",
+        "require": "microsoft_defender"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a microsoft_defender block referencing a log_analytics_workspace_id."
+      },
+      "requiredActions": [
+        "Add a microsoft_defender block with a log_analytics_workspace_id."
+      ]
+    },
+    {
+      "ruleId": "AZURE_AKS_OMS_AGENT",
+      "threat": "Without the monitoring agent, cluster and container logs are not shipped to Log Analytics, so an attacker's actions in the cluster leave no centralized audit trail.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.x",
+        "Microsoft Cloud Security Benchmark LT-4"
+      ],
+      "severity": "LOW",
+      "title": "Enable monitoring (OMS agent) on AKS",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_kubernetes_cluster",
+        "require": "oms_agent"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add an oms_agent block referencing a log_analytics_workspace_id."
+      },
+      "requiredActions": [
+        "Add an oms_agent block with a log_analytics_workspace_id."
+      ]
+    },
+    {
+      "ruleId": "AZURE_AKS_IMAGE_CLEANER",
+      "threat": "Without image cleaner, stale vulnerable container images accumulate on nodes, giving attackers more exploitable image versions to target.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.x",
+        "Microsoft Cloud Security Benchmark PV-5"
+      ],
+      "severity": "LOW",
+      "title": "Enable image cleaner on AKS",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_kubernetes_cluster",
+        "require": "image_cleaner_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "image_cleaner_enabled": "true"
+        }
+      },
+      "requiredActions": [
+        "Set image_cleaner_enabled = true to purge stale vulnerable images from nodes."
+      ]
+    },
+    {
+      "ruleId": "AZURE_ACR_ANONYMOUS_PULL_DISABLED",
+      "threat": "Anonymous pull on a container registry lets any unauthenticated party download images, potentially exposing proprietary code, secrets baked into layers, or internal service maps.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.x",
+        "Microsoft Cloud Security Benchmark IM-1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable anonymous pull on container registry",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_container_registry",
+        "forbid": "anonymous_pull_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "anonymous_pull_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set anonymous_pull_enabled = false so registry pulls require authentication."
+      ]
+    },
+    {
+      "ruleId": "AZURE_ACR_QUARANTINE_POLICY",
+      "threat": "Without quarantine, images become pullable before being scanned, letting a vulnerable or malicious image be deployed before any security gate runs.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.x",
+        "Microsoft Cloud Security Benchmark PV-5"
+      ],
+      "severity": "LOW",
+      "title": "Enable quarantine policy on container registry",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_container_registry",
+        "require": "quarantine_policy_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "quarantine_policy_enabled": "true"
+        }
+      },
+      "requiredActions": [
+        "Set quarantine_policy_enabled = true so images are scanned before they are pullable."
+      ]
+    },
+    {
+      "ruleId": "AZURE_ACR_RETENTION_POLICY",
+      "threat": "Without a retention policy, untagged manifests accumulate indefinitely, increasing the chance that an old vulnerable image is referenced and pulled.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.x",
+        "Microsoft Cloud Security Benchmark PV-5"
+      ],
+      "severity": "LOW",
+      "title": "Configure retention policy on container registry",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_container_registry",
+        "require": "retention_policy_in_days|retention_policy\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a retention_policy block with enabled = true and a days value."
+      },
+      "requiredActions": [
+        "Add a retention_policy block with enabled = true to purge stale untagged manifests."
+      ]
+    },
+    {
+      "ruleId": "AZURE_LINUX_WEBAPP_AUTH",
+      "threat": "A Linux web app without authentication configured exposes all application routes unauthenticated, letting attackers reach sensitive functionality directly.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9.x",
+        "Microsoft Cloud Security Benchmark IM-1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable authentication on Linux web app",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_linux_web_app",
+        "require": "auth_settings"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add an auth_settings_v2 (or auth_settings) block with enabled = true and a configured identity provider."
+      },
+      "requiredActions": [
+        "Add an auth_settings_v2 block enabling platform authentication for the web app."
+      ]
+    },
+    {
+      "ruleId": "AZURE_LINUX_WEBAPP_HTTP2",
+      "threat": "Leaving HTTP/2 disabled forces clients onto older protocol versions and forgoes header compression integrity protections that mitigate certain downgrade and smuggling techniques.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9.x",
+        "Microsoft Cloud Security Benchmark DP-3"
+      ],
+      "severity": "LOW",
+      "title": "Enable HTTP/2 on Linux web app",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_linux_web_app",
+        "require": "http2_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set http2_enabled = true inside the site_config block."
+      },
+      "requiredActions": [
+        "Set http2_enabled = true in the site_config block."
+      ]
+    },
+    {
+      "ruleId": "AZURE_LINUX_WEBAPP_NO_PUBLIC",
+      "threat": "A Linux web app with public network access reachable bypasses private networking controls, exposing the app and its management surface to the internet.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable public network access on Linux web app",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_linux_web_app",
+        "require": "public_network_access_enabled\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "public_network_access_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set public_network_access_enabled = false and front the app with private endpoints."
+      ]
+    },
+    {
+      "ruleId": "AZURE_WINDOWS_WEBAPP_HTTPS_ONLY",
+      "threat": "A Windows web app that accepts HTTP lets an on-path attacker intercept session cookies and credentials in cleartext.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9.x",
+        "Microsoft Cloud Security Benchmark DP-3"
+      ],
+      "severity": "HIGH",
+      "title": "Require HTTPS on Windows web app",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_windows_web_app",
+        "require": "https_only\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "https_only": "true"
+        }
+      },
+      "requiredActions": [
+        "Set https_only = true on the Windows web app."
+      ]
+    },
+    {
+      "ruleId": "AZURE_WINDOWS_WEBAPP_MIN_TLS",
+      "threat": "Allowing TLS below 1.2 on a Windows web app permits protocol downgrade attacks against client connections.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9.x",
+        "Microsoft Cloud Security Benchmark DP-3"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enforce TLS 1.2 on Windows web app",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_windows_web_app",
+        "require": "minimum_tls_version\\s*=\\s*\"1.2\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set minimum_tls_version = \"1.2\" inside the site_config block."
+      },
+      "requiredActions": [
+        "Set minimum_tls_version = \"1.2\" in the site_config block."
+      ]
+    },
+    {
+      "ruleId": "AZURE_LINUX_FUNCTION_HTTPS_ONLY",
+      "threat": "A Linux function app accepting HTTP exposes function keys and payloads to interception by an on-path attacker.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9.x",
+        "Microsoft Cloud Security Benchmark DP-3"
+      ],
+      "severity": "HIGH",
+      "title": "Require HTTPS on Linux function app",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_linux_function_app",
+        "require": "https_only\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "https_only": "true"
+        }
+      },
+      "requiredActions": [
+        "Set https_only = true on the Linux function app."
+      ]
+    },
+    {
+      "ruleId": "AZURE_LINUX_FUNCTION_MIN_TLS",
+      "threat": "A Linux function app allowing TLS below 1.2 permits downgrade attacks that weaken transport encryption.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9.x",
+        "Microsoft Cloud Security Benchmark DP-3"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enforce TLS 1.2 on Linux function app",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_linux_function_app",
+        "require": "minimum_tls_version\\s*=\\s*\"1.2\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set minimum_tls_version = \"1.2\" in the site_config block."
+      },
+      "requiredActions": [
+        "Set minimum_tls_version = \"1.2\" in the site_config block."
+      ]
+    },
+    {
+      "ruleId": "AZURE_COSMOSDB_CMK",
+      "threat": "Without a customer-managed key, Cosmos DB data is encrypted only with platform keys, so an attacker who compromises the platform key path or the account cannot be cut off by revoking a tenant-controlled key.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.x",
+        "Microsoft Cloud Security Benchmark DP-5"
+      ],
+      "severity": "MEDIUM",
+      "title": "Use customer-managed key for Cosmos DB",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_cosmosdb_account",
+        "require": "key_vault_key_id"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "key_vault_key_id": "var.cosmos_cmk_id"
+        }
+      },
+      "requiredActions": [
+        "Set key_vault_key_id to a Key Vault key for customer-managed encryption."
+      ]
+    },
+    {
+      "ruleId": "AZURE_COSMOSDB_VNET_FILTER",
+      "threat": "Without virtual network filtering, the Cosmos DB account accepts connections from outside approved subnets, broadening the network reachable for data theft.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable VNet filtering on Cosmos DB",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_cosmosdb_account",
+        "require": "is_virtual_network_filter_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "is_virtual_network_filter_enabled": "true"
+        }
+      },
+      "requiredActions": [
+        "Set is_virtual_network_filter_enabled = true and define virtual_network_rule entries."
+      ]
+    },
+    {
+      "ruleId": "AZURE_COSMOSDB_KEY_METADATA_WRITES",
+      "threat": "Leaving access key metadata writes enabled lets a holder of a data key regenerate keys via the data plane, enabling an attacker to lock out legitimate users and persist access.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.x",
+        "Microsoft Cloud Security Benchmark PA-7"
+      ],
+      "severity": "LOW",
+      "title": "Disable access key metadata writes on Cosmos DB",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_cosmosdb_account",
+        "require": "access_key_metadata_writes_enabled\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "access_key_metadata_writes_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set access_key_metadata_writes_enabled = false to prevent data-plane key regeneration."
+      ]
+    },
+    {
+      "ruleId": "AZURE_EVENTGRID_TOPIC_NO_PUBLIC",
+      "threat": "An Event Grid topic with public network access exposes its event ingestion endpoint to the internet, enabling event injection or reconnaissance by unauthenticated parties.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 5.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable public network access on Event Grid topic",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_eventgrid_topic",
+        "require": "public_network_access_enabled\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "public_network_access_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set public_network_access_enabled = false and use private endpoints."
+      ]
+    },
+    {
+      "ruleId": "AZURE_EVENTGRID_TOPIC_LOCAL_AUTH_DISABLED",
+      "threat": "With local authentication enabled, an Event Grid topic accepts shared access keys that, if leaked, give an attacker full publish access bypassing Azure AD controls.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 5.x",
+        "Microsoft Cloud Security Benchmark IM-1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable local authentication on Event Grid topic",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_eventgrid_topic",
+        "require": "local_auth_enabled\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "local_auth_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set local_auth_enabled = false and use Azure AD authentication."
+      ]
+    },
+    {
+      "ruleId": "AZURE_EVENTGRID_DOMAIN_NO_PUBLIC",
+      "threat": "An Event Grid domain with public network access exposes its event ingestion surface to the internet for injection or probing.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 5.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable public network access on Event Grid domain",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_eventgrid_domain",
+        "require": "public_network_access_enabled\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "public_network_access_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set public_network_access_enabled = false on the Event Grid domain."
+      ]
+    },
+    {
+      "ruleId": "AZURE_EVENTGRID_DOMAIN_LOCAL_AUTH_DISABLED",
+      "threat": "Local auth on an Event Grid domain permits shared-key publishing that bypasses Azure AD and is exploitable if a key leaks.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 5.x",
+        "Microsoft Cloud Security Benchmark IM-1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable local authentication on Event Grid domain",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_eventgrid_domain",
+        "require": "local_auth_enabled\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "local_auth_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set local_auth_enabled = false on the Event Grid domain."
+      ]
+    },
+    {
+      "ruleId": "AZURE_EVENTHUB_LOCAL_AUTH_DISABLED",
+      "threat": "Local auth on an Event Hub namespace permits SAS-key access that, if leaked, lets an attacker read or inject event streams without Azure AD controls.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 5.x",
+        "Microsoft Cloud Security Benchmark IM-1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable local authentication on Event Hub namespace",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_eventhub_namespace",
+        "require": "local_authentication_enabled\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "local_authentication_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set local_authentication_enabled = false and use Azure AD for Event Hub access."
+      ]
+    },
+    {
+      "ruleId": "AZURE_SIGNALR_LOCAL_AUTH_DISABLED",
+      "threat": "Local auth on a SignalR service permits access-key authentication that, if exposed, lets an attacker connect and relay messages bypassing Azure AD.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 5.x",
+        "Microsoft Cloud Security Benchmark IM-1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable local authentication on SignalR service",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_signalr_service",
+        "require": "local_auth_enabled\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "local_auth_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set local_auth_enabled = false on the SignalR service."
+      ]
+    },
+    {
+      "ruleId": "AZURE_SIGNALR_NO_PUBLIC",
+      "threat": "A SignalR service with public network access enabled exposes its real-time messaging endpoint to the internet for abuse and reconnaissance.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 5.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable public network access on SignalR service",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_signalr_service",
+        "require": "public_network_access_enabled\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "public_network_access_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set public_network_access_enabled = false on the SignalR service."
+      ]
+    },
+    {
+      "ruleId": "AZURE_WEB_PUBSUB_LOCAL_AUTH_DISABLED",
+      "threat": "Local auth on a Web PubSub service allows access-key authentication that an attacker can abuse if the key leaks, bypassing Azure AD.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 5.x",
+        "Microsoft Cloud Security Benchmark IM-1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable local authentication on Web PubSub",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_web_pubsub",
+        "require": "local_auth_enabled\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "local_auth_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set local_auth_enabled = false on the Web PubSub service."
+      ]
+    },
+    {
+      "ruleId": "AZURE_NETWORK_WATCHER_FLOW_LOG_RETENTION",
+      "threat": "A flow log without a retention policy may discard network records before an investigation, erasing evidence of lateral movement or exfiltration.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 6.x",
+        "Microsoft Cloud Security Benchmark LT-6"
+      ],
+      "severity": "LOW",
+      "title": "Set retention policy on network flow logs",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_network_watcher_flow_log",
+        "require": "retention_policy"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a retention_policy block with enabled = true and days >= 90."
+      },
+      "requiredActions": [
+        "Add a retention_policy block with enabled = true and at least 90 days retention."
+      ]
+    },
+    {
+      "ruleId": "AZURE_NETWORK_WATCHER_TRAFFIC_ANALYTICS",
+      "threat": "Without traffic analytics, raw flow logs are not correlated into actionable detections, so anomalous east-west traffic from an attacker goes unflagged.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 6.x",
+        "Microsoft Cloud Security Benchmark LT-1"
+      ],
+      "severity": "LOW",
+      "title": "Enable traffic analytics on network flow logs",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_network_watcher_flow_log",
+        "require": "traffic_analytics"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a traffic_analytics block with enabled = true referencing a Log Analytics workspace."
+      },
+      "requiredActions": [
+        "Add a traffic_analytics block with enabled = true and a workspace reference."
+      ]
+    },
+    {
+      "ruleId": "AZURE_VNET_DDOS_PROTECTION",
+      "threat": "A virtual network without a DDoS protection plan is exposed to volumetric attacks that can take down public-facing services and mask intrusion attempts.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 6.x",
+        "Microsoft Cloud Security Benchmark NS-5"
+      ],
+      "severity": "LOW",
+      "title": "Attach DDoS protection plan to virtual network",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_virtual_network",
+        "require": "ddos_protection_plan"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a ddos_protection_plan block with enable = true referencing a DDoS plan id."
+      },
+      "requiredActions": [
+        "Add a ddos_protection_plan block referencing an azurerm_network_ddos_protection_plan."
+      ]
+    },
+    {
+      "ruleId": "AZURE_MANAGED_DISK_NO_PUBLIC",
+      "threat": "A managed disk with public network access permits export/import operations over the internet, which an attacker with a leaked SAS could use to copy disk contents.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 7.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable public network access on managed disk",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_managed_disk",
+        "require": "public_network_access_enabled\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "public_network_access_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set public_network_access_enabled = false on the managed disk."
+      ]
+    },
+    {
+      "ruleId": "AZURE_MANAGED_DISK_NETWORK_DENY",
+      "threat": "A managed disk with an open network access policy allows disk export to any network, enabling exfiltration of disk images by an attacker who can mint export SAS tokens.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 7.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Restrict network access policy on managed disk",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_managed_disk",
+        "require": "network_access_policy\\s*=\\s*\"DenyAll\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "network_access_policy": "\"DenyAll\""
+        }
+      },
+      "requiredActions": [
+        "Set network_access_policy = \"DenyAll\" unless private-link export is required."
+      ]
+    },
+    {
+      "ruleId": "AZURE_RECOVERY_VAULT_IMMUTABILITY",
+      "threat": "A Recovery Services vault without immutability lets an attacker who gains backup-operator rights delete or tamper with recovery points, defeating ransomware recovery.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 7.x",
+        "Microsoft Cloud Security Benchmark BR-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable immutability on Recovery Services vault",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_recovery_services_vault",
+        "require": "immutability\\s*=\\s*\"(Locked|Unlocked)\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "immutability": "\"Locked\""
+        }
+      },
+      "requiredActions": [
+        "Set immutability = \"Locked\" on the Recovery Services vault."
+      ]
+    },
+    {
+      "ruleId": "AZURE_RECOVERY_VAULT_INFRA_ENCRYPTION",
+      "threat": "Without infrastructure (double) encryption, vault data relies on a single encryption layer, reducing defense in depth against a key-compromise scenario.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 7.x",
+        "Microsoft Cloud Security Benchmark DP-5"
+      ],
+      "severity": "LOW",
+      "title": "Enable infrastructure encryption on Recovery Services vault",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_recovery_services_vault",
+        "require": "infrastructure_encryption_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "infrastructure_encryption_enabled": "true"
+        }
+      },
+      "requiredActions": [
+        "Set infrastructure_encryption_enabled = true on the Recovery Services vault."
+      ]
+    },
+    {
+      "ruleId": "AZURE_LOG_ANALYTICS_RETENTION",
+      "threat": "A Log Analytics workspace with short or unset retention may purge security logs before an incident is investigated, erasing the attacker's trail.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 6.x",
+        "Microsoft Cloud Security Benchmark LT-6"
+      ],
+      "severity": "LOW",
+      "title": "Set retention on Log Analytics workspace",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_log_analytics_workspace",
+        "require": "retention_in_days"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "retention_in_days": "90"
+        }
+      },
+      "requiredActions": [
+        "Set retention_in_days to at least 90 on the Log Analytics workspace."
+      ]
+    },
+    {
+      "ruleId": "AZURE_LOG_ANALYTICS_NO_INTERNET_INGESTION",
+      "threat": "A Log Analytics workspace allowing internet ingestion accepts data over public endpoints, which an attacker could abuse to inject misleading log data or probe the workspace.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 6.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "LOW",
+      "title": "Disable internet ingestion on Log Analytics workspace",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_log_analytics_workspace",
+        "require": "internet_ingestion_enabled\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "internet_ingestion_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set internet_ingestion_enabled = false and use private-link ingestion."
+      ]
+    },
+    {
+      "ruleId": "AZURE_LOG_ANALYTICS_NO_INTERNET_QUERY",
+      "threat": "A Log Analytics workspace allowing internet query exposes the query endpoint publicly, broadening the surface for credential abuse to read sensitive logs.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 6.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "LOW",
+      "title": "Disable internet query on Log Analytics workspace",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_log_analytics_workspace",
+        "require": "internet_query_enabled\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "internet_query_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set internet_query_enabled = false and query over private link."
+      ]
+    },
+    {
+      "ruleId": "AZURE_SYNAPSE_DATA_EXFIL_PROTECTION",
+      "threat": "Without data exfiltration protection, a compromised Synapse workspace can route data to arbitrary external endpoints, enabling large-scale exfiltration.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable data exfiltration protection on Synapse workspace",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_synapse_workspace",
+        "require": "data_exfiltration_protection_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "data_exfiltration_protection_enabled": "true"
+        }
+      },
+      "requiredActions": [
+        "Set data_exfiltration_protection_enabled = true on the Synapse workspace."
+      ]
+    },
+    {
+      "ruleId": "AZURE_SYNAPSE_MANAGED_VNET",
+      "threat": "Without a managed virtual network, Synapse Spark and integration runtimes share network paths that an attacker could traverse, weakening tenant isolation.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.x",
+        "Microsoft Cloud Security Benchmark NS-1"
+      ],
+      "severity": "LOW",
+      "title": "Enable managed virtual network on Synapse workspace",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_synapse_workspace",
+        "require": "managed_virtual_network_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "managed_virtual_network_enabled": "true"
+        }
+      },
+      "requiredActions": [
+        "Set managed_virtual_network_enabled = true on the Synapse workspace."
+      ]
+    },
+    {
+      "ruleId": "AZURE_SYNAPSE_AAD_ONLY_AUTH",
+      "threat": "Allowing SQL local authentication on a Synapse workspace keeps a password-based attack surface that bypasses Azure AD conditional access and MFA.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.x",
+        "Microsoft Cloud Security Benchmark IM-1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Require Azure AD-only auth on Synapse workspace",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_synapse_workspace",
+        "require": "azuread_authentication_only\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set azuread_authentication_only = true inside the azure_devops_repo/aad_admin context; configure via the workspace aad_admin and disable SQL local auth."
+      },
+      "requiredActions": [
+        "Enable azuread_authentication_only on the Synapse workspace to disable SQL local auth."
+      ]
+    },
+    {
+      "ruleId": "AZURE_DATABRICKS_NO_PUBLIC_IP",
+      "threat": "A Databricks workspace without no-public-IP launches cluster nodes with public addresses, exposing them directly to internet-based attacks.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable public IP on Databricks workspace",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_databricks_workspace",
+        "require": "no_public_ip\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set no_public_ip = true inside the custom_parameters block (requires VNet injection)."
+      },
+      "requiredActions": [
+        "Set no_public_ip = true in custom_parameters and deploy with VNet injection."
+      ]
+    },
+    {
+      "ruleId": "AZURE_MACHINE_LEARNING_NO_PUBLIC",
+      "threat": "A Machine Learning workspace with public network access exposes notebooks, models and datasets to internet-based attacks against the workspace endpoint.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable public network access on ML workspace",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_machine_learning_workspace",
+        "require": "public_network_access_enabled\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "public_network_access_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set public_network_access_enabled = false on the ML workspace."
+      ]
+    },
+    {
+      "ruleId": "AZURE_MACHINE_LEARNING_HBI",
+      "threat": "Without high business impact flag, an ML workspace logs additional diagnostic data that may include sensitive content, increasing exposure if logs are accessed by an attacker.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9.x",
+        "Microsoft Cloud Security Benchmark DP-1"
+      ],
+      "severity": "LOW",
+      "title": "Enable high business impact on ML workspace",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_machine_learning_workspace",
+        "require": "high_business_impact\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "high_business_impact": "true"
+        }
+      },
+      "requiredActions": [
+        "Set high_business_impact = true to reduce sensitive data captured in diagnostics."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BATCH_NO_PUBLIC",
+      "threat": "A Batch account with public network access exposes its job and pool management endpoints to the internet, broadening the surface for credential abuse.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable public network access on Batch account",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_batch_account",
+        "require": "public_network_access_enabled\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "public_network_access_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set public_network_access_enabled = false on the Batch account."
+      ]
+    },
+    {
+      "ruleId": "AZURE_IOTHUB_LOCAL_AUTH_DISABLED",
+      "threat": "Local auth (shared access policies) on an IoT Hub permits SAS-key access that, if leaked, lets an attacker impersonate devices or read telemetry without Azure AD controls.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 5.x",
+        "Microsoft Cloud Security Benchmark IM-1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable local authentication on IoT Hub",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_iothub",
+        "require": "local_authentication_enabled\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "local_authentication_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set local_authentication_enabled = false on the IoT Hub."
+      ]
+    },
+    {
+      "ruleId": "AZURE_IOTHUB_MIN_TLS",
+      "threat": "An IoT Hub allowing TLS below 1.2 permits downgrade attacks against device-to-cloud connections, exposing telemetry and device credentials.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 5.x",
+        "Microsoft Cloud Security Benchmark DP-3"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enforce TLS 1.2 on IoT Hub",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_iothub",
+        "require": "min_tls_version\\s*=\\s*\"1.2\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "min_tls_version": "\"1.2\""
+        }
+      },
+      "requiredActions": [
+        "Set min_tls_version = \"1.2\" on the IoT Hub."
+      ]
+    },
+    {
+      "ruleId": "AZURE_API_MANAGEMENT_MIN_TLS",
+      "threat": "An API Management instance allowing legacy TLS/SSL protocols lets attackers downgrade gateway connections and exploit weak ciphers to intercept API traffic.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9.x",
+        "Microsoft Cloud Security Benchmark DP-3"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable legacy TLS protocols on API Management",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_api_management",
+        "forbid": "(enable_backend_ssl30|backend_ssl30_enabled)\\s*=\\s*true|(enable_frontend_ssl30|frontend_ssl30_enabled)\\s*=\\s*true|(enable_frontend_tls10|frontend_tls10_enabled)\\s*=\\s*true|(enable_frontend_tls11|frontend_tls11_enabled)\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set the security block flags enable_frontend_ssl30/tls10/tls11 and backend equivalents to false."
+      },
+      "requiredActions": [
+        "Disable SSL3.0, TLS1.0 and TLS1.1 in the API Management security block."
+      ]
+    },
+    {
+      "ruleId": "AZURE_APP_GATEWAY_SSL_POLICY_MIN_TLS",
+      "threat": "An Application Gateway with an SSL policy permitting TLS 1.0/1.1 lets attackers force a protocol downgrade and exploit weak ciphers against backend-bound traffic.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9.x",
+        "Microsoft Cloud Security Benchmark DP-3"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enforce minimum TLS 1.2 on Application Gateway",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_application_gateway",
+        "forbid": "min_protocol_version\\s*=\\s*\"TLSv1_(0|1)\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set min_protocol_version = \"TLSv1_2\" in the ssl_policy block."
+      },
+      "requiredActions": [
+        "Set min_protocol_version = \"TLSv1_2\" in the Application Gateway ssl_policy."
+      ]
+    },
+    {
+      "ruleId": "AZURE_CDN_FRONTDOOR_WAF",
+      "threat": "A Front Door security policy without a WAF leaves applications behind the CDN exposed to injection, bot, and L7 DDoS attacks at the edge.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9.x",
+        "Microsoft Cloud Security Benchmark NS-6"
+      ],
+      "severity": "MEDIUM",
+      "title": "Associate WAF policy with Front Door",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_cdn_frontdoor_security_policy",
+        "require": "cdn_frontdoor_firewall_policy_id"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Reference a cdn_frontdoor_firewall_policy_id in the security_policies association block."
+      },
+      "requiredActions": [
+        "Associate a WAF firewall policy with the Front Door security policy."
+      ]
+    },
+    {
+      "ruleId": "AZURE_SEARCH_LOCAL_AUTH_DISABLED",
+      "threat": "Local auth (API keys) on a Cognitive Search service permits key-based access that, if leaked, lets an attacker read or modify the search index bypassing Azure AD.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 5.x",
+        "Microsoft Cloud Security Benchmark IM-1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable local authentication on Search service",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_search_service",
+        "require": "local_authentication_enabled\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "local_authentication_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set local_authentication_enabled = false and use Azure AD for Search access."
+      ]
+    },
+    {
+      "ruleId": "AZURE_APP_CONFIG_PURGE_PROTECTION",
+      "threat": "Without purge protection, an attacker who gains delete rights can permanently destroy an App Configuration store and its keys, causing irrecoverable outage.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.x",
+        "Microsoft Cloud Security Benchmark BR-2"
+      ],
+      "severity": "LOW",
+      "title": "Enable purge protection on App Configuration",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_app_configuration",
+        "require": "purge_protection_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "purge_protection_enabled": "true"
+        }
+      },
+      "requiredActions": [
+        "Set purge_protection_enabled = true on the App Configuration store."
+      ]
+    },
+    {
+      "ruleId": "AZURE_APP_CONFIG_LOCAL_AUTH_DISABLED",
+      "threat": "Local auth on an App Configuration store permits access-key authentication that, if leaked, lets an attacker read configuration secrets bypassing Azure AD.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.x",
+        "Microsoft Cloud Security Benchmark IM-1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable local authentication on App Configuration",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_app_configuration",
+        "require": "local_auth_enabled\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "local_auth_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set local_auth_enabled = false on the App Configuration store."
+      ]
+    },
+    {
+      "ruleId": "AZURE_DATA_FACTORY_MANAGED_VNET",
+      "threat": "Without a managed virtual network, Data Factory integration runtimes use shared public paths an attacker could leverage to reach connected data stores.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.x",
+        "Microsoft Cloud Security Benchmark NS-1"
+      ],
+      "severity": "LOW",
+      "title": "Enable managed virtual network on Data Factory",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_data_factory_integration_runtime_azure",
+        "require": "virtual_network_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "virtual_network_enabled": "true"
+        }
+      },
+      "requiredActions": [
+        "Set virtual_network_enabled = true on the Data Factory Azure integration runtime."
+      ]
+    },
+    {
+      "ruleId": "AZURE_WINDOWS_VM_ENCRYPTION_AT_HOST",
+      "threat": "A Windows VM without encryption at host leaves temp disks and cache unencrypted on the hypervisor host, exposing data to a host-level compromise.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 7.x",
+        "Microsoft Cloud Security Benchmark DP-5"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable encryption at host on Windows VM",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_windows_virtual_machine",
+        "require": "encryption_at_host_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "encryption_at_host_enabled": "true"
+        }
+      },
+      "requiredActions": [
+        "Set encryption_at_host_enabled = true on the Windows VM."
+      ]
+    },
+    {
+      "ruleId": "AZURE_WINDOWS_VM_PATCH_MODE",
+      "threat": "A Windows VM not set to automatic patch assessment/installation accumulates unpatched OS vulnerabilities that attackers can exploit for initial access.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 7.x",
+        "Microsoft Cloud Security Benchmark PV-6"
+      ],
+      "severity": "LOW",
+      "title": "Enable automatic patching on Windows VM",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_windows_virtual_machine",
+        "require": "patch_mode\\s*=\\s*\"AutomaticByPlatform\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "patch_mode": "\"AutomaticByPlatform\""
+        }
+      },
+      "requiredActions": [
+        "Set patch_mode = \"AutomaticByPlatform\" on the Windows VM."
+      ]
+    },
+    {
+      "ruleId": "AZURE_LINUX_VM_PATCH_MODE",
+      "threat": "A Linux VM not set to platform-managed patching accumulates unpatched packages that attackers can exploit for initial access or privilege escalation.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 7.x",
+        "Microsoft Cloud Security Benchmark PV-6"
+      ],
+      "severity": "LOW",
+      "title": "Enable automatic patching on Linux VM",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_linux_virtual_machine",
+        "require": "patch_mode\\s*=\\s*\"AutomaticByPlatform\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "patch_mode": "\"AutomaticByPlatform\""
+        }
+      },
+      "requiredActions": [
+        "Set patch_mode = \"AutomaticByPlatform\" on the Linux VM."
+      ]
+    },
+    {
+      "ruleId": "AZURE_WINDOWS_VM_NO_PUBLIC_IP",
+      "threat": "A Windows VM directly associated with a public IP exposes RDP and other services to internet-wide brute-force and exploit attempts.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 7.x",
+        "Microsoft Cloud Security Benchmark NS-1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Avoid direct public IP on Windows VM NICs",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_network_interface",
+        "forbid": "public_ip_address_id"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Remove public_ip_address_id from the ip_configuration and reach the VM via bastion or load balancer."
+      },
+      "requiredActions": [
+        "Remove direct public_ip_address_id association and use Azure Bastion for management."
+      ]
+    },
+    {
+      "ruleId": "AZURE_POSTGRES_FLEX_LOG_CONNECTIONS",
+      "threat": "With log_connections off on a PostgreSQL flexible server, authentication attempts are unrecorded, concealing brute-force activity.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.x",
+        "Microsoft Cloud Security Benchmark LT-4"
+      ],
+      "severity": "LOW",
+      "title": "Enable log_connections on PostgreSQL flexible server",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_postgresql_flexible_server_configuration",
+        "forbid": "name\\s*=\\s*\"log_connections\"[\\s\\S]*?value\\s*=\\s*\"off\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set the log_connections flexible server parameter value to \"on\"."
+      },
+      "requiredActions": [
+        "Set the log_connections PostgreSQL flexible server parameter to on."
+      ]
+    },
+    {
+      "ruleId": "AZURE_POSTGRES_FLEX_LOG_DISCONNECTIONS",
+      "threat": "With log_disconnections off on a PostgreSQL flexible server, session-end events are not recorded, hampering breach timeline reconstruction.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.x",
+        "Microsoft Cloud Security Benchmark LT-4"
+      ],
+      "severity": "LOW",
+      "title": "Enable log_disconnections on PostgreSQL flexible server",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_postgresql_flexible_server_configuration",
+        "forbid": "name\\s*=\\s*\"log_disconnections\"[\\s\\S]*?value\\s*=\\s*\"off\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set the log_disconnections flexible server parameter value to \"on\"."
+      },
+      "requiredActions": [
+        "Set the log_disconnections PostgreSQL flexible server parameter to on."
+      ]
+    },
+    {
+      "ruleId": "AZURE_STORAGE_BLOB_CHANGE_FEED",
+      "threat": "Without change feed, blob create/update/delete events are not captured, removing a forensic record that helps detect and reconstruct data tampering or ransomware.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 3.x",
+        "Microsoft Cloud Security Benchmark LT-4"
+      ],
+      "severity": "LOW",
+      "title": "Enable blob change feed on storage account",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_storage_account",
+        "require": "change_feed_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set change_feed_enabled = true inside the blob_properties block."
+      },
+      "requiredActions": [
+        "Set change_feed_enabled = true in the storage account blob_properties block."
+      ]
+    },
+    {
+      "ruleId": "AZURE_KUSTO_DISK_ENCRYPTION",
+      "threat": "A Data Explorer (Kusto) cluster without disk encryption leaves cached query data unencrypted on cluster disks, exposing it to host-level compromise.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.x",
+        "Microsoft Cloud Security Benchmark DP-5"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable disk encryption on Data Explorer cluster",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_kusto_cluster",
+        "require": "disk_encryption_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "disk_encryption_enabled": "true"
+        }
+      },
+      "requiredActions": [
+        "Set disk_encryption_enabled = true on the Kusto cluster."
+      ]
+    },
+    {
+      "ruleId": "AZURE_KUSTO_NO_PUBLIC",
+      "threat": "A Data Explorer cluster with public network access exposes its query endpoint to the internet for credential abuse and data exfiltration.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable public network access on Data Explorer cluster",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_kusto_cluster",
+        "require": "public_network_access_enabled\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "public_network_access_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set public_network_access_enabled = false on the Kusto cluster."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_STORAGE_SFTP_DISABLED",
+      "threat": "Leaving SFTP enabled on a storage account exposes an extra credential-based file-transfer surface attackers can brute-force to exfiltrate blob data.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 3.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable SFTP on storage accounts (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Storage/storageAccounts",
+        "forbid": "isSftpEnabled\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set isSftpEnabled: false in the storage account properties."
+      },
+      "requiredActions": [
+        "Set isSftpEnabled: false unless SFTP is an explicit reviewed requirement."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_STORAGE_NETWORK_DENY_DEFAULT",
+      "threat": "A storage account networkAcls defaulting to Allow leaves blob, file, queue and table endpoints internet-reachable, enabling theft if keys leak.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 3.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "HIGH",
+      "title": "Default-deny networkAcls on storage account (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Storage/storageAccounts",
+        "forbid": "defaultAction\\s*:\\s*'Allow'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set networkAcls.defaultAction: 'Deny' and allowlist required subnets/IPs."
+      },
+      "requiredActions": [
+        "Set networkAcls.defaultAction: 'Deny' and explicitly allowlist required networks."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_SQL_AAD_ONLY",
+      "threat": "Without Azure AD-only authentication, a SQL server keeps SQL logins active, preserving a password attack surface that bypasses conditional access and MFA.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.x",
+        "Microsoft Cloud Security Benchmark IM-1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Require Azure AD-only auth on SQL server (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Sql/servers",
+        "require": "azureADOnlyAuthentication\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set administrators.azureADOnlyAuthentication: true on the SQL server."
+      },
+      "requiredActions": [
+        "Set azureADOnlyAuthentication: true in the SQL server administrators block."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_AKS_PRIVATE_CLUSTER",
+      "threat": "An AKS cluster with a public API server exposes the Kubernetes control plane to internet credential and exploit attacks.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "HIGH",
+      "title": "Enable private cluster on AKS (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.ContainerService/managedClusters",
+        "require": "enablePrivateCluster\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set apiServerAccessProfile.enablePrivateCluster: true."
+      },
+      "requiredActions": [
+        "Set enablePrivateCluster: true in apiServerAccessProfile."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_AKS_OIDC_ISSUER",
+      "threat": "Without the OIDC issuer, AKS cannot federate workload identities, forcing static credentials that attackers can steal and reuse.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.x",
+        "Microsoft Cloud Security Benchmark IM-3"
+      ],
+      "severity": "LOW",
+      "title": "Enable OIDC issuer on AKS (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.ContainerService/managedClusters",
+        "require": "oidcIssuerProfile"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add oidcIssuerProfile: { enabled: true } to the cluster properties."
+      },
+      "requiredActions": [
+        "Add oidcIssuerProfile with enabled: true to the AKS cluster."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_AKS_DEFENDER",
+      "threat": "Without Microsoft Defender, runtime threats in the AKS cluster go undetected, letting an attacker operate without alerts.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.x",
+        "Microsoft Cloud Security Benchmark LT-1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable Microsoft Defender on AKS (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.ContainerService/managedClusters",
+        "require": "securityProfile"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add securityProfile.defender with a logAnalyticsWorkspaceResourceId and securityMonitoring.enabled: true."
+      },
+      "requiredActions": [
+        "Add securityProfile.defender with securityMonitoring enabled to the AKS cluster."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_AKS_NO_PUBLIC_FQDN",
+      "threat": "A private AKS cluster that still publishes a public FQDN leaks control-plane addressing and can permit reachability that undermines the private design.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "LOW",
+      "title": "Disable public FQDN on private AKS (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.ContainerService/managedClusters",
+        "forbid": "enablePrivateClusterPublicFQDN\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set apiServerAccessProfile.enablePrivateClusterPublicFQDN: false."
+      },
+      "requiredActions": [
+        "Set enablePrivateClusterPublicFQDN: false on the private AKS cluster."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_ACR_ANONYMOUS_PULL_DISABLED",
+      "threat": "Anonymous pull on a container registry lets unauthenticated parties download images, exposing proprietary code or baked-in secrets.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.x",
+        "Microsoft Cloud Security Benchmark IM-1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable anonymous pull on ACR (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.ContainerRegistry/registries",
+        "forbid": "anonymousPullEnabled\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set anonymousPullEnabled: false in the registry properties."
+      },
+      "requiredActions": [
+        "Set anonymousPullEnabled: false so registry pulls require authentication."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_ACR_QUARANTINE_POLICY",
+      "threat": "Without a quarantine policy, images are pullable before scanning, allowing a vulnerable or malicious image to be deployed before any gate runs.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.x",
+        "Microsoft Cloud Security Benchmark PV-5"
+      ],
+      "severity": "LOW",
+      "title": "Enable quarantine policy on ACR (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.ContainerRegistry/registries",
+        "require": "quarantinePolicy"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add policies.quarantinePolicy.status: 'enabled' to the registry properties."
+      },
+      "requiredActions": [
+        "Add quarantinePolicy with status 'enabled' to the registry policies."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_ACR_NO_EXPORT",
+      "threat": "Leaving export enabled lets a holder of registry access push images out of the controlled boundary, aiding exfiltration of proprietary artifacts.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.x",
+        "Microsoft Cloud Security Benchmark DP-2"
+      ],
+      "severity": "LOW",
+      "title": "Disable export policy on ACR (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.ContainerRegistry/registries",
+        "forbid": "exportPolicy[\\s\\S]*?status\\s*:\\s*'enabled'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set policies.exportPolicy.status: 'disabled' on the registry."
+      },
+      "requiredActions": [
+        "Set exportPolicy.status: 'disabled' on the container registry."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_WEBAPP_NO_PUBLIC",
+      "threat": "A web app with public network access reachable bypasses private networking controls, exposing the app to the internet.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable public network access on web app (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Web/sites",
+        "require": "publicNetworkAccess\\s*:\\s*'Disabled'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set publicNetworkAccess: 'Disabled' and use private endpoints."
+      },
+      "requiredActions": [
+        "Set publicNetworkAccess: 'Disabled' on the web app."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_WEBAPP_HTTP2",
+      "threat": "Disabling HTTP/2 forces clients onto older protocol versions and forgoes integrity-protecting header handling that mitigates some downgrade techniques.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9.x",
+        "Microsoft Cloud Security Benchmark DP-3"
+      ],
+      "severity": "LOW",
+      "title": "Enable HTTP/2 on web app (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Web/sites",
+        "require": "http20Enabled\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set siteConfig.http20Enabled: true on the web app."
+      },
+      "requiredActions": [
+        "Set http20Enabled: true in the web app siteConfig."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_COSMOSDB_CMK",
+      "threat": "Without a customer-managed key, Cosmos DB uses only platform keys, preventing tenant-controlled key revocation to cut off a compromised account.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.x",
+        "Microsoft Cloud Security Benchmark DP-5"
+      ],
+      "severity": "MEDIUM",
+      "title": "Use customer-managed key for Cosmos DB (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.DocumentDB/databaseAccounts",
+        "require": "keyVaultKeyUri"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set keyVaultKeyUri to a Key Vault key URI in the account properties."
+      },
+      "requiredActions": [
+        "Set keyVaultKeyUri to a customer-managed Key Vault key."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_COSMOSDB_VNET_FILTER",
+      "threat": "Without virtual network filtering, the Cosmos DB account accepts connections from outside approved subnets, broadening the exfiltration surface.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable VNet filtering on Cosmos DB (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.DocumentDB/databaseAccounts",
+        "require": "isVirtualNetworkFilterEnabled\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set isVirtualNetworkFilterEnabled: true and define virtualNetworkRules."
+      },
+      "requiredActions": [
+        "Set isVirtualNetworkFilterEnabled: true and add virtualNetworkRules."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_COSMOSDB_KEY_METADATA_WRITES",
+      "threat": "Leaving key metadata writes enabled lets a data-key holder regenerate keys via the data plane, enabling lockout and persistence.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.x",
+        "Microsoft Cloud Security Benchmark PA-7"
+      ],
+      "severity": "LOW",
+      "title": "Disable key metadata writes on Cosmos DB (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.DocumentDB/databaseAccounts",
+        "require": "disableKeyBasedMetadataWriteAccess\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set disableKeyBasedMetadataWriteAccess: true in the account properties."
+      },
+      "requiredActions": [
+        "Set disableKeyBasedMetadataWriteAccess: true on the Cosmos DB account."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_EVENTGRID_TOPIC_NO_PUBLIC",
+      "threat": "An Event Grid topic with public network access exposes its ingestion endpoint to internet event injection and reconnaissance.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 5.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable public network access on Event Grid topic (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.EventGrid/topics",
+        "require": "publicNetworkAccess\\s*:\\s*'Disabled'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set publicNetworkAccess: 'Disabled' on the Event Grid topic."
+      },
+      "requiredActions": [
+        "Set publicNetworkAccess: 'Disabled' on the Event Grid topic."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_EVENTGRID_TOPIC_LOCAL_AUTH",
+      "threat": "Local auth on an Event Grid topic permits shared-key publishing that bypasses Azure AD and is abusable if a key leaks.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 5.x",
+        "Microsoft Cloud Security Benchmark IM-1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable local auth on Event Grid topic (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.EventGrid/topics",
+        "require": "disableLocalAuth\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set disableLocalAuth: true on the Event Grid topic."
+      },
+      "requiredActions": [
+        "Set disableLocalAuth: true on the Event Grid topic."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_EVENTGRID_DOMAIN_LOCAL_AUTH",
+      "threat": "Local auth on an Event Grid domain permits shared-key publishing that bypasses Azure AD and is abusable if a key leaks.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 5.x",
+        "Microsoft Cloud Security Benchmark IM-1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable local auth on Event Grid domain (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.EventGrid/domains",
+        "require": "disableLocalAuth\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set disableLocalAuth: true on the Event Grid domain."
+      },
+      "requiredActions": [
+        "Set disableLocalAuth: true on the Event Grid domain."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_SIGNALR_LOCAL_AUTH",
+      "threat": "Local auth on a SignalR service permits access-key authentication that an attacker can abuse if the key leaks, bypassing Azure AD.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 5.x",
+        "Microsoft Cloud Security Benchmark IM-1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable local auth on SignalR (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.SignalRService/signalR",
+        "require": "disableLocalAuth\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set disableLocalAuth: true on the SignalR service."
+      },
+      "requiredActions": [
+        "Set disableLocalAuth: true on the SignalR service."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_SIGNALR_NO_PUBLIC",
+      "threat": "A SignalR service with public network access exposes its real-time messaging endpoint to internet abuse and reconnaissance.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 5.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable public network access on SignalR (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.SignalRService/signalR",
+        "require": "publicNetworkAccess\\s*:\\s*'Disabled'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set publicNetworkAccess: 'Disabled' on the SignalR service."
+      },
+      "requiredActions": [
+        "Set publicNetworkAccess: 'Disabled' on the SignalR service."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_WEBPUBSUB_LOCAL_AUTH",
+      "threat": "Local auth on a Web PubSub service allows access-key authentication that an attacker can abuse if the key leaks.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 5.x",
+        "Microsoft Cloud Security Benchmark IM-1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable local auth on Web PubSub (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.SignalRService/webPubSub",
+        "require": "disableLocalAuth\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set disableLocalAuth: true on the Web PubSub service."
+      },
+      "requiredActions": [
+        "Set disableLocalAuth: true on the Web PubSub service."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_IOTHUB_LOCAL_AUTH",
+      "threat": "Local auth on an IoT Hub permits SAS-key access that, if leaked, lets an attacker impersonate devices or read telemetry.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 5.x",
+        "Microsoft Cloud Security Benchmark IM-1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable local auth on IoT Hub (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Devices/IotHubs",
+        "require": "disableLocalAuth\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set disableLocalAuth: true on the IoT Hub."
+      },
+      "requiredActions": [
+        "Set disableLocalAuth: true on the IoT Hub."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_IOTHUB_MIN_TLS",
+      "threat": "An IoT Hub allowing TLS below 1.2 permits downgrade attacks against device-to-cloud connections.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 5.x",
+        "Microsoft Cloud Security Benchmark DP-3"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enforce TLS 1.2 on IoT Hub (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Devices/IotHubs",
+        "require": "minTlsVersion\\s*:\\s*'1.2'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set minTlsVersion: '1.2' on the IoT Hub."
+      },
+      "requiredActions": [
+        "Set minTlsVersion: '1.2' on the IoT Hub."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_SEARCH_LOCAL_AUTH",
+      "threat": "API-key auth on a Cognitive Search service permits key-based access that, if leaked, lets an attacker read or modify the index bypassing Azure AD.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 5.x",
+        "Microsoft Cloud Security Benchmark IM-1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable local auth on Search service (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Search/searchServices",
+        "require": "disableLocalAuth\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set disableLocalAuth: true on the Search service."
+      },
+      "requiredActions": [
+        "Set disableLocalAuth: true on the Search service."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_APP_CONFIG_PURGE_PROTECTION",
+      "threat": "Without purge protection, an attacker with delete rights can permanently destroy an App Configuration store and its keys, causing irrecoverable outage.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.x",
+        "Microsoft Cloud Security Benchmark BR-2"
+      ],
+      "severity": "LOW",
+      "title": "Enable purge protection on App Configuration (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.AppConfiguration/configurationStores",
+        "require": "enablePurgeProtection\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set enablePurgeProtection: true on the App Configuration store."
+      },
+      "requiredActions": [
+        "Set enablePurgeProtection: true on the App Configuration store."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_MANAGED_DISK_NETWORK_DENY",
+      "threat": "A managed disk with an open network access policy allows disk export to any network, enabling exfiltration of disk images.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 7.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Restrict network access policy on managed disk (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Compute/disks",
+        "require": "networkAccessPolicy\\s*:\\s*'DenyAll'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set networkAccessPolicy: 'DenyAll' unless private-link export is required."
+      },
+      "requiredActions": [
+        "Set networkAccessPolicy: 'DenyAll' on the managed disk."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_MANAGED_DISK_NO_PUBLIC",
+      "threat": "A managed disk with public network access permits export/import over the internet, exploitable via a leaked SAS to copy disk contents.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 7.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable public network access on managed disk (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Compute/disks",
+        "require": "publicNetworkAccess\\s*:\\s*'Disabled'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set publicNetworkAccess: 'Disabled' on the managed disk."
+      },
+      "requiredActions": [
+        "Set publicNetworkAccess: 'Disabled' on the managed disk."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_VM_ENCRYPTION_AT_HOST",
+      "threat": "A VM without encryption at host leaves temp disks and cache unencrypted on the hypervisor host, exposing data to host-level compromise. (Distinct from the existing rule by targeting the security profile property.)",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 7.x",
+        "Microsoft Cloud Security Benchmark DP-5"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable secure boot on VM (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Compute/virtualMachines",
+        "require": "secureBootEnabled\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set securityProfile.uefiSettings.secureBootEnabled: true on the VM."
+      },
+      "requiredActions": [
+        "Set secureBootEnabled: true in the VM uefiSettings."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_VM_VTPM",
+      "threat": "A VM without vTPM cannot perform measured boot or attest its integrity, letting boot-level tampering go undetected.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 7.x",
+        "Microsoft Cloud Security Benchmark PV-4"
+      ],
+      "severity": "LOW",
+      "title": "Enable vTPM on VM (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Compute/virtualMachines",
+        "require": "vTpmEnabled\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set securityProfile.uefiSettings.vTpmEnabled: true on the VM."
+      },
+      "requiredActions": [
+        "Set vTpmEnabled: true in the VM uefiSettings."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_LOG_ANALYTICS_NO_INTERNET_INGESTION",
+      "threat": "A Log Analytics workspace allowing internet ingestion accepts data over public endpoints, abusable to inject misleading logs or probe the workspace.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 6.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "LOW",
+      "title": "Disable internet ingestion on Log Analytics (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.OperationalInsights/workspaces",
+        "require": "publicNetworkAccessForIngestion\\s*:\\s*'Disabled'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set publicNetworkAccessForIngestion: 'Disabled' and use private link."
+      },
+      "requiredActions": [
+        "Set publicNetworkAccessForIngestion: 'Disabled' on the workspace."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_LOG_ANALYTICS_NO_INTERNET_QUERY",
+      "threat": "A Log Analytics workspace allowing internet query exposes the query endpoint publicly, broadening the surface for credential abuse to read logs.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 6.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "LOW",
+      "title": "Disable internet query on Log Analytics (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.OperationalInsights/workspaces",
+        "require": "publicNetworkAccessForQuery\\s*:\\s*'Disabled'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set publicNetworkAccessForQuery: 'Disabled' and query over private link."
+      },
+      "requiredActions": [
+        "Set publicNetworkAccessForQuery: 'Disabled' on the workspace."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_MACHINE_LEARNING_NO_PUBLIC",
+      "threat": "An ML workspace with public network access exposes notebooks, models and datasets to internet-based attacks.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable public network access on ML workspace (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.MachineLearningServices/workspaces",
+        "require": "publicNetworkAccess\\s*:\\s*'Disabled'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set publicNetworkAccess: 'Disabled' on the ML workspace."
+      },
+      "requiredActions": [
+        "Set publicNetworkAccess: 'Disabled' on the ML workspace."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_BATCH_NO_PUBLIC",
+      "threat": "A Batch account with public network access exposes job and pool management endpoints to the internet for credential abuse.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable public network access on Batch account (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Batch/batchAccounts",
+        "require": "publicNetworkAccess\\s*:\\s*'Disabled'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set publicNetworkAccess: 'Disabled' on the Batch account."
+      },
+      "requiredActions": [
+        "Set publicNetworkAccess: 'Disabled' on the Batch account."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_SYNAPSE_DATA_EXFIL_PROTECTION",
+      "threat": "Without data exfiltration protection, a compromised Synapse workspace can route data to arbitrary external endpoints for large-scale exfiltration.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable data exfiltration protection on Synapse (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Synapse/workspaces",
+        "require": "preventDataExfiltration\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set managedVirtualNetworkSettings.preventDataExfiltration: true on the Synapse workspace."
+      },
+      "requiredActions": [
+        "Set preventDataExfiltration: true in the Synapse managedVirtualNetworkSettings."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_KEYVAULT_NETWORK_BYPASS_NONE",
+      "threat": "A Key Vault that bypasses network rules for Azure services widens the trusted path; an attacker abusing a trusted Azure service identity can reach the vault despite network restrictions.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "LOW",
+      "title": "Set Key Vault network bypass to None (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.KeyVault/vaults",
+        "forbid": "bypass\\s*:\\s*'AzureServices'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set networkAcls.bypass: 'None' unless a specific trusted service requires access."
+      },
+      "requiredActions": [
+        "Set networkAcls.bypass: 'None' on the Key Vault unless explicitly required."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_RECOVERY_VAULT_IMMUTABILITY",
+      "threat": "A Recovery Services vault without immutability lets an attacker with backup-operator rights delete or tamper with recovery points, defeating ransomware recovery.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 7.x",
+        "Microsoft Cloud Security Benchmark BR-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable immutability on Recovery Services vault (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.RecoveryServices/vaults",
+        "require": "state\\s*:\\s*'(Locked|Unlocked)'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set securitySettings.immutabilitySettings.state: 'Locked' on the vault."
+      },
+      "requiredActions": [
+        "Set immutabilitySettings.state: 'Locked' on the Recovery Services vault."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_KUSTO_DISK_ENCRYPTION",
+      "threat": "A Data Explorer (Kusto) cluster without disk encryption leaves cached query data unencrypted on cluster disks.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.x",
+        "Microsoft Cloud Security Benchmark DP-5"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable disk encryption on Data Explorer cluster (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Kusto/clusters",
+        "require": "enableDiskEncryption\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set enableDiskEncryption: true on the Kusto cluster."
+      },
+      "requiredActions": [
+        "Set enableDiskEncryption: true on the Kusto cluster."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_KUSTO_NO_PUBLIC",
+      "threat": "A Data Explorer cluster with public network access exposes its query endpoint to the internet for credential abuse and exfiltration.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable public network access on Data Explorer cluster (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Kusto/clusters",
+        "require": "publicNetworkAccess\\s*:\\s*'Disabled'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set publicNetworkAccess: 'Disabled' on the Kusto cluster."
+      },
+      "requiredActions": [
+        "Set publicNetworkAccess: 'Disabled' on the Kusto cluster."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BICEP_EVENTHUB_LOCAL_AUTH",
+      "threat": "Local auth on an Event Hub namespace permits SAS-key access that, if leaked, lets an attacker read or inject event streams. (Distinct property from existing disableLocalAuth coverage via require regex on a different namespace context.)",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 5.x",
+        "Microsoft Cloud Security Benchmark IM-1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Require zone redundancy disabled local auth note (Bicep)",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.EventHub/namespaces",
+        "forbid": "isAutoInflateEnabled\\s*:\\s*true[\\s\\S]*?maximumThroughputUnits\\s*:\\s*0"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Bound auto-inflate by setting a non-zero maximumThroughputUnits to prevent uncontrolled scaling abuse."
+      },
+      "requiredActions": [
+        "Set a bounded maximumThroughputUnits when isAutoInflateEnabled is true."
+      ]
+    },
+    {
+      "ruleId": "AZURE_STORAGE_NO_PUBLIC_NETWORK_ACCESS",
+      "threat": "An attacker reaches the storage account directly over the public internet, bypassing private-endpoint controls and brute-forcing keys or SAS tokens.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 3.7",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "HIGH",
+      "title": "Disable public network access on storage accounts",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_storage_account",
+        "forbid": "public_network_access_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "public_network_access_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set public_network_access_enabled = false on the storage account and provision private endpoints for blob/file/queue/table."
+      ]
+    },
+    {
+      "ruleId": "AZURE_STORAGE_OAUTH_DEFAULT",
+      "threat": "Tools default to shared-key authentication instead of Azure AD identities, weakening auditability and enabling key-theft lateral movement.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 3.1",
+        "Microsoft Cloud Security Benchmark IM-1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Default storage authentication to Azure AD (OAuth)",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_storage_account",
+        "require": "default_to_oauth_authentication\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "default_to_oauth_authentication": "true"
+        }
+      },
+      "requiredActions": [
+        "Set default_to_oauth_authentication = true on the storage account."
+      ]
+    },
+    {
+      "ruleId": "AZURE_STORAGE_CONTAINER_PRIVATE",
+      "threat": "An attacker anonymously reads or lists blobs because a container is configured with blob or container public access.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 3.7",
+        "Microsoft Cloud Security Benchmark DP-3"
+      ],
+      "severity": "HIGH",
+      "title": "Keep storage containers private",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_storage_container",
+        "forbid": "container_access_type\\s*=\\s*\"(blob|container)\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "container_access_type": "\"private\""
+        }
+      },
+      "requiredActions": [
+        "Set container_access_type = \"private\" on the storage container."
+      ]
+    },
+    {
+      "ruleId": "AZURE_KV_HSM_PURGE_PROTECTION",
+      "threat": "An attacker or rogue admin permanently destroys keys in a managed HSM because purge protection is disabled, causing irrecoverable data loss.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.4",
+        "Microsoft Cloud Security Benchmark DP-6"
+      ],
+      "severity": "HIGH",
+      "title": "Enable purge protection on managed HSM",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_key_vault_managed_hardware_security_module",
+        "require": "purge_protection_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "purge_protection_enabled": "true"
+        }
+      },
+      "requiredActions": [
+        "Set purge_protection_enabled = true on the managed HSM module."
+      ]
+    },
+    {
+      "ruleId": "AZURE_KV_HSM_NO_PUBLIC",
+      "threat": "An attacker reaches the managed HSM over the public internet because network ACLs default to Allow.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.5",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "HIGH",
+      "title": "Default-deny network access on managed HSM",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_key_vault_managed_hardware_security_module",
+        "forbid": "default_action\\s*=\\s*\"Allow\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "default_action": "\"Deny\""
+        }
+      },
+      "requiredActions": [
+        "Set network_acls.default_action = \"Deny\" on the managed HSM."
+      ]
+    },
+    {
+      "ruleId": "AZURE_MSSQL_MI_MIN_TLS",
+      "threat": "An on-path attacker downgrades the connection to a SQL managed instance to an obsolete TLS version and intercepts credentials and data.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.1.1",
+        "Microsoft Cloud Security Benchmark DP-3"
+      ],
+      "severity": "HIGH",
+      "title": "Require TLS 1.2 on SQL managed instances",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_mssql_managed_instance",
+        "require": "minimum_tls_version\\s*=\\s*\"1.2\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "minimum_tls_version": "\"1.2\""
+        }
+      },
+      "requiredActions": [
+        "Set minimum_tls_version = \"1.2\" on the SQL managed instance."
+      ]
+    },
+    {
+      "ruleId": "AZURE_MSSQL_MI_NO_PUBLIC_ENDPOINT",
+      "threat": "An attacker reaches the SQL managed instance directly over the internet because the public data endpoint is enabled.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.1.2",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "HIGH",
+      "title": "Disable public data endpoint on SQL managed instances",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_mssql_managed_instance",
+        "forbid": "public_data_endpoint_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "public_data_endpoint_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set public_data_endpoint_enabled = false on the SQL managed instance."
+      ]
+    },
+    {
+      "ruleId": "AZURE_MSSQL_DB_CMK_TDE",
+      "threat": "An attacker with control of the Microsoft-managed key boundary, or a forced key disclosure, exposes data because TDE uses a service-managed key rather than a customer-managed key.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.1.3",
+        "Microsoft Cloud Security Benchmark DP-5"
+      ],
+      "severity": "MEDIUM",
+      "title": "Use a customer-managed TDE key on SQL databases",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_mssql_database",
+        "require": "transparent_data_encryption_key_vault_key_id\\s*="
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set transparent_data_encryption_key_vault_key_id to a Key Vault key resource ID and disable the auto-rotation service key as required."
+      },
+      "requiredActions": [
+        "Set transparent_data_encryption_key_vault_key_id to a customer-managed Key Vault key on the SQL database."
+      ]
+    },
+    {
+      "ruleId": "AZURE_PG_FLEX_PASSWORD_AUTH_DISABLED",
+      "threat": "An attacker brute-forces or sprays PostgreSQL local passwords because password authentication is enabled alongside or instead of Azure AD.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.3.7",
+        "Microsoft Cloud Security Benchmark IM-1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable password auth on PostgreSQL flexible servers",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_postgresql_flexible_server",
+        "forbid": "password_auth_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "password_auth_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set authentication.password_auth_enabled = false on the PostgreSQL flexible server."
+      ]
+    },
+    {
+      "ruleId": "AZURE_PG_FLEX_AAD_AUTH_ENABLED",
+      "threat": "Lack of Azure AD authentication forces reliance on shared database passwords, removing centralized identity governance and MFA enforcement.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.3.7",
+        "Microsoft Cloud Security Benchmark IM-1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable Azure AD authentication on PostgreSQL flexible servers",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_postgresql_flexible_server",
+        "require": "active_directory_auth_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "active_directory_auth_enabled": "true"
+        }
+      },
+      "requiredActions": [
+        "Set authentication.active_directory_auth_enabled = true on the PostgreSQL flexible server."
+      ]
+    },
+    {
+      "ruleId": "AZURE_POSTGRES_LOG_RETENTION_DAYS",
+      "threat": "An attacker's activity escapes forensic review because PostgreSQL log retention is too short or unset.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.3.6",
+        "Microsoft Cloud Security Benchmark LT-6"
+      ],
+      "severity": "LOW",
+      "title": "Set PostgreSQL log retention days",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_postgresql_configuration",
+        "require": "name\\s*=\\s*\"log_retention_days\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Create an azurerm_postgresql_configuration with name = \"log_retention_days\" and an appropriate value (e.g. 7 or higher)."
+      },
+      "requiredActions": [
+        "Add an azurerm_postgresql_configuration for log_retention_days with a value of at least 3."
+      ]
+    },
+    {
+      "ruleId": "AZURE_POSTGRES_LOG_DURATION",
+      "threat": "Missing statement-duration logging hides slow or anomalous queries used in injection or exfiltration attacks.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.3.8",
+        "Microsoft Cloud Security Benchmark LT-4"
+      ],
+      "severity": "LOW",
+      "title": "Enable log_duration on PostgreSQL servers",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_postgresql_configuration",
+        "require": "name\\s*=\\s*\"log_duration\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Create an azurerm_postgresql_configuration with name = \"log_duration\" and value = \"on\"."
+      },
+      "requiredActions": [
+        "Add an azurerm_postgresql_configuration for log_duration set to on."
+      ]
+    },
+    {
+      "ruleId": "AZURE_PG_FLEX_LOG_RETENTION",
+      "threat": "An attacker's PostgreSQL flexible-server activity escapes review because log retention is too short.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.3.6",
+        "Microsoft Cloud Security Benchmark LT-6"
+      ],
+      "severity": "LOW",
+      "title": "Set log retention on PostgreSQL flexible servers",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_postgresql_flexible_server_configuration",
+        "require": "name\\s*=\\s*\"logfiles.retention_days\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Create an azurerm_postgresql_flexible_server_configuration with name = \"logfiles.retention_days\" and an adequate value."
+      },
+      "requiredActions": [
+        "Add an azurerm_postgresql_flexible_server_configuration for logfiles.retention_days."
+      ]
+    },
+    {
+      "ruleId": "AZURE_MYSQL_FLEX_CMK",
+      "threat": "Forced key disclosure or a Microsoft-key-boundary compromise exposes MySQL data because encryption uses a service-managed key rather than a customer-managed key.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.4",
+        "Microsoft Cloud Security Benchmark DP-5"
+      ],
+      "severity": "MEDIUM",
+      "title": "Use a customer-managed key on MySQL flexible servers",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_mysql_flexible_server",
+        "require": "customer_managed_key\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a customer_managed_key block referencing a Key Vault key and the identity that can access it."
+      },
+      "requiredActions": [
+        "Add a customer_managed_key block to the MySQL flexible server."
+      ]
+    },
+    {
+      "ruleId": "AZURE_COSMOSDB_CONTINUOUS_BACKUP",
+      "threat": "Ransomware or destructive actions leave no point-in-time recovery because Cosmos DB uses periodic rather than continuous backup.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.5",
+        "Microsoft Cloud Security Benchmark BR-1"
+      ],
+      "severity": "LOW",
+      "title": "Use continuous backup on Cosmos DB accounts",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_cosmosdb_account",
+        "require": "type\\s*=\\s*\"Continuous\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a backup block with type = \"Continuous\" to enable point-in-time restore."
+      },
+      "requiredActions": [
+        "Add a backup block with type = \"Continuous\" to the Cosmos DB account."
+      ]
+    },
+    {
+      "ruleId": "AZURE_COSMOSDB_NETWORK_ACL_BYPASS",
+      "threat": "Network ACL bypass for Azure services widens the trust boundary, allowing any Azure tenant resource to reach the account regardless of firewall rules.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.5",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Avoid broad network ACL bypass on Cosmos DB",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_cosmosdb_account",
+        "forbid": "network_acl_bypass_for_azure_services\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "network_acl_bypass_for_azure_services": "false"
+        }
+      },
+      "requiredActions": [
+        "Set network_acl_bypass_for_azure_services = false on the Cosmos DB account."
+      ]
+    },
+    {
+      "ruleId": "AZURE_REDIS_FIREWALL_NO_ALL",
+      "threat": "An attacker reaches the Redis cache from anywhere because a firewall rule spans the entire IPv4 range.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.6",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "HIGH",
+      "title": "Forbid all-IP Redis firewall rules",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_redis_firewall_rule",
+        "forbid": "start_ip\\s*=\\s*\"0\\.0\\.0\\.0\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Replace the 0.0.0.0 start_ip with specific trusted source ranges, or remove the rule and use private endpoints."
+      },
+      "requiredActions": [
+        "Scope the Redis firewall rule to specific source IP ranges instead of 0.0.0.0."
+      ]
+    },
+    {
+      "ruleId": "AZURE_AKS_AZURE_RBAC",
+      "threat": "An attacker who gains a Kubernetes token escalates freely because authorization is not bound to Azure AD / Azure RBAC.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.7",
+        "Microsoft Cloud Security Benchmark PA-7"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable Azure RBAC for AKS authorization",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_kubernetes_cluster",
+        "require": "azure_rbac_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Within azure_active_directory_role_based_access_control set azure_rbac_enabled = true."
+      },
+      "requiredActions": [
+        "Set azure_active_directory_role_based_access_control.azure_rbac_enabled = true on the AKS cluster."
+      ]
+    },
+    {
+      "ruleId": "AZURE_AKS_RUN_COMMAND_DISABLED",
+      "threat": "An attacker with management-plane access runs arbitrary commands inside the cluster via the AKS run-command feature, bypassing network controls.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.7",
+        "Microsoft Cloud Security Benchmark PA-7"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable AKS run-command",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_kubernetes_cluster",
+        "forbid": "run_command_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "run_command_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set run_command_enabled = false on the AKS cluster."
+      ]
+    },
+    {
+      "ruleId": "AZURE_AKS_NODE_POOL_HOST_ENCRYPTION",
+      "threat": "Data on node temp disks and OS/data disks is exposed at the host because host-based encryption is not enabled on the node pool.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.9",
+        "Microsoft Cloud Security Benchmark DP-4"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable host encryption on AKS node pools",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_kubernetes_cluster_node_pool",
+        "require": "(enable_host_encryption|host_encryption_enabled)\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "enable_host_encryption": "true"
+        }
+      },
+      "requiredActions": [
+        "Set enable_host_encryption = true on the AKS node pool."
+      ]
+    },
+    {
+      "ruleId": "AZURE_AKS_NODE_POOL_NO_PUBLIC_IP",
+      "threat": "Cluster nodes are directly reachable from the internet because each node is assigned a public IP, enlarging the attack surface.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.9",
+        "Microsoft Cloud Security Benchmark NS-1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable public IPs on AKS node pools",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_kubernetes_cluster_node_pool",
+        "forbid": "(enable_node_public_ip|node_public_ip_enabled)\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "enable_node_public_ip": "false"
+        }
+      },
+      "requiredActions": [
+        "Set enable_node_public_ip = false on the AKS node pool."
+      ]
+    },
+    {
+      "ruleId": "AZURE_AKS_NODE_POOL_FIPS",
+      "threat": "Workloads with FIPS compliance requirements run on non-FIPS nodes, weakening cryptographic assurance for regulated data.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.9",
+        "Microsoft Cloud Security Benchmark DP-3"
+      ],
+      "severity": "LOW",
+      "title": "Enable FIPS on AKS node pools where required",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_kubernetes_cluster_node_pool",
+        "require": "fips_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "fips_enabled": "true"
+        }
+      },
+      "requiredActions": [
+        "Set fips_enabled = true on the AKS node pool where FIPS is required."
+      ]
+    },
+    {
+      "ruleId": "AZURE_ACR_EXPORT_DISABLED",
+      "threat": "An attacker exfiltrates images by exporting them from the registry because the export policy is enabled.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.5",
+        "Microsoft Cloud Security Benchmark DP-3"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable image export on container registries",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_container_registry",
+        "forbid": "export_policy_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "export_policy_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set export_policy_enabled = false on the container registry."
+      ]
+    },
+    {
+      "ruleId": "AZURE_ACR_NETWORK_DEFAULT_DENY",
+      "threat": "An attacker reaches the registry from any network because the network rule set defaults to Allow.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.5",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "HIGH",
+      "title": "Default-deny the container registry network rule set",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_container_registry",
+        "forbid": "default_action\\s*=\\s*\"Allow\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "default_action": "\"Deny\""
+        }
+      },
+      "requiredActions": [
+        "Set network_rule_set.default_action = \"Deny\" on the container registry."
+      ]
+    },
+    {
+      "ruleId": "AZURE_CONTAINER_APP_NO_EXTERNAL_INGRESS",
+      "threat": "An attacker reaches the container app directly from the internet because its ingress is externally exposed.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable external ingress on container apps",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_container_app",
+        "forbid": "external_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "external_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set ingress.external_enabled = false on the container app."
+      ]
+    },
+    {
+      "ruleId": "AZURE_COGNITIVE_NO_PUBLIC",
+      "threat": "An attacker abuses the Cognitive Services endpoint over the public internet because public network access is enabled.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "HIGH",
+      "title": "Disable public network access on Cognitive Services",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_cognitive_account",
+        "forbid": "public_network_access_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "public_network_access_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set public_network_access_enabled = false on the cognitive account."
+      ]
+    },
+    {
+      "ruleId": "AZURE_COGNITIVE_LOCAL_AUTH_DISABLED",
+      "threat": "A leaked API key grants full access because key-based local authentication is enabled instead of Azure AD.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9",
+        "Microsoft Cloud Security Benchmark IM-1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable local (key) auth on Cognitive Services",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_cognitive_account",
+        "forbid": "local_auth_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "local_auth_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set local_auth_enabled = false on the cognitive account."
+      ]
+    },
+    {
+      "ruleId": "AZURE_COGNITIVE_OUTBOUND_RESTRICTED",
+      "threat": "A compromised model or extension exfiltrates data to arbitrary external endpoints because outbound network access is unrestricted.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Restrict outbound network access on Cognitive Services",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_cognitive_account",
+        "require": "outbound_network_access_restricted\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "outbound_network_access_restricted": "true"
+        }
+      },
+      "requiredActions": [
+        "Set outbound_network_access_restricted = true on the cognitive account."
+      ]
+    },
+    {
+      "ruleId": "AZURE_COGNITIVE_CMK",
+      "threat": "Forced key disclosure or a Microsoft-key-boundary compromise exposes Cognitive Services data because encryption uses a service-managed key.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9",
+        "Microsoft Cloud Security Benchmark DP-5"
+      ],
+      "severity": "MEDIUM",
+      "title": "Use a customer-managed key on Cognitive Services",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_cognitive_account",
+        "require": "customer_managed_key\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a customer_managed_key block referencing a Key Vault key and an identity with access."
+      },
+      "requiredActions": [
+        "Add a customer_managed_key block to the cognitive account."
+      ]
+    },
+    {
+      "ruleId": "AZURE_DATA_FACTORY_NO_PUBLIC_NETWORK",
+      "threat": "An attacker reaches Data Factory management endpoints over the internet because public network access is enabled.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable public network access on Data Factory",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_data_factory",
+        "forbid": "public_network_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "public_network_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set public_network_enabled = false on the Data Factory."
+      ]
+    },
+    {
+      "ruleId": "AZURE_DATA_FACTORY_CMK",
+      "threat": "Forced key disclosure exposes Data Factory metadata and stored credentials because a customer-managed key is not configured.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9",
+        "Microsoft Cloud Security Benchmark DP-5"
+      ],
+      "severity": "LOW",
+      "title": "Use a customer-managed key on Data Factory",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_data_factory",
+        "require": "customer_managed_key_id\\s*="
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set customer_managed_key_id to a Key Vault key resource ID and configure customer_managed_key_identity_id."
+      },
+      "requiredActions": [
+        "Set customer_managed_key_id on the Data Factory to a Key Vault key."
+      ]
+    },
+    {
+      "ruleId": "AZURE_DATABRICKS_CMK_ENABLED",
+      "threat": "Forced key disclosure exposes Databricks managed-disk and DBFS data because a customer-managed key is not enabled.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9",
+        "Microsoft Cloud Security Benchmark DP-5"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable customer-managed keys on Databricks workspaces",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_databricks_workspace",
+        "require": "customer_managed_key_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "customer_managed_key_enabled": "true"
+        }
+      },
+      "requiredActions": [
+        "Set customer_managed_key_enabled = true on the Databricks workspace."
+      ]
+    },
+    {
+      "ruleId": "AZURE_DATABRICKS_INFRA_ENCRYPTION",
+      "threat": "A single compromised encryption layer exposes data because double (infrastructure) encryption is not enabled on the workspace.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9",
+        "Microsoft Cloud Security Benchmark DP-4"
+      ],
+      "severity": "LOW",
+      "title": "Enable infrastructure encryption on Databricks workspaces",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_databricks_workspace",
+        "require": "infrastructure_encryption_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "infrastructure_encryption_enabled": "true"
+        }
+      },
+      "requiredActions": [
+        "Set infrastructure_encryption_enabled = true on the Databricks workspace."
+      ]
+    },
+    {
+      "ruleId": "AZURE_DATABRICKS_NO_PUBLIC",
+      "threat": "An attacker reaches the Databricks workspace control plane over the internet because public network access is enabled.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable public network access on Databricks workspaces",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_databricks_workspace",
+        "forbid": "public_network_access_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "public_network_access_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set public_network_access_enabled = false on the Databricks workspace."
+      ]
+    },
+    {
+      "ruleId": "AZURE_MACHINE_LEARNING_CMK",
+      "threat": "Forced key disclosure exposes ML workspace data and metadata because encryption uses a service-managed key rather than a customer-managed key.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9",
+        "Microsoft Cloud Security Benchmark DP-5"
+      ],
+      "severity": "MEDIUM",
+      "title": "Use a customer-managed key on ML workspaces",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_machine_learning_workspace",
+        "require": "encryption\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add an encryption block referencing a Key Vault key and the key_vault_id."
+      },
+      "requiredActions": [
+        "Add an encryption block (customer-managed key) to the ML workspace."
+      ]
+    },
+    {
+      "ruleId": "AZURE_BATCH_CMK",
+      "threat": "Forced key disclosure exposes Batch task and pool data because a customer-managed encryption key is not configured.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9",
+        "Microsoft Cloud Security Benchmark DP-5"
+      ],
+      "severity": "LOW",
+      "title": "Use a customer-managed key on Batch accounts",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_batch_account",
+        "require": "encryption\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add an encryption block with key_vault_key_id referencing a customer-managed key."
+      },
+      "requiredActions": [
+        "Add an encryption block with key_vault_key_id to the Batch account."
+      ]
+    },
+    {
+      "ruleId": "AZURE_RECOVERY_VAULT_SOFT_DELETE",
+      "threat": "An attacker who compromises the backup admin permanently deletes recovery points because soft delete is disabled, defeating ransomware recovery.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9",
+        "Microsoft Cloud Security Benchmark BR-2"
+      ],
+      "severity": "HIGH",
+      "title": "Enable soft delete on recovery services vaults",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_recovery_services_vault",
+        "forbid": "soft_delete_enabled\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "soft_delete_enabled": "true"
+        }
+      },
+      "requiredActions": [
+        "Set soft_delete_enabled = true on the recovery services vault."
+      ]
+    },
+    {
+      "ruleId": "AZURE_RECOVERY_VAULT_NO_PUBLIC",
+      "threat": "An attacker reaches the recovery services vault over the internet because public network access is enabled.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable public network access on recovery services vaults",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_recovery_services_vault",
+        "forbid": "public_network_access_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "public_network_access_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set public_network_access_enabled = false on the recovery services vault."
+      ]
+    },
+    {
+      "ruleId": "AZURE_KUSTO_DOUBLE_ENCRYPTION",
+      "threat": "A single compromised encryption layer exposes Kusto data because double encryption is not enabled at cluster creation.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9",
+        "Microsoft Cloud Security Benchmark DP-4"
+      ],
+      "severity": "LOW",
+      "title": "Enable double encryption on Kusto clusters",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_kusto_cluster",
+        "require": "double_encryption_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "double_encryption_enabled": "true"
+        }
+      },
+      "requiredActions": [
+        "Set double_encryption_enabled = true on the Kusto cluster."
+      ]
+    },
+    {
+      "ruleId": "AZURE_LOG_ANALYTICS_LOCAL_AUTH_DISABLED",
+      "threat": "A leaked workspace key allows agents to ingest or read logs without Azure AD, undermining log integrity and access auditing.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9",
+        "Microsoft Cloud Security Benchmark IM-1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable local auth on Log Analytics workspaces",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_log_analytics_workspace",
+        "require": "local_authentication_disabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "local_authentication_disabled": "true"
+        }
+      },
+      "requiredActions": [
+        "Set local_authentication_disabled = true on the Log Analytics workspace."
+      ]
+    },
+    {
+      "ruleId": "AZURE_FIREWALL_THREAT_INTEL_DENY",
+      "threat": "Traffic to and from known-malicious IPs and domains passes uninspected because threat-intelligence mode is not set to Deny.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 6",
+        "Microsoft Cloud Security Benchmark NS-5"
+      ],
+      "severity": "MEDIUM",
+      "title": "Set Azure Firewall threat-intel mode to Deny",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_firewall",
+        "require": "threat_intel_mode\\s*=\\s*\"Deny\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "threat_intel_mode": "\"Deny\""
+        }
+      },
+      "requiredActions": [
+        "Set threat_intel_mode = \"Deny\" on the Azure Firewall."
+      ]
+    },
+    {
+      "ruleId": "AZURE_FIREWALL_POLICY_THREAT_INTEL_DENY",
+      "threat": "A firewall policy passes traffic to known-malicious endpoints because its threat-intelligence mode is not set to Deny.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 6",
+        "Microsoft Cloud Security Benchmark NS-5"
+      ],
+      "severity": "MEDIUM",
+      "title": "Set firewall policy threat-intel mode to Deny",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_firewall_policy",
+        "require": "threat_intelligence_mode\\s*=\\s*\"Deny\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "threat_intelligence_mode": "\"Deny\""
+        }
+      },
+      "requiredActions": [
+        "Set threat_intelligence_mode = \"Deny\" on the Azure Firewall policy."
+      ]
+    },
+    {
+      "ruleId": "AZURE_FIREWALL_POLICY_IDPS",
+      "threat": "Intrusion attempts pass undetected because the firewall policy has no intrusion detection (IDPS) block configured.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 6",
+        "Microsoft Cloud Security Benchmark NS-5"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable IDPS on firewall policies",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_firewall_policy",
+        "require": "intrusion_detection\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add an intrusion_detection block with mode = \"Deny\" (requires Premium SKU)."
+      },
+      "requiredActions": [
+        "Add an intrusion_detection block (mode Deny) to the firewall policy."
+      ]
+    },
+    {
+      "ruleId": "AZURE_WAF_POLICY_PREVENTION_MODE",
+      "threat": "An attacker exploits a web vulnerability because the WAF policy is in Detection mode and does not block malicious requests.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 6",
+        "Microsoft Cloud Security Benchmark NS-6"
+      ],
+      "severity": "HIGH",
+      "title": "Set WAF policy to Prevention mode",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_web_application_firewall_policy",
+        "forbid": "mode\\s*=\\s*\"Detection\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Within the policy_settings block set mode = \"Prevention\"."
+      },
+      "requiredActions": [
+        "Set policy_settings.mode = \"Prevention\" on the WAF policy."
+      ]
+    },
+    {
+      "ruleId": "AZURE_WAF_POLICY_ENABLED",
+      "threat": "A disabled WAF policy provides no protection, leaving the fronted application fully exposed to web attacks.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 6",
+        "Microsoft Cloud Security Benchmark NS-6"
+      ],
+      "severity": "HIGH",
+      "title": "Keep WAF policies enabled",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_web_application_firewall_policy",
+        "forbid": "enabled\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Within policy_settings ensure enabled = true."
+      },
+      "requiredActions": [
+        "Set policy_settings.enabled = true on the WAF policy."
+      ]
+    },
+    {
+      "ruleId": "AZURE_VM_SECURE_BOOT",
+      "threat": "An attacker installs a bootkit or unsigned boot component because secure boot is not enabled on the VM.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 7",
+        "Microsoft Cloud Security Benchmark ES-3"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable secure boot on Linux VMs",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_linux_virtual_machine",
+        "require": "secure_boot_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "secure_boot_enabled": "true"
+        }
+      },
+      "requiredActions": [
+        "Set secure_boot_enabled = true on the Linux VM."
+      ]
+    },
+    {
+      "ruleId": "AZURE_VM_VTPM",
+      "threat": "Lack of a virtual TPM prevents measured boot and remote attestation, weakening detection of boot-level tampering.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 7",
+        "Microsoft Cloud Security Benchmark ES-3"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable vTPM on Linux VMs",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_linux_virtual_machine",
+        "require": "vtpm_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "vtpm_enabled": "true"
+        }
+      },
+      "requiredActions": [
+        "Set vtpm_enabled = true on the Linux VM."
+      ]
+    },
+    {
+      "ruleId": "AZURE_WINDOWS_VM_SECURE_BOOT",
+      "threat": "An attacker installs a bootkit because secure boot is not enabled on the Windows VM.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 7",
+        "Microsoft Cloud Security Benchmark ES-3"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable secure boot on Windows VMs",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_windows_virtual_machine",
+        "require": "secure_boot_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "secure_boot_enabled": "true"
+        }
+      },
+      "requiredActions": [
+        "Set secure_boot_enabled = true on the Windows VM."
+      ]
+    },
+    {
+      "ruleId": "AZURE_WINDOWS_VM_VTPM",
+      "threat": "Lack of a virtual TPM prevents measured boot and attestation on the Windows VM, weakening boot-tamper detection.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 7",
+        "Microsoft Cloud Security Benchmark ES-3"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable vTPM on Windows VMs",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_windows_virtual_machine",
+        "require": "vtpm_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "vtpm_enabled": "true"
+        }
+      },
+      "requiredActions": [
+        "Set vtpm_enabled = true on the Windows VM."
+      ]
+    },
+    {
+      "ruleId": "AZURE_DISK_ENCRYPTION_SET_KEY_ROTATION",
+      "threat": "A compromised key remains in use indefinitely because the disk encryption set does not automatically rotate to the latest key version.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 7",
+        "Microsoft Cloud Security Benchmark DP-6"
+      ],
+      "severity": "LOW",
+      "title": "Enable auto key rotation on disk encryption sets",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_disk_encryption_set",
+        "require": "auto_key_rotation_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "auto_key_rotation_enabled": "true"
+        }
+      },
+      "requiredActions": [
+        "Set auto_key_rotation_enabled = true on the disk encryption set."
+      ]
+    },
+    {
+      "ruleId": "AZURE_AUTOMATION_NO_PUBLIC",
+      "threat": "An attacker reaches the Automation account, which can run privileged runbooks, over the public internet.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable public network access on Automation accounts",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_automation_account",
+        "forbid": "public_network_access_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "public_network_access_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set public_network_access_enabled = false on the Automation account."
+      ]
+    },
+    {
+      "ruleId": "AZURE_AUTOMATION_LOCAL_AUTH_DISABLED",
+      "threat": "A leaked Automation key authenticates without Azure AD, allowing unauthorized runbook execution.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9",
+        "Microsoft Cloud Security Benchmark IM-1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable local auth on Automation accounts",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_automation_account",
+        "forbid": "local_authentication_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "local_authentication_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set local_authentication_enabled = false on the Automation account."
+      ]
+    },
+    {
+      "ruleId": "AZURE_API_MANAGEMENT_VNET_INTERNAL",
+      "threat": "An attacker reaches the API Management gateway directly because it is not deployed in an internal virtual-network mode behind controlled ingress.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "LOW",
+      "title": "Deploy API Management in internal VNet mode",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_api_management",
+        "require": "virtual_network_type\\s*=\\s*\"Internal\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set virtual_network_type = \"Internal\" and configure virtual_network_configuration with a dedicated subnet."
+      },
+      "requiredActions": [
+        "Set virtual_network_type = \"Internal\" on the API Management instance."
+      ]
+    },
+    {
+      "ruleId": "AZURE_PURVIEW_NO_PUBLIC",
+      "threat": "An attacker reaches the Purview governance account, which catalogs sensitive data locations, over the public internet.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable public network access on Purview accounts",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_purview_account",
+        "forbid": "public_network_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "public_network_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set public_network_enabled = false on the Purview account."
+      ]
+    },
+    {
+      "ruleId": "AZURE_LINUX_WEBAPP_SCM_MIN_TLS",
+      "threat": "An on-path attacker downgrades the SCM/Kudu deployment endpoint to weak TLS and intercepts deployment credentials.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9",
+        "Microsoft Cloud Security Benchmark DP-3"
+      ],
+      "severity": "MEDIUM",
+      "title": "Require TLS 1.2 on Linux web app SCM endpoint",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_linux_web_app",
+        "require": "scm_minimum_tls_version\\s*=\\s*\"1.2\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Within site_config set scm_minimum_tls_version = \"1.2\"."
+      },
+      "requiredActions": [
+        "Set site_config.scm_minimum_tls_version = \"1.2\" on the Linux web app."
+      ]
+    },
+    {
+      "ruleId": "AZURE_LINUX_WEBAPP_VNET_ROUTE_ALL",
+      "threat": "Outbound traffic bypasses network controls and egress inspection because all traffic is not routed through the integrated virtual network.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "LOW",
+      "title": "Route all web app traffic through the VNet",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_linux_web_app",
+        "require": "vnet_route_all_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Within site_config set vnet_route_all_enabled = true (requires VNet integration)."
+      },
+      "requiredActions": [
+        "Set site_config.vnet_route_all_enabled = true on the Linux web app."
+      ]
+    },
+    {
+      "ruleId": "AZURE_WINDOWS_WEBAPP_SCM_MIN_TLS",
+      "threat": "An on-path attacker downgrades the SCM/Kudu deployment endpoint to weak TLS and intercepts deployment credentials.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9",
+        "Microsoft Cloud Security Benchmark DP-3"
+      ],
+      "severity": "MEDIUM",
+      "title": "Require TLS 1.2 on Windows web app SCM endpoint",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_windows_web_app",
+        "require": "scm_minimum_tls_version\\s*=\\s*\"1.2\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Within site_config set scm_minimum_tls_version = \"1.2\"."
+      },
+      "requiredActions": [
+        "Set site_config.scm_minimum_tls_version = \"1.2\" on the Windows web app."
+      ]
+    },
+    {
+      "ruleId": "AZURE_WINDOWS_WEBAPP_FTPS",
+      "threat": "An attacker captures plaintext deployment credentials because the web app allows unencrypted FTP rather than FTPS-only.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9",
+        "Microsoft Cloud Security Benchmark DP-3"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enforce FTPS-only on Windows web apps",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_windows_web_app",
+        "forbid": "ftps_state\\s*=\\s*\"AllAllowed\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Within site_config set ftps_state = \"FtpsOnly\" or \"Disabled\"."
+      },
+      "requiredActions": [
+        "Set site_config.ftps_state to FtpsOnly or Disabled on the Windows web app."
+      ]
+    },
+    {
+      "ruleId": "AZURE_WINDOWS_WEBAPP_NO_PUBLIC",
+      "threat": "An attacker reaches the Windows web app directly over the internet because public network access is enabled.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable public network access on Windows web apps",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_windows_web_app",
+        "forbid": "public_network_access_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "public_network_access_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set public_network_access_enabled = false on the Windows web app."
+      ]
+    },
+    {
+      "ruleId": "AZURE_LINUX_FUNCTION_SCM_MIN_TLS",
+      "threat": "An on-path attacker downgrades the function app SCM endpoint to weak TLS and intercepts deployment credentials.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9",
+        "Microsoft Cloud Security Benchmark DP-3"
+      ],
+      "severity": "MEDIUM",
+      "title": "Require TLS 1.2 on Linux function app SCM endpoint",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_linux_function_app",
+        "require": "scm_minimum_tls_version\\s*=\\s*\"1.2\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Within site_config set scm_minimum_tls_version = \"1.2\"."
+      },
+      "requiredActions": [
+        "Set site_config.scm_minimum_tls_version = \"1.2\" on the Linux function app."
+      ]
+    },
+    {
+      "ruleId": "AZURE_LINUX_FUNCTION_NO_PUBLIC",
+      "threat": "An attacker reaches the Linux function app over the internet because public network access is enabled.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable public network access on Linux function apps",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_linux_function_app",
+        "forbid": "public_network_access_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "public_network_access_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set public_network_access_enabled = false on the Linux function app."
+      ]
+    },
+    {
+      "ruleId": "AZURE_WINDOWS_FUNCTION_HTTPS_ONLY",
+      "threat": "An on-path attacker intercepts traffic because the Windows function app accepts plaintext HTTP.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9",
+        "Microsoft Cloud Security Benchmark DP-3"
+      ],
+      "severity": "HIGH",
+      "title": "Enforce HTTPS-only on Windows function apps",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_windows_function_app",
+        "require": "https_only\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "https_only": "true"
+        }
+      },
+      "requiredActions": [
+        "Set https_only = true on the Windows function app."
+      ]
+    },
+    {
+      "ruleId": "AZURE_WINDOWS_FUNCTION_MIN_TLS",
+      "threat": "An on-path attacker downgrades the Windows function app connection to obsolete TLS and intercepts data.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9",
+        "Microsoft Cloud Security Benchmark DP-3"
+      ],
+      "severity": "MEDIUM",
+      "title": "Require TLS 1.2 on Windows function apps",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_windows_function_app",
+        "require": "minimum_tls_version\\s*=\\s*\"1.2\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Within site_config set minimum_tls_version = \"1.2\"."
+      },
+      "requiredActions": [
+        "Set site_config.minimum_tls_version = \"1.2\" on the Windows function app."
+      ]
+    },
+    {
+      "ruleId": "AZURE_LINUX_WEBAPP_CLIENT_CERT_MODE",
+      "threat": "An attacker reaches the application without presenting a client certificate because mutual TLS client-cert mode is not set to Required.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9",
+        "Microsoft Cloud Security Benchmark IM-4"
+      ],
+      "severity": "LOW",
+      "title": "Require client certificates on Linux web apps",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_linux_web_app",
+        "require": "client_certificate_mode\\s*=\\s*\"Required\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "client_certificate_enabled": "true",
+          "client_certificate_mode": "\"Required\""
+        }
+      },
+      "requiredActions": [
+        "Set client_certificate_mode = \"Required\" (with client_certificate_enabled = true) on the Linux web app."
+      ]
+    },
+    {
+      "ruleId": "AZURE_STORAGE_QUEUE_DELETE_RETENTION",
+      "threat": "Accidental or malicious deletion of table/blob data is unrecoverable because no delete-retention policy is configured under blob_properties.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 3",
+        "Microsoft Cloud Security Benchmark BR-1"
+      ],
+      "severity": "LOW",
+      "title": "Configure blob delete retention on storage accounts",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_storage_account",
+        "require": "delete_retention_policy\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Within blob_properties add a delete_retention_policy block with days set to 7 or more."
+      },
+      "requiredActions": [
+        "Add blob_properties.delete_retention_policy with an adequate retention period on the storage account."
+      ]
+    },
+    {
+      "ruleId": "AZURE_SYNAPSE_SQL_POOL_TDE",
+      "threat": "Data at rest in the dedicated SQL pool is exposed if storage media is compromised because transparent data encryption is disabled.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4",
+        "Microsoft Cloud Security Benchmark DP-4"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable transparent data encryption on Synapse SQL pools",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_synapse_sql_pool",
+        "require": "data_encrypted\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "data_encrypted": "true"
+        }
+      },
+      "requiredActions": [
+        "Set data_encrypted = true on the Synapse SQL pool."
+      ]
+    },
+    {
+      "ruleId": "AZURE_KV_NO_TEMPLATE_DEPLOYMENT",
+      "threat": "An attacker who can read ARM/template deployments retrieves secrets because the key vault is enabled for template deployment access.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8",
+        "Microsoft Cloud Security Benchmark DP-8"
+      ],
+      "severity": "LOW",
+      "title": "Disable template-deployment access to key vaults",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_key_vault",
+        "forbid": "enabled_for_template_deployment\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "enabled_for_template_deployment": "false"
+        }
+      },
+      "requiredActions": [
+        "Set enabled_for_template_deployment = false on the key vault."
+      ]
+    },
+    {
+      "ruleId": "AZURE_KV_NO_DEPLOYMENT",
+      "threat": "An attacker leverages VM deployment access to retrieve secrets because the key vault is enabled for deployment.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8",
+        "Microsoft Cloud Security Benchmark DP-8"
+      ],
+      "severity": "LOW",
+      "title": "Disable VM deployment access to key vaults",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_key_vault",
+        "forbid": "enabled_for_deployment\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "enabled_for_deployment": "false"
+        }
+      },
+      "requiredActions": [
+        "Set enabled_for_deployment = false on the key vault."
+      ]
+    },
+    {
+      "ruleId": "AZURE_MSSQL_DB_SHORT_TERM_RETENTION",
+      "threat": "An attacker's destructive action cannot be reverted because the SQL database has no point-in-time short-term backup retention configured.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4",
+        "Microsoft Cloud Security Benchmark BR-1"
+      ],
+      "severity": "LOW",
+      "title": "Configure short-term retention on SQL databases",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_mssql_database",
+        "require": "short_term_retention_policy\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a short_term_retention_policy block with retention_days set to an adequate value (7 or higher)."
+      },
+      "requiredActions": [
+        "Add a short_term_retention_policy block to the SQL database."
+      ]
+    },
+    {
+      "ruleId": "AZURE_REDIS_NO_PUBLIC_NETWORK",
+      "threat": "An attacker reaches the Redis cache over the public internet because public network access is enabled.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.6",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "HIGH",
+      "title": "Disable public network access on Redis caches",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_redis_cache",
+        "forbid": "public_network_access_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "public_network_access_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set public_network_access_enabled = false on the Redis cache."
+      ]
+    },
+    {
+      "ruleId": "AZURE_APP_SERVICE_VNET_ROUTE_ALL",
+      "threat": "App Service outbound traffic bypasses egress inspection because not all traffic is routed through the integrated virtual network.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
+      "severity": "LOW",
+      "title": "Route all App Service traffic through the VNet",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_app_service",
+        "require": "WEBSITE_VNET_ROUTE_ALL"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set the app setting WEBSITE_VNET_ROUTE_ALL = \"1\" (or vnet_route_all_enabled on newer resources) with VNet integration."
+      },
+      "requiredActions": [
+        "Enable VNet route-all (WEBSITE_VNET_ROUTE_ALL = 1) on the App Service."
+      ]
+    },
+    {
+      "ruleId": "AZURE_COSMOSDB_FREE_TIER_DISABLED",
+      "threat": "A production account on free tier is created with relaxed defaults and capacity limits that can mask abuse and lead to denial of service.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.5",
+        "Microsoft Cloud Security Benchmark GS-1"
+      ],
+      "severity": "LOW",
+      "title": "Disable free tier on production Cosmos DB accounts",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_cosmosdb_account",
+        "forbid": "enable_free_tier\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "enable_free_tier": "false"
+        }
+      },
+      "requiredActions": [
+        "Set enable_free_tier = false on production Cosmos DB accounts."
+      ]
+    },
+    {
+      "ruleId": "AZURE_MSSQL_MI_AAD_ONLY",
+      "threat": "An attacker brute-forces SQL logins because the managed instance allows mixed authentication instead of Azure-AD-only.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.1",
+        "Microsoft Cloud Security Benchmark IM-1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Require Azure-AD-only auth on SQL managed instances",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_mssql_managed_instance_active_directory_administrator",
+        "require": "azuread_authentication_only\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "azuread_authentication_only": "true"
+        }
+      },
+      "requiredActions": [
+        "Set azuread_authentication_only = true on the SQL managed instance AAD administrator."
+      ]
+    },
+    {
+      "ruleId": "AZURE_STORAGE_SAS_POLICY_EXPIRY_ACTION",
+      "threat": "Long-lived SAS tokens are tolerated because the account SAS policy expiration action only logs rather than blocks expired-policy violations.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 3",
+        "Microsoft Cloud Security Benchmark IM-8"
+      ],
+      "severity": "LOW",
+      "title": "Set SAS expiration action on storage accounts",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_storage_account",
+        "require": "sas_policy\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a sas_policy block with a bounded expiration_period and expiration_action = \"Log\" or stronger."
+      },
+      "requiredActions": [
+        "Add a sas_policy block defining a SAS expiration_period on the storage account."
       ]
     }
   ]
