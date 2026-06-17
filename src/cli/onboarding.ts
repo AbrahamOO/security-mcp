@@ -416,10 +416,14 @@ async function installFromGitHub(tool: SecurityTool, os: OsType): Promise<boolea
       }
       print(`     Integrity verified (SHA-256 matched).`);
     } else {
-      print(`     Warning: checksum file found but no entry for ${fileName} — proceeding without verification.`);
+      print(`     ABORT: checksum file found but no entry for ${fileName} — refusing to install an unverified binary (CWE-494).`);
+      try { unlinkSync(tmpFile); } catch { /* ignore cleanup failure */ }
+      return false;
     }
   } else {
-    print(`     Warning: no checksum file in release assets — cannot verify binary integrity.`);
+    print(`     ABORT: no checksum file in release assets — refusing to install an unverified binary (CWE-494).`);
+    try { unlinkSync(tmpFile); } catch { /* ignore cleanup failure */ }
+    return false;
   }
 
   const destDir = "/usr/local/bin";
@@ -511,11 +515,10 @@ async function tryDnf(tool: SecurityTool): Promise<boolean> {
   return run("sudo", [mgr, "install", "-y", "trivy"]);
 }
 
-async function tryInstallScript(tool: SecurityTool): Promise<boolean> {
-  if (!tool.installScript || !commandExists("curl") || !commandExists("sh")) return false;
-  print(`     Running official install script for ${tool.displayName}...`);
-  return run("bash", ["-c", tool.installScript]);
-}
+// REMOVED (CWE-78/CWE-494): the `curl … | sudo sh` install-script strategy piped an
+// unpinned, live-fetched script into root with no checksum — a compromise of the upstream
+// repo or a MITM yielded root RCE on `security-mcp install`. Tools are now installed only
+// via OS package managers or the checksum-verified GitHub-release path (installFromGitHub).
 
 async function tryWinget(tool: SecurityTool): Promise<boolean> {
   if (!tool.winget || !commandExists("winget")) return false;
@@ -547,7 +550,6 @@ async function installSingleTool(tool: SecurityTool, os: OsType): Promise<boolea
       () => tryBrew(tool),
       () => tryPip(tool),
       () => tryGoInstall(tool),
-      () => tryInstallScript(tool),
       () => installFromGitHub(tool, os)
     );
   } else if (os === "linux") {
@@ -556,7 +558,6 @@ async function installSingleTool(tool: SecurityTool, os: OsType): Promise<boolea
       () => tryDnf(tool),
       () => tryPip(tool),
       () => tryGoInstall(tool),
-      () => tryInstallScript(tool),
       () => installFromGitHub(tool, os)
     );
   } else {

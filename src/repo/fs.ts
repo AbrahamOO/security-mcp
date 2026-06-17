@@ -1,5 +1,12 @@
-import { readFile, realpath } from "node:fs/promises";
+import { readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
+
+// Upper bound on the size of any single file the gate will read into memory.
+// A malicious target repo can otherwise ship multi-GB files (or one huge
+// contiguous token) to exhaust memory, or trigger V8 RangeError in the
+// secret-scanner's global-regex passes. 10 MB comfortably covers real source,
+// lockfiles, and minified bundles while bounding blast radius. CWE-400 / CWE-789.
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
 function getWorkspaceRoot(): string {
 	return process.cwd();
@@ -40,6 +47,14 @@ export async function readFileSafe(relPath: string): Promise<string> {
 		// because readFile() would follow symlinks using the unverified lexical path,
 		// enabling traversal to out-of-workspace targets. CWE-61 / CAPEC-132.
 		throw new Error(`Cannot verify path safety for ${relPath}: ${(e as Error).message}`);
+	}
+
+	// CWE-400/CWE-789: refuse oversized files so a hostile repo cannot exhaust
+	// memory or feed a multi-MB contiguous token into a global regex (RangeError).
+	// Loop-callers (secret/cloud-controls/search scanners) catch this and skip the file.
+	const { size } = await stat(p);
+	if (size > MAX_FILE_BYTES) {
+		throw new Error(`File too large to scan safely: ${relPath} (${size} bytes > ${MAX_FILE_BYTES})`);
 	}
 
 	return await readFile(p, "utf8");

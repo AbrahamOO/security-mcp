@@ -7,7 +7,6 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { homedir, platform } from "node:os";
-import * as https from "node:https";
 import { fileURLToPath } from "node:url";
 import {
   runOnboarding,
@@ -210,60 +209,10 @@ function installSkill(dryRun: boolean): void {
  * Mirrors the same pattern used for security tool binary downloads in onboarding.ts.
  */
 // CWE-22: only alphanumeric, hyphens, and dots allowed in skill names
-const SAFE_SKILL_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/;
-// CWE-918: allowlist for skill download hosts — no user-controlled URLs reach the network
-const ALLOWED_SKILL_HOSTS = new Set(["raw.githubusercontent.com", "github.com"]);
-
-export async function downloadSkill(skillName: string, url: string, dryRun = false): Promise<void> {
-  if (!SAFE_SKILL_NAME_RE.test(skillName)) {
-    process.stdout.write(`  [error] invalid skill name "${skillName}" — skipping download\n`);
-    return;
-  }
-  try {
-    const { hostname } = new URL(url);
-    if (!ALLOWED_SKILL_HOSTS.has(hostname)) {
-      process.stdout.write(`  [error] blocked skill download from unauthorized host "${hostname}"\n`);
-      return;
-    }
-  } catch {
-    process.stdout.write(`  [error] invalid skill URL "${url}" — skipping download\n`);
-    return;
-  }
-  const skillDest = resolveHome(`~/.claude/skills/${skillName}/SKILL.md`);
-
-  if (dryRun) {
-    process.stdout.write(`  [dry-run] would download skill "${skillName}" from ${url} → ${skillDest}\n`);
-    return;
-  }
-
-  const MAX_SKILL_BYTES = 512 * 1024; // 512 KB — skills are markdown files
-  const content = await new Promise<string | null>((resolve) => {
-    const req = https.get(url, { headers: { "User-Agent": "security-mcp" } }, (res) => {
-      if ((res.statusCode ?? 500) >= 400) { res.resume(); resolve(null); return; }
-      let body = "";
-      res.setEncoding("utf8");
-      res.on("data", (chunk: string) => {
-        body += chunk;
-        if (Buffer.byteLength(body, "utf8") > MAX_SKILL_BYTES) {
-          req.destroy();
-          resolve(null);
-        }
-      });
-      res.on("end", () => resolve(body));
-    });
-    req.on("error", () => resolve(null));
-    req.setTimeout(10000, () => { req.destroy(); resolve(null); });
-  });
-
-  if (!content) {
-    process.stdout.write(`  [error] failed to download skill "${skillName}" from ${url}\n`);
-    return;
-  }
-
-  mkdirSync(dirname(skillDest), { recursive: true });
-  writeFileSync(skillDest, content, "utf-8");
-  process.stdout.write(`  installed skill: ${skillDest}\n`);
-}
+// REMOVED downloadSkill(): an unused, integrity-free network skill installer
+// (no sha256, no content sanitization) that, if ever wired up, would bypass every
+// protection in orchestration.ensureSkill. Skills are bundled in the package and
+// resolved locally by ensureSkill; there is no need for an unauthenticated fetcher.
 
 /**
  * Eagerly install the orchestrator skill (bundled in the package) plus record

@@ -265,11 +265,23 @@ async function checkNpmProvenance(): Promise<{ findings: Finding[] }> {
 				}
 			);
 
-			// Merge: prod deps first, then CI-executed dev deps, up to 20
-			const depsToCheck = [...new Set([...prodDeps, ...devDepsUsedInScripts])].slice(0, 20);
+			// Merge: prod deps first, then CI-executed dev deps, up to 20.
+			// CWE-200: never transmit private/internal package names to public
+			// endpoints (registry.npmjs.org / securityscorecards.dev). Skip any
+			// scoped package whose scope is not a known-public scope.
+			const depsToCheck = [...new Set([...prodDeps, ...devDepsUsedInScripts])]
+				.filter((dep) => {
+					const scope = dep.startsWith("@") ? dep.split("/")[0] : null;
+					return scope === null || KNOWN_PUBLIC_SCOPES.has(scope);
+				})
+				.slice(0, 20);
 			const totalAllDeps = prodDeps.length + Object.keys(pkg.devDependencies ?? {}).length;
 
-			for (const dep of depsToCheck) {
+			// CWE-200: allow operators of private repos to disable all third-party
+			// network egress (scorecard/EPSS/registry lookups) with SECURITY_OFFLINE.
+			const offline = process.env["SECURITY_OFFLINE"] === "1" || process.env["SECURITY_OFFLINE"] === "true";
+
+			for (const dep of (offline ? [] : depsToCheck)) {
 				const score = await fetchScorecardScore(dep);
 				if (score !== null && score < 5.0) {
 					findings.push({

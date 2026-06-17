@@ -544,7 +544,21 @@ export async function runPrGate(opts: {
   }
 
   // Fix 6: read severity_block from policy instead of hardcoding HIGH/CRITICAL
-  const blockedSeverities: string[] = policy.severity_block ?? ["HIGH", "CRITICAL"];
+  let blockedSeverities: string[] = policy.severity_block ?? ["HIGH", "CRITICAL"];
+  // SECURITY (silent-bypass hardening): when the policy file is NOT integrity-verified
+  // (no SECURITY_POLICY_HMAC_KEY — the default), an attacker who can edit the unsigned
+  // .mcp/policies/security-policy.json could set "severity_block": [] and force every
+  // verdict to PASS with unlimited HIGH/CRITICAL findings. Refuse to let an unverified
+  // policy RELAX the gate below the safe HIGH/CRITICAL floor. To intentionally weaken it,
+  // operators must sign the policy (SECURITY_POLICY_HMAC_KEY + `security-mcp sign-policy`).
+  // When a key IS set, loadPolicy has already HMAC-verified the file (or thrown), so the
+  // operator's configured severity_block is trusted as-is.
+  const policyIntegrityVerified = !!process.env["SECURITY_POLICY_HMAC_KEY"];
+  if (!policyIntegrityVerified) {
+    for (const floor of ["HIGH", "CRITICAL"]) {
+      if (!blockedSeverities.includes(floor)) blockedSeverities = [...blockedSeverities, floor];
+    }
+  }
   const status = effectiveFindings.some((f) => blockedSeverities.includes(f.severity))
     ? "FAIL" : "PASS";
 

@@ -77,7 +77,7 @@ function getExceptionsHmacKey(): string | null {
   return key;
 }
 
-async function readExceptionsJson(): Promise<{ raw: string; isCiFile: boolean; warnings: Finding[] }> {
+async function readExceptionsJson(): Promise<{ raw: string; isCiFile: boolean; isOverride: boolean; source: string; warnings: Finding[] }> {
   const warnings: Finding[] = [];
   const overridePath = process.env["SECURITY_GATE_EXCEPTIONS"];
 
@@ -88,7 +88,7 @@ async function readExceptionsJson(): Promise<{ raw: string; isCiFile: boolean; w
       throw new Error(`SECURITY_GATE_EXCEPTIONS path '${overridePath}' escapes the project directory`);
     }
     const raw = await readFile(resolved, "utf-8");
-    return { raw, isCiFile: false, warnings };
+    return { raw, isCiFile: false, isOverride: true, source: overridePath, warnings };
   }
 
   // Project-level CI exceptions file (suppresses self-scan false positives)
@@ -119,25 +119,59 @@ async function readExceptionsJson(): Promise<{ raw: string; isCiFile: boolean; w
         ]
       });
     }
-    return { raw, isCiFile: true, warnings };
+    return { raw, isCiFile: true, isOverride: false, source: ".github/security-exceptions-ci.json", warnings };
   } catch { /* not present — continue */ }
 
   try {
     const raw = await readFile(join(process.cwd(), ".mcp", "exceptions", "security-exceptions.json"), "utf-8");
-    return { raw, isCiFile: false, warnings };
+    return { raw, isCiFile: false, isOverride: false, source: ".mcp/exceptions/security-exceptions.json", warnings };
   } catch {
     const raw = await readFile(join(PKG_ROOT, "defaults", "security-exceptions.json"), "utf-8");
-    return { raw, isCiFile: false, warnings };
+    return { raw, isCiFile: false, isOverride: false, source: "defaults/security-exceptions.json", warnings };
   }
 }
 
-export async function loadSecurityExceptions(): Promise<{ exceptions: SecurityException[]; warnings: Finding[] }> {
-  const { raw, warnings } = await readExceptionsJson();
+export interface ExceptionsIntegrity {
+  /** True only when an HMAC key is set AND the file carried a matching hmacSha256. */
+  verified: boolean;
+  /** True when the file came from the SECURITY_GATE_EXCEPTIONS override (lowest trust). */
+  isOverride: boolean;
+  /** True for the .github/security-exceptions-ci.json self-scan file. */
+  isCiFile: boolean;
+  /** Human-readable source path of the exceptions file. */
+  source: string;
+}
+
+export async function loadSecurityExceptions(): Promise<{ exceptions: SecurityException[]; warnings: Finding[]; integrity: ExceptionsIntegrity }> {
+  const { raw, warnings, isOverride, isCiFile, source } = await readExceptionsJson();
   const parsed = ExceptionFileSchema.parse(JSON.parse(raw));
 
   // Fix 3: HMAC verification of exceptions file
   const hmacKey = getExceptionsHmacKey();
   const extraWarnings: Finding[] = [];
+
+  // #9 fix — opt-in fail-closed: when SECURITY_REQUIRE_SIGNED_EXCEPTIONS is set, an
+  // unsigned (or unverifiable) exceptions file is REJECTED rather than trusted. This
+  // closes the blanket-suppression bypass (an attacker editing an unsigned exceptions
+  // file to silence findings) for operators who enable it. Default-off preserves the
+  // backwards-compatible behavior (and self-scan workflows that use unsigned CI files).
+  const requireSigned =
+    process.env["SECURITY_REQUIRE_SIGNED_EXCEPTIONS"] === "1" ||
+    process.env["SECURITY_REQUIRE_SIGNED_EXCEPTIONS"] === "true";
+  if (requireSigned) {
+    if (!hmacKey) {
+      throw new Error(
+        "[loadSecurityExceptions] SECURITY_REQUIRE_SIGNED_EXCEPTIONS is set but SECURITY_POLICY_HMAC_KEY " +
+        "is not configured — cannot verify exceptions integrity. Set a ≥32-byte key and sign the exceptions file."
+      );
+    }
+    if (!parsed.hmacSha256) {
+      throw new Error(
+        "[loadSecurityExceptions] SECURITY_REQUIRE_SIGNED_EXCEPTIONS is set but the exceptions file is unsigned " +
+        "(no hmacSha256). Refusing to apply unsigned exceptions. Sign it with the signExceptionsFile helper."
+      );
+    }
+  }
 
   if (hmacKey) {
     if (!parsed.hmacSha256) {
@@ -170,7 +204,8 @@ export async function loadSecurityExceptions(): Promise<{ exceptions: SecurityEx
 
   return {
     exceptions: parsed.exceptions,
-    warnings: [...warnings, ...extraWarnings]
+    warnings: [...warnings, ...extraWarnings],
+    integrity: { verified: Boolean(hmacKey && parsed.hmacSha256), isOverride, isCiFile, source }
   };
 }
 
@@ -184,11 +219,12 @@ export async function applySecurityExceptions(
   activeControlExceptionIds: string[];
   warnings: Finding[];
 }> {
-  const { exceptions, warnings } = await loadSecurityExceptions();
+  const { exceptions, warnings, integrity } = await loadSecurityExceptions();
   const active: Finding[] = [];
   const suppressed: SuppressedFinding[] = [];
   const exceptionFindings: Finding[] = [];
   const activeControlExceptionIds = new Set<string>();
+  const HIGH_SEVERITIES = new Set(["HIGH", "CRITICAL"]);
 
   for (const entry of exceptions) {
     const expiresAt = new Date(entry.expires_on);
@@ -237,10 +273,65 @@ export async function applySecurityExceptions(
       continue;
     }
 
+    // #9 fix C/F — DEFAULT POSTURE: an unsigned/unverified exceptions file may NOT suppress
+    // HIGH/CRITICAL findings (it may still suppress LOW/MEDIUM noise). This makes the
+    // dangerous bypass — silently hiding a HIGH/CRITICAL by editing an unsigned file —
+    // fail by default on the override, default (defaults/...), and project (.mcp/...) paths.
+    //   Exemption: the named CI self-scan file `.github/security-exceptions-ci.json` (isCiFile)
+    //   is the project suppressing its OWN intentional test fixtures; its use is already
+    //   surfaced loudly (CI_EXCEPTIONS_IN_LOCAL_SCAN + EXCEPTIONS_UNSIGNED_SUPPRESSION), so it
+    //   stays allowed to avoid breaking self-scan workflows. Sign it to remove the exemption.
+    //   Break-glass: SECURITY_ALLOW_UNSIGNED_HIGH_SUPPRESSION=1 restores the legacy behavior
+    //   on all paths (use only for scanning intentionally-vulnerable fixtures).
+    const allowUnsignedHigh =
+      process.env["SECURITY_ALLOW_UNSIGNED_HIGH_SUPPRESSION"] === "1" ||
+      process.env["SECURITY_ALLOW_UNSIGNED_HIGH_SUPPRESSION"] === "true";
+    if (!integrity.verified && !allowUnsignedHigh && !integrity.isCiFile && HIGH_SEVERITIES.has(finding.severity)) {
+      active.push(finding);
+      exceptionFindings.push({
+        id: "EXCEPTION_UNSIGNED_HIGH_BLOCKED",
+        title: `Unsigned exceptions may not suppress ${finding.severity} finding ${finding.id}`,
+        severity: finding.severity,
+        evidence: [
+          `Finding: ${finding.id} (${finding.severity})`,
+          `Exception: ${match.id}`,
+          `Source: ${integrity.source}${integrity.isOverride ? " (SECURITY_GATE_EXCEPTIONS override)" : ""} — not integrity-verified`
+        ],
+        requiredActions: [
+          `Sign the exceptions file (set SECURITY_POLICY_HMAC_KEY ≥32 bytes + store its hmacSha256) to suppress ${finding.severity} findings, or resolve the finding. Break-glass for fixtures: SECURITY_ALLOW_UNSIGNED_HIGH_SUPPRESSION=1.`
+        ]
+      });
+      continue;
+    }
+
     suppressed.push({
       finding,
       exceptionId: match.id,
       expiresOn: match.expires_on
+    });
+  }
+
+  // #9 fix B — loud, unsuppressible visibility (default-on, ZERO breakage). When an
+  // UNSIGNED exceptions file suppressed anything, emit one finding (emitted here, AFTER
+  // the suppression loop, so it can never itself be suppressed) so the bypass is never
+  // silent. Severity is intentionally MEDIUM — visible in every report without auto-failing
+  // the gate (which would break legitimate unsigned self-scan workflows). To make unsigned
+  // suppression actually BLOCK, set SECURITY_REQUIRE_SIGNED_EXCEPTIONS=1 (fail-closed).
+  if (!integrity.verified && suppressed.length > 0) {
+    const highHidden = suppressed.filter((s) => HIGH_SEVERITIES.has(s.finding.severity));
+    exceptionFindings.push({
+      id: "EXCEPTIONS_UNSIGNED_SUPPRESSION",
+      title: `${suppressed.length} finding(s) suppressed by an unsigned exceptions file`,
+      severity: "MEDIUM",
+      evidence: [
+        `Source: ${integrity.source}${integrity.isOverride ? " (SECURITY_GATE_EXCEPTIONS override)" : ""}${integrity.isCiFile ? " (CI self-scan)" : ""}`,
+        "File is not integrity-protected (no verified hmacSha256) — its suppressions are not tamper-evident.",
+        `Total suppressed: ${suppressed.length}; HIGH/CRITICAL hidden: ${highHidden.length}`,
+        ...(highHidden.length > 0 ? [`Hidden HIGH/CRITICAL: ${highHidden.map((s) => `${s.finding.id} (${s.finding.severity})`).slice(0, 20).join(", ")}`] : [])
+      ],
+      requiredActions: [
+        "Sign the exceptions file (set SECURITY_POLICY_HMAC_KEY ≥32 bytes and store its hmacSha256) so suppressions are tamper-evident, or set SECURITY_REQUIRE_SIGNED_EXCEPTIONS=1 to reject unsigned exceptions entirely."
+      ]
     });
   }
 

@@ -70,7 +70,7 @@ const CHECKLIST_DEFAULTS_DIR = path.join(
 );
 
 async function ensureDir(dirPath: string): Promise<void> {
-  await mkdir(dirPath, { recursive: true });
+  await mkdir(dirPath, { recursive: true, mode: 0o700 });
 }
 
 function reviewPath(runId: string): string {
@@ -83,7 +83,7 @@ function reportPath(runId: string): string {
 
 async function writeJson(filePath: string, value: unknown): Promise<void> {
   await ensureDir(path.dirname(filePath));
-  await writeFile(filePath, JSON.stringify(value, null, 2) + "\n", "utf-8");
+  await writeFile(filePath, JSON.stringify(value, null, 2) + "\n", { encoding: "utf-8", mode: 0o600 });
 }
 
 function checklistPath(runId: string): string {

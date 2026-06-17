@@ -209,6 +209,12 @@ export async function checkSecrets(_: { changedFiles: string[] }): Promise<Findi
     // ------------------------------------------------------------------
     // Fix 2: Encoding evasion — base64 and hex secondary pass
     // ------------------------------------------------------------------
+    // SECURITY (CWE-400): a single multi-MB contiguous base64/hex run makes V8's
+    // regex engine throw RangeError ("Maximum call stack size exceeded"). The
+    // readFileSafe size cap bounds file size, but contain any residual throw here
+    // so one crafted repo file cannot crash the gate (docs tier) or silently drop
+    // all secret findings (full tier swallows the rejection via Promise.allSettled).
+    try {
     // Base64 candidates: length >= 20, valid base64 chars
     const b64Regex = /[A-Za-z0-9+/]{20,}={0,2}/g;
     let b64Match: RegExpExecArray | null;
@@ -249,6 +255,11 @@ export async function checkSecrets(_: { changedFiles: string[] }): Promise<Findi
       } catch {
         // decode failed — skip
       }
+    }
+    } catch {
+      // CWE-400: regex engine RangeError or similar on a pathological file —
+      // skip this file's encoding pass rather than aborting the whole scan.
+      continue;
     }
   }
 

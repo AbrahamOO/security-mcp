@@ -19,3 +19,4 @@ HANDOFF.md
 .mcp/mappings/
 .mcp/policies/
 .mcp/agent-runs/
+.mcp/memory/
