@@ -779,6 +779,63 @@
       "requiredActions": [
         "Configure CMEK (default_encryption_configuration) on the google_bigquery_dataset."
       ]
+    },
+    {
+      "ruleId": "GCP_COMPUTE_DISK_CMEK",
+      "threat": "A persistent disk without a customer-managed key relies on Google-managed keys, reducing key control over data at rest.",
+      "frameworks": ["CIS GCP Foundations Benchmark 4.7"],
+      "severity": "LOW",
+      "title": "Compute disk should use a customer-managed encryption key",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_disk",
+        "require": "disk_encryption_key"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add disk_encryption_key { kms_key_self_link = <kms-key> } to the google_compute_disk. The CMEK key must be supplied."
+      },
+      "requiredActions": [
+        "Configure CMEK (disk_encryption_key) on the google_compute_disk."
+      ]
+    },
+    {
+      "ruleId": "GCP_SPANNER_CMEK",
+      "threat": "A Spanner database without CMEK relies on Google-managed keys for data at rest.",
+      "frameworks": ["CIS GCP Foundations Benchmark 5.x"],
+      "severity": "LOW",
+      "title": "Spanner database should use a customer-managed key",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_spanner_database",
+        "require": "encryption_config"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add encryption_config { kms_key_name = <kms-key> } to the google_spanner_database."
+      },
+      "requiredActions": [
+        "Configure CMEK (encryption_config) on the google_spanner_database."
+      ]
+    },
+    {
+      "ruleId": "GCP_LOGGING_BUCKET_RETENTION_LOCK",
+      "threat": "An unlocked log bucket can be shortened or purged by an attacker covering tracks; a locked retention prevents tampering.",
+      "frameworks": ["CIS GCP Foundations Benchmark 2.3"],
+      "severity": "LOW",
+      "title": "Logging bucket should lock its retention policy",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_logging_project_bucket_config",
+        "require": "locked\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set locked = true and a retention_days on the google_logging_project_bucket_config. Locking is irreversible, so apply deliberately."
+      },
+      "requiredActions": [
+        "Lock the retention policy on the google_logging_project_bucket_config (irreversible)."
+      ]
     }
   ]
 }

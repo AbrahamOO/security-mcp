@@ -969,6 +969,120 @@
       "requiredActions": [
         "Set require_secure_transport = ON on the azurerm_postgresql_flexible_server."
       ]
+    },
+    {
+      "ruleId": "AZURE_SEARCH_NO_PUBLIC",
+      "threat": "A Cognitive/AI Search service with public network access is reachable from the internet for query abuse and data exfiltration.",
+      "frameworks": ["Microsoft Cloud Security Benchmark NS-2"],
+      "severity": "MEDIUM",
+      "title": "Search service should disable public network access",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_search_service",
+        "require": "public_network_access_enabled\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "public_network_access_enabled": "false" }
+      },
+      "requiredActions": [
+        "Set public_network_access_enabled = false on the azurerm_search_service and use a private endpoint."
+      ]
+    },
+    {
+      "ruleId": "AZURE_EVENTHUB_MIN_TLS",
+      "threat": "An Event Hub namespace allowing TLS 1.0/1.1 exposes traffic to downgrade and known TLS weaknesses.",
+      "frameworks": ["Microsoft Cloud Security Benchmark DP-3"],
+      "severity": "LOW",
+      "title": "Event Hub namespace must require TLS 1.2 minimum",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_eventhub_namespace",
+        "require": "minimum_tls_version\\s*=\\s*\"1.2\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "minimum_tls_version": "\"1.2\"" }
+      },
+      "requiredActions": [
+        "Set minimum_tls_version = \"1.2\" on the azurerm_eventhub_namespace."
+      ]
+    },
+    {
+      "ruleId": "AZURE_SERVICEBUS_MIN_TLS",
+      "threat": "A Service Bus namespace allowing TLS 1.0/1.1 exposes traffic to downgrade and known TLS weaknesses.",
+      "frameworks": ["Microsoft Cloud Security Benchmark DP-3"],
+      "severity": "LOW",
+      "title": "Service Bus namespace must require TLS 1.2 minimum",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_servicebus_namespace",
+        "require": "minimum_tls_version\\s*=\\s*\"1.2\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "minimum_tls_version": "\"1.2\"" }
+      },
+      "requiredActions": [
+        "Set minimum_tls_version = \"1.2\" on the azurerm_servicebus_namespace."
+      ]
+    },
+    {
+      "ruleId": "AZURE_COSMOSDB_MIN_TLS",
+      "threat": "A Cosmos DB account allowing TLS 1.0/1.1 exposes traffic to downgrade and known TLS weaknesses.",
+      "frameworks": ["Microsoft Cloud Security Benchmark DP-3"],
+      "severity": "LOW",
+      "title": "Cosmos DB account must require TLS 1.2 minimum",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_cosmosdb_account",
+        "require": "minimal_tls_version\\s*=\\s*\"Tls12\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "minimal_tls_version": "\"Tls12\"" }
+      },
+      "requiredActions": [
+        "Set minimal_tls_version = \"Tls12\" on the azurerm_cosmosdb_account."
+      ]
+    },
+    {
+      "ruleId": "AZURE_AKS_API_AUTHORIZED_IP",
+      "threat": "An AKS API server reachable from any IP is exposed to credential stuffing and API exploitation.",
+      "frameworks": ["CIS Azure Foundations Benchmark 8.x"],
+      "severity": "MEDIUM",
+      "title": "AKS API server should restrict authorized IP ranges",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_kubernetes_cluster",
+        "require": "authorized_ip_ranges|api_server_access_profile"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add api_server_access_profile { authorized_ip_ranges = [<admin-cidrs>] } (or a private cluster). The allowed CIDRs must be chosen."
+      },
+      "requiredActions": [
+        "Restrict the AKS API server via authorized_ip_ranges or a private cluster."
+      ]
+    },
+    {
+      "ruleId": "AZURE_APP_GATEWAY_WAF",
+      "threat": "An Application Gateway without WAF has no managed protection against L7 attacks (injection, bots).",
+      "frameworks": ["Microsoft Cloud Security Benchmark NS-6"],
+      "severity": "MEDIUM",
+      "title": "Application Gateway should attach a WAF policy",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_application_gateway",
+        "require": "firewall_policy_id|waf_configuration"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Attach a firewall_policy_id (azurerm_web_application_firewall_policy in Prevention mode) or a waf_configuration block to the azurerm_application_gateway with a WAF_v2 SKU."
+      },
+      "requiredActions": [
+        "Attach a WAF policy (Prevention mode) to the azurerm_application_gateway."
+      ]
     }
   ]
 }
