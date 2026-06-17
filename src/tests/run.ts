@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { runPrGate } from "../gate/policy.js";
 import { autoHardenTree } from "../gate/cloud-controls/apply.js";
+import { checkCloudControls } from "../gate/checks/cloud-controls.js";
 import { createReviewAttestation, createReviewRun, readReviewRun, updateReviewStep } from "../review/store.js";
 
 function repoPath(...parts: string[]): string {
@@ -216,11 +217,29 @@ async function runReviewWorkflowTests(): Promise<void> {
   cleanupFixtureReviewArtifacts("web-insecure");
 }
 
+async function runCfnBicepDetectionTests(): Promise<void> {
+  await withFixture("cfn-insecure", async () => {
+    const ids = new Set((await checkCloudControls({ changedFiles: [] })).map((f) => f.id));
+    assert.ok(ids.has("CFN_S3_NO_PUBLIC_ACL"));
+    assert.ok(ids.has("CFN_RDS_NOT_PUBLIC"));
+    assert.ok(ids.has("CFN_RDS_STORAGE_ENCRYPTED"));
+    assert.ok(ids.has("CFN_SG_OPEN_INGRESS"));
+  });
+
+  await withFixture("bicep-insecure", async () => {
+    const ids = new Set((await checkCloudControls({ changedFiles: [] })).map((f) => f.id));
+    assert.ok(ids.has("BICEP_STORAGE_HTTPS_ONLY"));
+    assert.ok(ids.has("BICEP_STORAGE_MIN_TLS"));
+    assert.ok(ids.has("BICEP_SQL_NO_PUBLIC"));
+  });
+}
+
 async function main(): Promise<void> {
   await runPromptConformanceTests();
   await runFixtureGateTests();
   await runCloudControlRemediationTests();
   await runNestedRemediationTests();
+  await runCfnBicepDetectionTests();
   await runReviewWorkflowTests();
   console.log("security-mcp tests passed");
 }

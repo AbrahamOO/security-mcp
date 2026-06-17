@@ -1,0 +1,24 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Deliberately-insecure CloudFormation fixture for cloud-controls tests.
+Resources:
+  PublicBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: fixture-public-bucket
+      AccessControl: PublicRead
+  ExposedDb:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      Engine: postgres
+      DBInstanceClass: db.t3.micro
+      PubliclyAccessible: true
+      StorageEncrypted: false
+  OpenSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: open ssh
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0

@@ -1,4 +1,6 @@
 import { HclBlock, parseResourceBlocks } from "./hcl.js";
+import { CfnResource, looksLikeCfn, parseCfnResources } from "./cfn.js";
+import { BicepResource, parseBicepResources } from "./bicep.js";
 import { CloudRule } from "./types.js";
 
 export type Violation = {
@@ -84,4 +86,46 @@ export function detectTerraform(file: string, text: string, rules: CloudRule[]):
     }
   }
   return violations;
+}
+
+/**
+ * Evaluate forbid/require rules for one target against a list of already-parsed
+ * resources (CloudFormation or Bicep). Body-scoped regex, detect-only.
+ */
+function detectResources(
+  file: string,
+  rules: CloudRule[],
+  target: "cloudformation" | "bicep",
+  resources: { type: string; name: string; body: string; line: number }[]
+): Violation[] {
+  if (resources.length === 0) return [];
+  const violations: Violation[] = [];
+  for (const rule of rules) {
+    if (rule.detect.target !== target) continue;
+    const { resourceType, forbid, require } = rule.detect;
+    const forbidRe = forbid ? compile(forbid) : null;
+    const requireRe = require ? compile(require) : null;
+    for (const res of resources) {
+      if (res.type !== resourceType) continue;
+      if (forbidRe && forbidRe.test(res.body)) {
+        violations.push({ rule, file, line: res.line, reason: "insecure value present" });
+      } else if (requireRe && !requireRe.test(res.body)) {
+        violations.push({ rule, file, line: res.line, reason: "secure setting missing" });
+      }
+    }
+  }
+  return violations;
+}
+
+/** Evaluate cloudformation-target rules against a JSON or YAML template. */
+export function detectCloudFormation(file: string, text: string, rules: CloudRule[]): Violation[] {
+  if (!looksLikeCfn(text)) return [];
+  const resources: CfnResource[] = parseCfnResources(text);
+  return detectResources(file, rules, "cloudformation", resources);
+}
+
+/** Evaluate bicep-target rules against a Bicep document. */
+export function detectBicep(file: string, text: string, rules: CloudRule[]): Violation[] {
+  const resources: BicepResource[] = parseBicepResources(text);
+  return detectResources(file, rules, "bicep", resources);
 }
