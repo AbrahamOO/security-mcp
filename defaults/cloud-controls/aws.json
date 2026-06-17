@@ -1681,6 +1681,144 @@
       "requiredActions": [
         "Add a log_config block to the aws_appsync_graphql_api."
       ]
+    },
+    {
+      "ruleId": "AWS_S3_ACCOUNT_BLOCK_PUBLIC_ACCESS",
+      "threat": "If account-level Block Public Access is partly disabled, any bucket ACL or policy can re-expose data to the internet.",
+      "frameworks": ["AWS FSBP S3.1", "CIS AWS Foundations Benchmark 2.1.5"],
+      "severity": "HIGH",
+      "title": "Account-level S3 Block Public Access must be fully enabled",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_s3_account_public_access_block",
+        "forbid": "block_public_acls\\s*=\\s*false|block_public_policy\\s*=\\s*false|ignore_public_acls\\s*=\\s*false|restrict_public_buckets\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "block_public_acls": "true",
+          "block_public_policy": "true",
+          "ignore_public_acls": "true",
+          "restrict_public_buckets": "true"
+        }
+      },
+      "requiredActions": [
+        "Set all four block flags = true on aws_s3_account_public_access_block."
+      ]
+    },
+    {
+      "ruleId": "AWS_CLOUDFRONT_VIEWER_HTTPS",
+      "threat": "A CloudFront behavior allowing plain HTTP serves content and cookies over an interceptable channel.",
+      "frameworks": ["AWS FSBP CloudFront.9"],
+      "severity": "MEDIUM",
+      "title": "CloudFront must redirect viewers to HTTPS",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_cloudfront_distribution",
+        "forbid": "viewer_protocol_policy\\s*=\\s*\"allow-all\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "default_cache_behavior.viewer_protocol_policy": "\"redirect-to-https\"" }
+      },
+      "requiredActions": [
+        "Set viewer_protocol_policy = \"redirect-to-https\" (or \"https-only\") on every cache behavior of the aws_cloudfront_distribution."
+      ]
+    },
+    {
+      "ruleId": "AWS_ELASTICACHE_AUTO_MINOR_UPGRADE",
+      "threat": "Disabling automatic minor upgrades leaves the cache engine on known-vulnerable patch levels.",
+      "frameworks": ["AWS FSBP ElastiCache.2"],
+      "severity": "LOW",
+      "title": "ElastiCache must allow automatic minor version upgrades",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_elasticache_replication_group",
+        "forbid": "auto_minor_version_upgrade\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "auto_minor_version_upgrade": "true" }
+      },
+      "requiredActions": [
+        "Set auto_minor_version_upgrade = true on the aws_elasticache_replication_group."
+      ]
+    },
+    {
+      "ruleId": "AWS_RDS_COPY_TAGS_TO_SNAPSHOT",
+      "threat": "Without copy-tags-to-snapshot, access-control and ownership tags are lost on snapshots, weakening least-privilege on restores.",
+      "frameworks": ["AWS FSBP RDS.16"],
+      "severity": "LOW",
+      "title": "RDS instance should copy tags to snapshots",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_db_instance",
+        "require": "copy_tags_to_snapshot\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "copy_tags_to_snapshot": "true" }
+      },
+      "requiredActions": [
+        "Set copy_tags_to_snapshot = true on the aws_db_instance."
+      ]
+    },
+    {
+      "ruleId": "AWS_RDS_ENHANCED_MONITORING",
+      "threat": "Without enhanced monitoring, OS-level metrics needed to detect resource-exhaustion attacks on the DB host are missing.",
+      "frameworks": ["AWS FSBP RDS.6"],
+      "severity": "LOW",
+      "title": "RDS instance should enable enhanced monitoring",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_db_instance",
+        "require": "monitoring_interval\\s*=\\s*[1-9]"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set monitoring_interval = 60 and monitoring_role_arn = <role> on the aws_db_instance. The monitoring IAM role must be supplied."
+      },
+      "requiredActions": [
+        "Enable enhanced monitoring (monitoring_interval + monitoring_role_arn) on the aws_db_instance."
+      ]
+    },
+    {
+      "ruleId": "AWS_ECS_NO_HOST_PID",
+      "threat": "A task sharing the host PID namespace can see and signal host processes — a container escape aid.",
+      "frameworks": ["AWS FSBP ECS.3"],
+      "severity": "MEDIUM",
+      "title": "ECS task must not share the host PID namespace",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_ecs_task_definition",
+        "forbid": "pid_mode\\s*=\\s*\"host\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Remove pid_mode = \"host\" from the aws_ecs_task_definition (use \"task\" or omit)."
+      },
+      "requiredActions": [
+        "Do not set pid_mode = host on the aws_ecs_task_definition."
+      ]
+    },
+    {
+      "ruleId": "AWS_REDSHIFT_AUDIT_LOGGING",
+      "threat": "Without audit logging, malicious queries and data exfiltration from Redshift leave no trail.",
+      "frameworks": ["AWS FSBP Redshift.4"],
+      "severity": "LOW",
+      "title": "Redshift cluster should enable audit logging",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_redshift_cluster",
+        "require": "logging"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a logging { enable = true, bucket_name = <log-bucket> } block (or aws_redshift_logging) to the aws_redshift_cluster."
+      },
+      "requiredActions": [
+        "Enable audit logging on the aws_redshift_cluster to a dedicated log bucket."
+      ]
     }
   ]
 }

@@ -722,6 +722,63 @@
       "requiredActions": [
         "Configure CMEK (gce_pd_kms_key_name) on the google_dataproc_cluster."
       ]
+    },
+    {
+      "ruleId": "GCP_VPC_FLOW_LOGS",
+      "threat": "Without VPC flow logs there is no network-level record of exfiltration or lateral movement between subnets.",
+      "frameworks": ["CIS GCP Foundations Benchmark 3.8"],
+      "severity": "LOW",
+      "title": "VPC subnet should enable flow logs",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_subnetwork",
+        "require": "log_config"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add log_config { aggregation_interval = \"INTERVAL_5_SEC\", flow_sampling = 0.5, metadata = \"INCLUDE_ALL_METADATA\" } to the google_compute_subnetwork."
+      },
+      "requiredActions": [
+        "Enable log_config (flow logs) on the google_compute_subnetwork."
+      ]
+    },
+    {
+      "ruleId": "GCP_COMPUTE_BLOCK_PROJECT_SSH",
+      "threat": "Allowing project-wide SSH keys widens blast radius: any project SSH key can log into this VM.",
+      "frameworks": ["CIS GCP Foundations Benchmark 4.3"],
+      "severity": "LOW",
+      "title": "Compute instance should block project-wide SSH keys",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_instance",
+        "require": "block-project-ssh-keys"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set metadata = { block-project-ssh-keys = \"true\" } (or enforce OS Login). Auto-fix avoids editing the metadata map to prevent clobbering other keys."
+      },
+      "requiredActions": [
+        "Block project-wide SSH keys on the google_compute_instance (prefer OS Login)."
+      ]
+    },
+    {
+      "ruleId": "GCP_BIGQUERY_CMEK",
+      "threat": "A BigQuery dataset without a customer-managed key relies on Google-managed keys, reducing key control over data at rest.",
+      "frameworks": ["CIS GCP Foundations Benchmark 7.2"],
+      "severity": "LOW",
+      "title": "BigQuery dataset should use a customer-managed key",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_bigquery_dataset",
+        "require": "default_encryption_configuration"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add default_encryption_configuration { kms_key_name = <kms-key> } to the google_bigquery_dataset. The CMEK key must be supplied."
+      },
+      "requiredActions": [
+        "Configure CMEK (default_encryption_configuration) on the google_bigquery_dataset."
+      ]
     }
   ]
 }
