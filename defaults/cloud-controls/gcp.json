@@ -836,6 +836,63 @@
       "requiredActions": [
         "Lock the retention policy on the google_logging_project_bucket_config (irreversible)."
       ]
+    },
+    {
+      "ruleId": "GCP_SECRET_MANAGER_CMEK",
+      "threat": "A Secret Manager secret without CMEK relies on Google-managed keys, reducing key control and revocation over secret material.",
+      "frameworks": ["CIS GCP Foundations Benchmark 1.x"],
+      "severity": "LOW",
+      "title": "Secret Manager secret should use a customer-managed key",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_secret_manager_secret",
+        "require": "customer_managed_encryption"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add replication { user_managed { replicas { customer_managed_encryption { kms_key_name = <kms-key> } } } } to the google_secret_manager_secret."
+      },
+      "requiredActions": [
+        "Configure CMEK (customer_managed_encryption) on the google_secret_manager_secret."
+      ]
+    },
+    {
+      "ruleId": "GCP_ARTIFACT_REGISTRY_CMEK",
+      "threat": "An Artifact Registry without CMEK relies on Google-managed keys for stored images/packages at rest.",
+      "frameworks": ["CIS GCP Foundations Benchmark 5.x"],
+      "severity": "LOW",
+      "title": "Artifact Registry should use a customer-managed key",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_artifact_registry_repository",
+        "require": "kms_key_name"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set kms_key_name = <kms-key> on the google_artifact_registry_repository."
+      },
+      "requiredActions": [
+        "Configure CMEK (kms_key_name) on the google_artifact_registry_repository."
+      ]
+    },
+    {
+      "ruleId": "GCP_GKE_COS_IMAGE",
+      "threat": "Non-COS node images have a larger attack surface and weaker default hardening than Container-Optimized OS.",
+      "frameworks": ["CIS GCP Foundations Benchmark 7.x"],
+      "severity": "LOW",
+      "title": "GKE node pool should use a Container-Optimized OS image",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_container_node_pool",
+        "require": "image_type\\s*=\\s*\"COS"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set node_config { image_type = \"COS_CONTAINERD\" } on the google_container_node_pool."
+      },
+      "requiredActions": [
+        "Use a COS/COS_CONTAINERD image_type on the google_container_node_pool."
+      ]
     }
   ]
 }
