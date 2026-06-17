@@ -893,6 +893,82 @@
       "requiredActions": [
         "Set public_network_access = \"Disabled\" on the azurerm_app_configuration and use a private endpoint."
       ]
+    },
+    {
+      "ruleId": "AZURE_DEFENDER_PLAN_STANDARD",
+      "threat": "A Defender for Cloud plan left on the Free tier means no threat detection for that resource type — attacks go unalerted.",
+      "frameworks": ["CIS Azure Foundations Benchmark 2.1"],
+      "severity": "MEDIUM",
+      "title": "Defender for Cloud plans must be on the Standard tier",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_security_center_subscription_pricing",
+        "forbid": "tier\\s*=\\s*\"Free\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "tier": "\"Standard\"" }
+      },
+      "requiredActions": [
+        "Set tier = \"Standard\" on the azurerm_security_center_subscription_pricing for each resource_type (VirtualMachines, SqlServers, StorageAccounts, KeyVaults, Containers, AppServices, etc.)."
+      ]
+    },
+    {
+      "ruleId": "AZURE_APP_SERVICE_CLIENT_CERT",
+      "threat": "Without incoming client certificates, an App Service cannot enforce mutual TLS for service-to-service callers.",
+      "frameworks": ["CIS Azure Foundations Benchmark 9.x"],
+      "severity": "LOW",
+      "title": "App Service should require incoming client certificates",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_app_service",
+        "require": "client_cert_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "client_cert_enabled": "true" }
+      },
+      "requiredActions": [
+        "Set client_cert_enabled = true on the azurerm_app_service (for internal/mTLS apps)."
+      ]
+    },
+    {
+      "ruleId": "AZURE_SECURITY_CONTACT_EMAIL",
+      "threat": "Without a security contact, Defender for Cloud alerts (including active-attack notifications) are not delivered to anyone.",
+      "frameworks": ["CIS Azure Foundations Benchmark 2.x"],
+      "severity": "LOW",
+      "title": "Defender for Cloud should have a security contact",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_security_center_contact",
+        "require": "email"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set email (and enable alert_notifications/alerts_to_admins) on the azurerm_security_center_contact. The contact address must be chosen."
+      },
+      "requiredActions": [
+        "Configure a security contact email with alert notifications enabled."
+      ]
+    },
+    {
+      "ruleId": "AZURE_PG_FLEX_SSL",
+      "threat": "A PostgreSQL Flexible Server allowing non-TLS connections exposes credentials and data on the wire.",
+      "frameworks": ["CIS Azure Foundations Benchmark 4.3.x"],
+      "severity": "MEDIUM",
+      "title": "PostgreSQL Flexible Server must require TLS",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_postgresql_flexible_server_configuration",
+        "forbid": "value\\s*=\\s*\"OFF\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Ensure the require_secure_transport server parameter is ON via azurerm_postgresql_flexible_server_configuration { name = \"require_secure_transport\", value = \"ON\" }."
+      },
+      "requiredActions": [
+        "Set require_secure_transport = ON on the azurerm_postgresql_flexible_server."
+      ]
     }
   ]
 }
