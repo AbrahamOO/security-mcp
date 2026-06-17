@@ -75,7 +75,7 @@ const SECRET_PATTERNS: Array<{ name: string; regex: RegExp; description: string 
   // Infrastructure tokens
   { name: "hashicorp_vault_token",   regex: /\bhvs\.[A-Za-z0-9]{24,}\b/, description: "HashiCorp Vault service token" },
   { name: "npm_token",               regex: /\bnpm_[A-Za-z0-9]{36}\b/, description: "npm access token" },
-  { name: "npmrc_auth_token",        regex: /_authToken\s*=\s*[A-Za-z0-9_\-\.]{10,}/, description: "npm _authToken in .npmrc" },
+  { name: "npmrc_auth_token",        regex: /_authToken\s*=\s*[A-Za-z0-9_\-.]{10,}/, description: "npm _authToken in .npmrc" },
   { name: "docker_hub_pat",          regex: /\bdckr_pat_[A-Za-z0-9\-_]{27}\b/, description: "Docker Hub personal access token" },
   { name: "terraform_cloud_token",   regex: /\b[A-Za-z0-9]{14}\.atlasv1\.[A-Za-z0-9]{60,}\b/, description: "Terraform Cloud token" },
   { name: "datadog_api_key",         regex: /\bDD_API_KEY\s*[:=]\s*["'][a-fA-F0-9]{32}["']/, description: "Datadog API key" },
@@ -390,7 +390,7 @@ export async function checkSecrets(_: { changedFiles: string[] }): Promise<Findi
     } catch {
       // report parse failure — non-fatal
     } finally {
-      try { await unlink(tmpReport); } catch {}
+      try { await unlink(tmpReport); } catch { /* ignore cleanup failure */ }
     }
   }
 
