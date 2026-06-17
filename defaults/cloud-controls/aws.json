@@ -1819,6 +1819,158 @@
       "requiredActions": [
         "Enable audit logging on the aws_redshift_cluster to a dedicated log bucket."
       ]
+    },
+    {
+      "ruleId": "AWS_REDSHIFT_ALLOW_VERSION_UPGRADE",
+      "threat": "Disabling Redshift version upgrades keeps the cluster on known-vulnerable engine versions.",
+      "frameworks": ["AWS FSBP Redshift.6"],
+      "severity": "LOW",
+      "title": "Redshift cluster must allow version upgrades",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_redshift_cluster",
+        "forbid": "allow_version_upgrade\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "allow_version_upgrade": "true" }
+      },
+      "requiredActions": [
+        "Set allow_version_upgrade = true on the aws_redshift_cluster."
+      ]
+    },
+    {
+      "ruleId": "AWS_NETWORKFIREWALL_DELETE_PROTECTION",
+      "threat": "Without delete protection, a compromised credential can tear down the Network Firewall and open all egress/ingress.",
+      "frameworks": ["AWS FSBP NetworkFirewall.x"],
+      "severity": "LOW",
+      "title": "Network Firewall must enable delete protection",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_networkfirewall_firewall",
+        "forbid": "delete_protection\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "delete_protection": "true" }
+      },
+      "requiredActions": [
+        "Set delete_protection = true on the aws_networkfirewall_firewall."
+      ]
+    },
+    {
+      "ruleId": "AWS_ELB_CROSS_ZONE",
+      "threat": "Disabling cross-zone load balancing concentrates traffic and can be abused to overload a single AZ's targets.",
+      "frameworks": ["AWS FSBP ELB.9"],
+      "severity": "LOW",
+      "title": "Load balancer should keep cross-zone balancing enabled",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_lb",
+        "forbid": "enable_cross_zone_load_balancing\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "enable_cross_zone_load_balancing": "true" }
+      },
+      "requiredActions": [
+        "Set enable_cross_zone_load_balancing = true on the aws_lb (NLB)."
+      ]
+    },
+    {
+      "ruleId": "AWS_ELASTICSEARCH_NODE_TO_NODE",
+      "threat": "A legacy Elasticsearch domain without node-to-node encryption sends intra-cluster traffic in plaintext.",
+      "frameworks": ["AWS FSBP ES.3"],
+      "severity": "MEDIUM",
+      "title": "Elasticsearch domain must use node-to-node encryption",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_elasticsearch_domain",
+        "require": "node_to_node_encryption"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "node_to_node_encryption.enabled": "true" }
+      },
+      "requiredActions": [
+        "Add node_to_node_encryption { enabled = true } to the aws_elasticsearch_domain."
+      ]
+    },
+    {
+      "ruleId": "AWS_ELASTICSEARCH_ENFORCE_HTTPS",
+      "threat": "A legacy Elasticsearch domain that does not enforce HTTPS accepts plaintext queries carrying credentials.",
+      "frameworks": ["AWS FSBP ES.8"],
+      "severity": "MEDIUM",
+      "title": "Elasticsearch domain must enforce HTTPS",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_elasticsearch_domain",
+        "require": "enforce_https\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "domain_endpoint_options.enforce_https": "true" }
+      },
+      "requiredActions": [
+        "Add domain_endpoint_options { enforce_https = true } to the aws_elasticsearch_domain."
+      ]
+    },
+    {
+      "ruleId": "AWS_EKS_SECRETS_ENCRYPTION",
+      "threat": "Without envelope encryption, Kubernetes Secrets are stored only base64-encoded in EKS etcd.",
+      "frameworks": ["AWS FSBP EKS.3"],
+      "severity": "MEDIUM",
+      "title": "EKS cluster should encrypt Kubernetes secrets with KMS",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_eks_cluster",
+        "require": "encryption_config"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add encryption_config { resources = [\"secrets\"], provider { key_arn = <cmk> } } to the aws_eks_cluster. The KMS key must be supplied."
+      },
+      "requiredActions": [
+        "Enable secrets envelope encryption (encryption_config) on the aws_eks_cluster."
+      ]
+    },
+    {
+      "ruleId": "AWS_RDS_LOG_EXPORTS",
+      "threat": "Without CloudWatch log exports, DB engine/audit/error logs aren't available for detection of injection or abuse.",
+      "frameworks": ["AWS FSBP RDS.9", "AWS FSBP RDS.10"],
+      "severity": "LOW",
+      "title": "RDS instance should export logs to CloudWatch",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_db_instance",
+        "require": "enabled_cloudwatch_logs_exports"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set enabled_cloudwatch_logs_exports = [\"audit\",\"error\",\"general\",\"slowquery\"] (engine-specific log types) on the aws_db_instance."
+      },
+      "requiredActions": [
+        "Enable enabled_cloudwatch_logs_exports on the aws_db_instance (log types vary by engine)."
+      ]
+    },
+    {
+      "ruleId": "AWS_ECS_NO_HOST_NETWORK",
+      "threat": "Host network mode gives the task the host's network stack, bypassing per-task SG isolation.",
+      "frameworks": ["AWS FSBP ECS.1"],
+      "severity": "MEDIUM",
+      "title": "ECS task should not use host network mode",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_ecs_task_definition",
+        "forbid": "network_mode\\s*=\\s*\"host\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Use network_mode = \"awsvpc\" (per-task ENI + SG) instead of \"host\" on the aws_ecs_task_definition."
+      },
+      "requiredActions": [
+        "Switch the aws_ecs_task_definition off host network mode (prefer awsvpc)."
+      ]
     }
   ]
 }
