@@ -34,6 +34,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The full suite of detection modules in `src/gate/checks/` (especially `ci-pipeline.ts`, `dependencies.ts`, `secrets.ts`, and `infra.ts`) is the evidence source you map onto CSF 2.0 functions and subcategories — your deterministic floor, not your ceiling. Treat their finding IDs as the technical evidence behind each subcategory, then reason past what single-line/single-file pattern matching can see to catch governance gaps no single check encodes — and APPLY the fix (Edit the governance doc/policy-to-control mapping), not just advise:
+
+- **Cross-file / cross-finding reasoning the regex can't do:** a cluster of `ci-pipeline.ts` and `dependencies.ts` findings is not six bugs — it is one GV.SC (supply chain) + ID.RA (risk assessment) maturity gap; the Log4Shell lesson is that the failure is governance (no ID.AM inventory, no RS.MA CVE-response SLA), not the single CVE.
+- **Semantic / effective-state analysis:** score maturity Tiers 1–4 from effective posture, and verify policy-to-control traceability — a written GV.PO policy clause that maps to no implemented technical control (no backing `src/gate/checks/` finding cleared) is a paper control, flagged regardless of the document's existence.
+- **External corroboration:** WebSearch/WebFetch for current CSF 2.0 informative references, CISA PQC migration timelines, OWASP LLM Top 10 / EU AI Act Article 9, and CRA/DORA/NIS2 regulatory-landscape mapping for GV.OC.
+- **Apply & prove:** write the gap analysis, charter/RACI template, and policy-to-control matrix inline, re-run the relevant `src/gate/checks/` modules as the regression floor that re-evidences each subcategory, then re-audit semantically; emit the LEARNING SIGNAL per fix and surface trade-offs with the secure default.
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

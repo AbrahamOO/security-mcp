@@ -22,6 +22,15 @@ Find and fix every injection vulnerability in the codebase.
 Three-layer defense on every route: input validation → sanitization → parameterized query/safe API.
 Cover §13 input validation and §17 file handling completely.
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `injection-deep.ts` detection module (`src/gate/checks/injection-deep.ts`) — SQL/NoSQL/command/SSTI/path/JSON — is your deterministic floor, not your ceiling. Treat its finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** trace a tainted `req.body` field through a Zod parse, into a service-layer helper, and only there into a `prisma.$queryRawUnsafe()` sink three files away — the regex sees a "validated" input at the route and a "constant" query at the sink and misses the join. Confirm second-order paths where input is stored, then later read into a query in an admin context.
+- **Semantic / effective-state analysis:** a tagged-template `$queryRaw` is parameterized, but the same call with a string built by `+` is not; an allowlist that compares against a user-supplied `req.query.table` is still injection. Judge the *effective* parameterization, not the API name.
+- **External corroboration:** WebSearch/WebFetch current CVEs/advisories for the detected ORM/template engine (e.g. Prisma, Handlebars, gRPC metadata injection) and confirm version ranges before scoring.
+- **Apply & prove:** rewrite to parameterized/allowlisted form inline, then re-run `src/gate/checks/injection-deep.ts` plus `semgrep --config p/sql-injection` and a `sqlmap`/Burp polyglot pass as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs (e.g. strict allowlist breaking a legitimate dynamic-column feature) against the secure default.
+
 ## EXECUTION
 
 1. Enumerate all routes and endpoints

@@ -22,6 +22,15 @@ from the web API — often with different, weaker controls.
 Find mobile-specific API security issues: hardcoded credentials, missing versioning,
 certificate pinning bypass vectors, and GraphQL/REST endpoint exposure gaps.
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `mobile-android.ts`, `mobile-ios.ts`, and `api.ts` detection modules (`src/gate/checks/mobile-android.ts`, `src/gate/checks/mobile-ios.ts`, `src/gate/checks/api.ts`) are your deterministic floor, not your ceiling. Treat their finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** a hardcoded key flagged in `BuildConfig.java` becomes a full account-takeover only when you join it to the `api.ts` endpoint it authenticates and confirm that endpoint lacks device attestation — and a mobile-only route may enforce weaker auth than its web twin, visible only by comparing the two route definitions across files. Trace token storage (Keychain/EncryptedSharedPreferences) through to its transmission header and the server's validation.
+- **Semantic / effective-state analysis:** certificate pinning that compares the full cert (not the SPKI hash) breaks on renewal and is often disabled in practice; OAuth on a custom URI scheme without PKCE S256 is *effectively* interceptable. Judge the real trust decision and whether the `/token` endpoint actually requires `code_verifier`, not the presence of a pinning block.
+- **External corroboration:** WebSearch/WebFetch current advisories for the mobile stack (OAuth URI-scheme hijack CVE-2019-9700 class, Firebase rules misconfig, GraphQL introspection exposure) and the targeted SDK versions.
+- **Apply & prove:** apply the config/code fix inline, then re-run `src/gate/checks/mobile-android.ts`/`mobile-ios.ts`/`api.ts` plus a `mobsf` scan, a `frida`/`objection` pinning-bypass attempt against a `mitmproxy`/Burp MitM, and an introspection probe (`{ __schema { types { name } } }`) as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs (e.g. strict pinning complicating cert rotation) against the secure default.
+
 ## EXECUTION
 
 1. **Hardcoded secrets in mobile code:**

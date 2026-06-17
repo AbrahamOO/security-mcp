@@ -34,6 +34,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `mobile-android` + `mobile-ios` (WebView surfaces) and `web-nextjs` detection modules (`src/gate/checks/mobile-android.ts`, `src/gate/checks/mobile-ios.ts`, `src/gate/checks/web-nextjs.ts`) are your deterministic floor, not your ceiling. Treat their finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / multi-step reasoning the regex can't do:** follow a `addJavascriptInterface`/`WKScriptMessageHandler` bridge from its registration into the JS that calls it, then into the native method it invokes, to prove a loaded page can drive native code; correlate a permissive `loadUrl`/`WKWebView` origin with the CSP/`allowsArbitraryLoads` policy served by the Next.js backend.
+- **Semantic / effective-state analysis:** decide whether `setJavaScriptEnabled`, `setAllowFileAccess`, `allowUniversalAccessFromFileURLs`, `shouldOverrideUrlLoading`, and the served CSP combine to *effectively* sandbox untrusted content, not merely look configured — an exposed bridge gated only by a client-side origin string is still XSS-to-native.
+- **External corroboration:** WebSearch/WebFetch for current WebView/WKWebView CVEs and OWASP MASVS-PLATFORM / MASTG WebView test guidance for the SDK versions in use.
+- **Apply & prove:** write the Kotlin/Swift/JS/Next.js fix inline, re-run the `mobile-android`/`mobile-ios`/`web-nextjs` checks (plus MobSF on the build artifact) as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs with the secure default.
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

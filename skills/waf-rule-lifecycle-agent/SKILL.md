@@ -34,6 +34,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `web-nextjs`, `api`, `injection-deep`, and `runtime` detection modules (`src/gate/checks/web-nextjs.ts`, `src/gate/checks/api.ts`, `src/gate/checks/injection-deep.ts`, `src/gate/checks/runtime.ts`) are your deterministic floor, not your ceiling. Treat their finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / multi-step reasoning the regex can't do:** a regex sees `action: block` in one rule but cannot prove rule *ordering* — an ALLOW rule earlier in the chain that short-circuits a later BLOCK, or a `default_action allow` paired with COUNT-mode managed groups that silently log without blocking. Correlate the WAF/CDN config against the actual app routes and headers config (web-nextjs CSP/headers) to find request components (custom headers, cookies, multipart parts) that no rule covers.
+- **Semantic / effective-state analysis:** model the bypass, not the signature — double/mixed encoding (`%252f`), HTTP request smuggling (CL.TE / TE.CL desync between ALB and origin), multipart boundary injection, and deep JSON nesting that evades flat-pattern rules; confirm the WAF blocks SSRF to `169.254.169.254` (and IPv6 `fd00:ec2::254`, decimal `2130706433`) at the edge.
+- **External corroboration:** WebSearch/WebFetch for current CVEs/advisories/standards for WAF — current OWASP CRS version, AWS/Cloudflare managed-rule-group changes, and request-smuggling advisories (CVE-2023-44487 class).
+- **Apply & prove:** write the rule/config inline (Cloudflare rules JSON, AWS WAF Terraform, CSP), re-run the relevant `src/gate/checks/` modules plus active bypass tooling (`nuclei` WAF-bypass templates, `waf-a-mole`, `smuggler.py`, `sqlmap` against staging) as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs with the secure default (e.g. strict blocking vs. false-positive rate, ML-block appeal path under EU AI Act).
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

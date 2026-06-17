@@ -34,6 +34,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `api` and `auth-deep` detection modules (`src/gate/checks/api.ts`, `src/gate/checks/auth-deep.ts`) are your deterministic floor, not your ceiling. Treat their finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / multi-step reasoning the regex can't do:** a regex confirms `verifySignature` exists on the primary receiver, but cannot prove the *retry* code path also enforces it, that timing-safe comparison is used on every signature version (including legacy `v0`), or that the outbound delivery job re-resolves the URL at send time rather than trusting the IP cached at registration. Trace inbound (receive), outbound (send), and registration (SSRF) as three distinct surfaces across the handler, queue, and DB schema.
+- **Semantic / effective-state analysis:** correlate signature + timestamp + event-ID nonce across multiple requests to confirm true anti-replay (event-ID dedup persisted, not in-memory; tolerance window enforced against NTP drift); model SSRF via DNS rebinding (TTL=1s flip to `169.254.169.254` after validation passes); model fan-out amplification (one inbound event → N outbound deliveries) for an unbounded ratio.
+- **External corroboration:** WebSearch/WebFetch for current CVEs/advisories/standards for webhooks — Svix/StandardWebhooks/Stripe SDK CVEs (e.g. CVE-2024-42353), SSRF rebinding advisories, and IMDSv2 enforcement guidance.
+- **Apply & prove:** write the validation inline, re-run the `api`/`auth-deep` checks plus active probes (`nuclei` SSRF/webhook templates, Burp Collaborator / interactsh for DNS-rebinding OOB, `wrk` for replay and fan-out, `npm audit`/`pip-audit` on the webhook SDK) as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs with the secure default (e.g. HTTPS-only outbound vs. self-hosted-receiver compatibility).
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

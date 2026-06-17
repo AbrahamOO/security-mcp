@@ -1,0 +1,22 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: web
+  namespace: flux-system
+spec:
+  interval: 1m
+  chart:
+    spec:
+      chart: web
+      sourceRef:
+        kind: HelmRepository
+        name: charts
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: charts
+  namespace: flux-system
+spec:
+  interval: 10m
+  url: http://charts.example.com/stable

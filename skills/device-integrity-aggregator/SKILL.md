@@ -34,6 +34,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `mobile-android` + `mobile-ios` detection modules (`src/gate/checks/mobile-android.ts`, `src/gate/checks/mobile-ios.ts`) are your deterministic floor, not your ceiling. Treat their finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** a `CertificatePinner` in one file means nothing if `network_security_config.xml` still sets `cleartextTrafficPermitted="true"` for the same domain, or if `android:allowBackup="true"` lets the data those keys protect leave via `adb backup` — correlate the pinning code, the manifest, and the keystore usage as one chain.
+- **Semantic / effective-state analysis:** model the attestation taint chain — is the Play Integrity / App Attest token bound to a server nonce, re-checked before each sensitive op, and denied (not silently downgraded) when the API is unreachable? Verify pinning validates the chain, not just the leaf hash.
+- **External corroboration:** WebSearch/WebFetch for current Play Integrity / DeviceCheck API guidance, Frida bypass advisories, and CVEs for the attestation SDK versions in use.
+- **Apply & prove:** write the fix inline (NSC pin-set with backup pin, `allowBackup=false`, nonce-bound attestation, `minifyEnabled true`), re-run the `mobile-android`/`mobile-ios` checks plus `apkleaks`/`mobsf` and an `objection`/Frida bypass attempt as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs with the secure default.
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

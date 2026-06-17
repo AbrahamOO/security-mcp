@@ -23,6 +23,15 @@ Every threat identified must include a mitigation written and implemented.
 Project-aware: derive threats from the ACTUAL tech stack, data types, and integrations found —
 not a generic checklist.
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The full suite of detection modules in `src/gate/checks/` (especially `auth-deep.ts`, `injection-deep.ts`, and `api.ts`) is your deterministic floor, not your ceiling. As the threat-model analyst that produces the §22A output driving all downstream checks, treat their finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the mitigation (Edit), not just advise:
+
+- **Cross-file / multi-step reasoning the regex can't do:** the per-check modules each see one component; your STRIDE/PASTA job is the seam between them — a webhook handler (one file) whose payload-derived URL reaches an outbound fetch (another file) and pivots to IMDS, or a tenant-id absent from a cache key set far from where it is read. Build the DFD from the actual import graph and ORM schema and trace threats across every trust boundary.
+- **Semantic / effective-state analysis:** model whole attack trees end to end — JWT `alg` confusion → auth bypass → privileged tool-call injection; price-manipulation → coupon double-spend; harvest-now-decrypt-later on RSA/ECDH-protected PII — and prove the *effective* exploitability that no single-line check can assert, with a working PoC before and a failing PoC after the fix.
+- **External corroboration:** WebSearch/WebFetch for current CVEs/advisories/standards and industry-vertical APT TTPs (FIN7/TA505/Scattered Spider), the latest ATT&CK STIX bundle, and CISA KEV.
+- **Apply & prove:** write the mitigation inline (algorithm pinning, tenant-scoped keys, SSRF allowlist, server-side price lookup), re-run the relevant `src/gate/checks/` modules (plus targeted tools — `nuclei`, `osv-scanner`, `slsa-verifier`) as a regression floor, then re-audit and re-emit the threat model. Emit the LEARNING SIGNAL per fix; surface trade-offs with the secure default.
+
 ## EXECUTION
 
 1. Read `stackContext` from parent agent

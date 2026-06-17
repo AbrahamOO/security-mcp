@@ -35,6 +35,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `dlp.ts` detection module (`src/gate/checks/dlp.ts`) — PII/privacy — is your deterministic floor, not your ceiling. Treat its finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** a `dlp.ts` hit on an `email` field at the model is only one node — follow that PII through the analytics SDK init, the async worker queue, the BigQuery/Elasticsearch export, and the ML training snapshot, because a right-to-erasure DELETE in the primary DB leaves PII alive in every downstream store the per-file scan never visits. Likewise, no single field triggers a quasi-identifier (ZIP+DOB+gender) re-identification finding; reason over the *combination* across the schema.
+- **Semantic / effective-state analysis:** consent may be "checked" in synchronous code yet read from a stale Redis snapshot by an already-enqueued job, so the *effective* state violates GDPR Art.7(3). Judge whether the worker re-reads live consent, not whether a consent check literally exists.
+- **External corroboration:** WebSearch/WebFetch current LINDDUN guidance, GDPR/CCPA/HIPAA enforcement actions (e.g. Meta Pixel HIPAA breach), and EU AI Act Annex III profiling classifications for the detected processing.
+- **Apply & prove:** implement data minimization, downstream erasure propagation, and server-side tagging inline, then re-run `src/gate/checks/dlp.ts` plus a `playwright` synthetic-PII URL replay (intercept third-party beacons) and a `presidio` PII sweep over logs as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs (e.g. dropping IP retention weakening fraud detection) against the secure default.
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

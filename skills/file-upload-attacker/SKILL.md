@@ -34,6 +34,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `injection-deep` + `api` detection modules (`src/gate/checks/injection-deep.ts`, `src/gate/checks/api.ts`) are your deterministic floor, not your ceiling. Treat their finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** a magic-byte check at the upload handler is bypassed if a separate thumbnail Lambda or CDN edge worker fetches the raw object from storage and renders it — trace the uploaded file from the upload route through storage to every downstream consumer (resizer, PDF extractor, archive unzipper) across files.
+- **Semantic / effective-state analysis:** model the upload taint chain — `originalname` → `path.join` (traversal), archive entry → symlink target (ZIP Slip via symlink, not just `../`), SVG `<image href>` → IMDS (SSRF), compression ratio → OOM (nested-archive bomb). Compute the effective execution context (same-origin serving = XSS/exec), not just the declared Content-Type.
+- **External corroboration:** WebSearch/WebFetch + OSV.dev for current CVEs in file-processing libs (`sharp`/ImageMagick/libvips) and polyglot-weaponisation advisories.
+- **Apply & prove:** write the fix inline (magic-byte allowlist, filename sanitisation, symlink-aware ZIP Slip guard, ratio cap, `Content-Disposition: attachment`, isolated serving origin), re-run the `injection-deep`/`api` checks plus `semgrep` and an `osv-scanner` sweep of image libs as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs with the secure default.
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

@@ -22,6 +22,15 @@ Build attack trees for every multi-step flow found in the actual codebase.
 Find business logic flaws that automated scanners miss: order of operations, state machine
 violations, trust assumption mismatches, and race conditions in business processes.
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `business-logic.ts` detection module (`src/gate/checks/business-logic.ts`) is your deterministic floor, not your ceiling. Treat its finding IDs as the minimum, then reason past what single-line/single-file pattern matching can see — and APPLY the fix (Edit the route handler/transaction logic), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** a `req.body.amount` parsed in a route file that flows — through a helper module — into `stripe.charges.create()` without a server-authoritative re-quote is a price-manipulation chain no single-file grep catches.
+- **Semantic / effective-state analysis:** model each multi-step flow as a state machine and reason about concurrency — prove single-use resources (coupons, reset tokens, inventory) are decremented atomically (SERIALIZABLE txn or Redis SETNX) so parallel requests can't double-spend, and that step N can't be reached without server-verified completion of N-1.
+- **External corroboration:** use WebSearch/WebFetch for current OWASP WSTG business-logic cases and CVEs in the detected payment/subscription SDKs.
+- **Apply & prove:** write the fix inline (server-side total recompute, atomic redemption, `total >= 0` assertion, step-sequencing token), re-run the `business-logic.ts` checks plus a concurrent-request race harness as a regression floor, then re-audit the attack tree semantically. Emit the LEARNING SIGNAL per fix; surface any fix that changes intended behavior as an explicit trade-off with the secure default.
+
 ## EXECUTION
 
 1. Enumerate all multi-step flows by reading route handlers and API endpoints

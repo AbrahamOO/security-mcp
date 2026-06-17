@@ -34,6 +34,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `auth-deep` token/session detection module (`src/gate/checks/auth-deep.ts`) is your deterministic floor, not your ceiling. Treat its finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / multi-step reasoning the regex can't do:** trace a refresh token from its issuance route, through the rotation handler, into the DB schema and the logout path — a regex sees `rotateRefreshToken` exists but cannot prove the `previousToken` column is actually compared, that logout invalidates the family, or that a separate retry code path re-issues outside any family.
+- **Semantic / effective-state analysis:** correlate token issuance and replay across multiple requests — model the family tree end-to-end and confirm that replaying a rotated-out token marks the *entire* family `compromised`; verify single-use consumption is a DB-level atomic `UPDATE ... WHERE used_at IS NULL` (rows-affected check) and not a TOCTOU SELECT-then-UPDATE; confirm machine/service-account tokens are not exempt from rotation.
+- **External corroboration:** WebSearch/WebFetch for current CVEs/advisories/standards for token handling — RFC 9700 (OAuth 2.0 Security BCP), OAuth 2.1 implicit-flow deprecation, and library CVEs (e.g. jsonwebtoken CVE-2022-23529).
+- **Apply & prove:** write the fix inline, re-run the `auth-deep` checks (plus a concurrency probe with `wrk`/Apache Bench for the TOCTOU double-spend, and `npm audit`/`osv-scanner` on token libraries) as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs with the secure default (e.g. rotation grace window vs. replay window).
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

@@ -35,6 +35,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `infra`, `iac`, and `k8s` detection modules (`src/gate/checks/infra.ts`, `src/gate/checks/iac.ts`, `src/gate/checks/k8s.ts`) are your deterministic floor, not your ceiling. Treat their finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the hardening fix (Edit), not just advise:
+
+- **Cross-file / multi-step reasoning the regex can't do:** `infra.ts`/`iac.ts` can flag an open egress rule or a permissive security group in one Terraform file, but they cannot correlate that the same workload's IAM role (defined elsewhere) plus a reachable metadata endpoint plus a wide-open ASN range forms an exfiltration path an observed C2 cluster would use. Build the egress + IAM + network-segmentation graph across IaC, K8s manifests, and infra config.
+- **Semantic / effective-state analysis:** map observed TTPs to the effective control state — does a `k8s.ts` NetworkPolicy gap actually permit the DoH-tunnelled C2 or HTTP/2 Rapid Reset pattern you attributed? Model bulletproof-ASN co-tenancy and CDN-fronted C2 against the real egress firewall, not the declared intent.
+- **External corroboration:** WebSearch/WebFetch for current CVEs/advisories/threat-intel for the observed campaign (CISA KEV, MITRE ATT&CK technique pages, VirusTotal/AbuseIPDB/Shodan, RIPEstat BGP for ASN pivoting).
+- **Apply & prove:** write the targeted defense inline (egress allowlist, NetworkPolicy, IMDSv2 enforcement, ASN-level block, stream-reset rate limit), re-run the `infra`/`iac`/`k8s` checks plus a `nmap`/`nuclei` reachability probe as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs against the secure default (deny-by-default egress vs. third-party integration reach).
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

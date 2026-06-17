@@ -34,6 +34,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `crypto` detection module (`src/gate/checks/crypto.ts`) is your deterministic floor, not your ceiling. Treat its finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** `crypto.ts` flags a literal `RS256` or `generateKeyPair("rsa")`; you must trace the algorithm that is actually resolved at runtime from `process.env.JWT_ALG` or a config map, and follow the key-wrapping chain (RSA KEK wrapping an AES-256 DEK) so the quantum-vulnerable outer layer is not masked by a quantum-safe inner one.
+- **Semantic / effective-state analysis:** inventory ALL classical-crypto usages for PQC migration — including third-party SDK TLS sessions (gRPC, pg, redis) and hybrid-scheme fallback branches that silently drop to classical-only ECDH on error — and classify each by data-confidentiality horizon (harvest-now-decrypt-later) rather than by literal match.
+- **External corroboration:** WebSearch/WebFetch for current NIST FIPS 203/204/205 status, CNSA 2.0 / NSM-10 milestone dates, CMVP validation queue for ML-KEM/ML-DSA, and HSM vendor PQC firmware baselines.
+- **Apply & prove:** write the fix inline (cryptographic-agility interface, `@noble/post-quantum` hybrid X-Wing encapsulation, ML-DSA JWT signing), re-run the `crypto.ts` checks (plus `testssl.sh --curves` against endpoints and `osv-scanner` on PQC dependencies) as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs with the hybrid-by-default option.
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

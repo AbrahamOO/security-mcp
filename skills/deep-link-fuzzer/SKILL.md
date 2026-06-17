@@ -34,6 +34,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `mobile-android.ts` and `mobile-ios.ts` detection modules (`src/gate/checks/mobile-android.ts`, `src/gate/checks/mobile-ios.ts`) are your deterministic floor, not your ceiling. Treat their finding IDs (intent-filter exposure, URL-scheme handling, WebView sinks) as the minimum, then reason past what single-line/single-file pattern matching can see — and APPLY the fix (Edit the manifest/plist/handler/AASA), not just advise:
+
+- **Cross-file / cross-finding reasoning the regex can't do:** a `mobile-android.ts` BROWSABLE intent-filter match is only CRITICAL when traced through the handler to a terminal `exported="true"` Activity in another file, or to a `WebView.loadUrl` sink several hops away — follow the intent-redirect chain, not the first-hop declaration.
+- **Semantic / effective-state analysis:** a `javascript:` blocklist is bypassed by `%6Aavascript:`/`java%0dscript:` that WebView decodes before execution, a Universal Link falls back to the unvalidated custom-scheme handler on AASA fetch failure, and a fragment (`#/admin`) survives into the SPA router invisible to native handlers; adjudicate the effective post-decode, post-fallback behaviour.
+- **External corroboration:** WebSearch/WebFetch for current Android intent-resolution changes (API 35+), scheme-hijacking toolkits, WebView CVEs, and EU CRA Article 13 deep-link evidence requirements.
+- **Apply & prove:** write strict scheme/host/path allowlisting, post-decode validation, server-side OAuth `state` binding, and AASA/assetlinks.json + HSTS/CAA inline, re-run `src/gate/checks/mobile-android.ts` + `mobile-ios.ts` as a regression floor, then re-audit semantically; emit the LEARNING SIGNAL per fix and surface trade-offs (e.g. strict allowlist vs. link flexibility) with the secure default.
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

@@ -1,0 +1,1686 @@
+{
+  "version": "1.0.0",
+  "rules": [
+    {
+      "ruleId": "AWS_EC2_IMDSV2_REQUIRED",
+      "threat": "SSRF in the application reaches 169.254.169.254 and steals the instance-profile credentials when IMDSv1 is allowed.",
+      "frameworks": ["AWS FSBP EC2.8", "CIS AWS Foundations Benchmark 5.6"],
+      "severity": "CRITICAL",
+      "title": "EC2 instance must enforce IMDSv2 with hop limit 1",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_instance",
+        "require": "http_tokens\\s*=\\s*\"required\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "metadata_options.http_tokens": "\"required\"",
+          "metadata_options.http_put_response_hop_limit": "1"
+        }
+      },
+      "requiredActions": [
+        "Add metadata_options { http_tokens = \"required\", http_put_response_hop_limit = 1 } to the aws_instance so IMDSv2 session tokens are mandatory and the metadata endpoint is unreachable from a single-hop SSRF."
+      ]
+    },
+    {
+      "ruleId": "AWS_LAUNCH_TEMPLATE_IMDSV2",
+      "threat": "Autoscaling instances launched from a template without IMDSv2 expose instance-profile credentials to SSRF.",
+      "frameworks": ["AWS FSBP EC2.8", "CIS AWS Foundations Benchmark 5.6"],
+      "severity": "HIGH",
+      "title": "Launch template must enforce IMDSv2",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_launch_template",
+        "require": "http_tokens\\s*=\\s*\"required\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "metadata_options.http_tokens": "\"required\"",
+          "metadata_options.http_put_response_hop_limit": "1"
+        }
+      },
+      "requiredActions": [
+        "Add metadata_options { http_tokens = \"required\", http_put_response_hop_limit = 1 } to the aws_launch_template."
+      ]
+    },
+    {
+      "ruleId": "AWS_EBS_VOLUME_ENCRYPTED",
+      "threat": "An unencrypted EBS volume or its snapshot, if exfiltrated or shared, exposes data at rest with no key barrier.",
+      "frameworks": ["AWS FSBP EC2.3", "CIS AWS Foundations Benchmark 2.2.1"],
+      "severity": "HIGH",
+      "title": "EBS volume must be encrypted at rest",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_ebs_volume",
+        "forbid": "encrypted\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "encrypted": "true" }
+      },
+      "requiredActions": [
+        "Set encrypted = true on the aws_ebs_volume and supply a customer-managed kms_key_id."
+      ]
+    },
+    {
+      "ruleId": "AWS_RDS_NOT_PUBLIC",
+      "threat": "A publicly accessible RDS instance is directly reachable from the internet for brute force and CVE exploitation.",
+      "frameworks": ["AWS FSBP RDS.2", "CIS AWS Foundations Benchmark 2.3.3"],
+      "severity": "CRITICAL",
+      "title": "RDS instance must not be publicly accessible",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_db_instance",
+        "forbid": "publicly_accessible\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "publicly_accessible": "false" }
+      },
+      "requiredActions": [
+        "Set publicly_accessible = false on the aws_db_instance and place it in private subnets behind a security group that only allows the application tier."
+      ]
+    },
+    {
+      "ruleId": "AWS_RDS_STORAGE_ENCRYPTED",
+      "threat": "Unencrypted RDS storage exposes the database contents if the underlying volume or a snapshot is accessed.",
+      "frameworks": ["AWS FSBP RDS.3", "CIS AWS Foundations Benchmark 2.3.1"],
+      "severity": "HIGH",
+      "title": "RDS storage must be encrypted",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_db_instance",
+        "require": "storage_encrypted\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "storage_encrypted": "true" }
+      },
+      "requiredActions": [
+        "Set storage_encrypted = true (and kms_key_id) on the aws_db_instance. Note: encryption can only be enabled at creation; rebuild from an encrypted snapshot if the instance already exists."
+      ]
+    },
+    {
+      "ruleId": "AWS_S3_BUCKET_NO_PUBLIC_ACL",
+      "threat": "A public-read ACL lets anonymous users list and download every object in the bucket.",
+      "frameworks": ["AWS FSBP S3.2", "AWS FSBP S3.3", "CIS AWS Foundations Benchmark 2.1.5"],
+      "severity": "CRITICAL",
+      "title": "S3 bucket must not use a public ACL",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_s3_bucket",
+        "forbid": "acl\\s*=\\s*\"public-read"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "acl": "\"private\"" }
+      },
+      "requiredActions": [
+        "Set acl = \"private\" and attach an aws_s3_bucket_public_access_block with all four block flags = true."
+      ]
+    },
+    {
+      "ruleId": "AWS_S3_BLOCK_PUBLIC_ACCESS",
+      "threat": "Without a public access block, a future bucket policy or ACL can silently expose the bucket to the internet.",
+      "frameworks": ["AWS FSBP S3.8", "CIS AWS Foundations Benchmark 2.1.5"],
+      "severity": "HIGH",
+      "title": "S3 bucket must have a public access block",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_s3_bucket",
+        "requireCompanionType": "aws_s3_bucket_public_access_block"
+      },
+      "remediate": {
+        "strategy": "companion-resource",
+        "companion": "resource \"aws_s3_bucket_public_access_block\" \"${name}\" {\n  bucket                  = aws_s3_bucket.${name}.id\n  block_public_acls       = true\n  block_public_policy     = true\n  ignore_public_acls      = true\n  restrict_public_buckets = true\n}"
+      },
+      "requiredActions": [
+        "Add an aws_s3_bucket_public_access_block referencing this bucket with block_public_acls, block_public_policy, ignore_public_acls, and restrict_public_buckets all set to true."
+      ]
+    },
+    {
+      "ruleId": "AWS_KMS_KEY_ROTATION",
+      "threat": "A customer-managed KMS key without rotation means a single key compromise exposes all historical ciphertext.",
+      "frameworks": ["AWS FSBP KMS.4", "CIS AWS Foundations Benchmark 3.8"],
+      "severity": "MEDIUM",
+      "title": "KMS key must have automatic rotation enabled",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_kms_key",
+        "require": "enable_key_rotation\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "enable_key_rotation": "true" }
+      },
+      "requiredActions": [
+        "Set enable_key_rotation = true on the aws_kms_key."
+      ]
+    },
+    {
+      "ruleId": "AWS_CLOUDTRAIL_MULTIREGION",
+      "threat": "A single-region trail misses global service events (IAM, STS, CloudFront); an attacker operating in another region is unlogged.",
+      "frameworks": ["AWS FSBP CloudTrail.1", "CIS AWS Foundations Benchmark 3.1"],
+      "severity": "HIGH",
+      "title": "CloudTrail must be multi-region",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_cloudtrail",
+        "require": "is_multi_region_trail\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "is_multi_region_trail": "true" }
+      },
+      "requiredActions": [
+        "Set is_multi_region_trail = true on the aws_cloudtrail so global and cross-region API activity is captured."
+      ]
+    },
+    {
+      "ruleId": "AWS_CLOUDTRAIL_LOG_VALIDATION",
+      "threat": "Without log file validation an attacker can tamper with or delete trail objects to cover tracks undetected.",
+      "frameworks": ["AWS FSBP CloudTrail.4", "CIS AWS Foundations Benchmark 3.2"],
+      "severity": "MEDIUM",
+      "title": "CloudTrail must enable log file validation",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_cloudtrail",
+        "require": "enable_log_file_validation\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "enable_log_file_validation": "true" }
+      },
+      "requiredActions": [
+        "Set enable_log_file_validation = true on the aws_cloudtrail."
+      ]
+    },
+    {
+      "ruleId": "AWS_LAMBDA_URL_AUTH_REQUIRED",
+      "threat": "A Lambda function URL with authorization_type NONE is an unauthenticated internet endpoint that can reach the function's IAM role and downstream data stores.",
+      "frameworks": ["AWS FSBP Lambda.1"],
+      "severity": "CRITICAL",
+      "title": "Lambda function URL must require IAM auth",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_lambda_function_url",
+        "forbid": "authorization_type\\s*=\\s*\"NONE\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "authorization_type": "\"AWS_IAM\"" }
+      },
+      "requiredActions": [
+        "Set authorization_type = \"AWS_IAM\" on the aws_lambda_function_url, or front it with API Gateway / a Lambda authorizer that enforces authentication."
+      ]
+    },
+    {
+      "ruleId": "AWS_DYNAMODB_PITR",
+      "threat": "Without point-in-time recovery, a destructive write or ransomware action against the table is unrecoverable.",
+      "frameworks": ["AWS FSBP DynamoDB.2"],
+      "severity": "MEDIUM",
+      "title": "DynamoDB table must enable point-in-time recovery",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_dynamodb_table",
+        "require": "point_in_time_recovery"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "point_in_time_recovery.enabled": "true" }
+      },
+      "requiredActions": [
+        "Add point_in_time_recovery { enabled = true } to the aws_dynamodb_table."
+      ]
+    },
+    {
+      "ruleId": "AWS_SG_NO_OPEN_ADMIN",
+      "threat": "A security group rule allowing 0.0.0.0/0 exposes admin/database ports directly to internet-wide scanning and brute force.",
+      "frameworks": ["AWS FSBP EC2.13", "AWS FSBP EC2.14", "CIS AWS Foundations Benchmark 5.2"],
+      "severity": "HIGH",
+      "title": "Security group rule must not open ports to 0.0.0.0/0",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_security_group_rule",
+        "forbid": "0\\.0\\.0\\.0/0"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Replace cidr_blocks = [\"0.0.0.0/0\"] with the specific corporate / VPC CIDR ranges that require access. For SSH/RDP prefer SSM Session Manager or a bastion."
+      },
+      "requiredActions": [
+        "Restrict cidr_blocks to known source ranges. Auto-fix cannot choose a safe replacement CIDR — review and set the correct allowlist."
+      ]
+    },
+    {
+      "ruleId": "AWS_EC2_NO_PUBLIC_IP",
+      "threat": "Auto-assigning a public IP places the instance directly on the internet, widening the attack surface beyond the load balancer.",
+      "frameworks": ["AWS FSBP EC2.9"],
+      "severity": "MEDIUM",
+      "title": "EC2 instance must not auto-assign a public IP",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_instance",
+        "forbid": "associate_public_ip_address\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "associate_public_ip_address": "false" }
+      },
+      "requiredActions": [
+        "Set associate_public_ip_address = false and reach the instance through a load balancer, NAT, or SSM Session Manager."
+      ]
+    },
+    {
+      "ruleId": "AWS_S3_BUCKET_VERSIONING",
+      "threat": "Without versioning, an accidental or malicious overwrite/delete of objects is unrecoverable (no ransomware rollback).",
+      "frameworks": ["AWS FSBP S3.14"],
+      "severity": "LOW",
+      "title": "S3 bucket should enable versioning",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_s3_bucket",
+        "requireCompanionType": "aws_s3_bucket_versioning"
+      },
+      "remediate": {
+        "strategy": "companion-resource",
+        "companion": "resource \"aws_s3_bucket_versioning\" \"${name}\" {\n  bucket = aws_s3_bucket.${name}.id\n  versioning_configuration {\n    status = \"Enabled\"\n  }\n}"
+      },
+      "requiredActions": [
+        "Add an aws_s3_bucket_versioning resource for this bucket with versioning_configuration { status = \"Enabled\" }."
+      ]
+    },
+    {
+      "ruleId": "AWS_ECR_SCAN_ON_PUSH",
+      "threat": "Images pushed without vulnerability scanning can ship known-exploitable CVEs straight into production.",
+      "frameworks": ["AWS FSBP ECR.1"],
+      "severity": "MEDIUM",
+      "title": "ECR repository must scan images on push",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_ecr_repository",
+        "require": "scan_on_push\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "image_scanning_configuration.scan_on_push": "true" }
+      },
+      "requiredActions": [
+        "Add image_scanning_configuration { scan_on_push = true } to the aws_ecr_repository."
+      ]
+    },
+    {
+      "ruleId": "AWS_ECR_IMMUTABLE_TAGS",
+      "threat": "Mutable tags let an attacker who gains push access overwrite a trusted tag (e.g. :latest) with a backdoored image.",
+      "frameworks": ["AWS FSBP ECR.2"],
+      "severity": "MEDIUM",
+      "title": "ECR repository must use immutable tags",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_ecr_repository",
+        "require": "image_tag_mutability\\s*=\\s*\"IMMUTABLE\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "image_tag_mutability": "\"IMMUTABLE\"" }
+      },
+      "requiredActions": [
+        "Set image_tag_mutability = \"IMMUTABLE\" on the aws_ecr_repository."
+      ]
+    },
+    {
+      "ruleId": "AWS_EFS_ENCRYPTED",
+      "threat": "An unencrypted EFS file system exposes shared data at rest with no key barrier.",
+      "frameworks": ["AWS FSBP EFS.1"],
+      "severity": "HIGH",
+      "title": "EFS file system must be encrypted",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_efs_file_system",
+        "require": "encrypted\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "encrypted": "true" }
+      },
+      "requiredActions": [
+        "Set encrypted = true (and kms_key_id) on the aws_efs_file_system."
+      ]
+    },
+    {
+      "ruleId": "AWS_SNS_ENCRYPTED",
+      "threat": "An unencrypted SNS topic stores and forwards potentially sensitive messages without encryption at rest.",
+      "frameworks": ["AWS FSBP SNS.1"],
+      "severity": "MEDIUM",
+      "title": "SNS topic must be encrypted at rest",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_sns_topic",
+        "require": "kms_master_key_id"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "kms_master_key_id": "\"alias/aws/sns\"" }
+      },
+      "requiredActions": [
+        "Set kms_master_key_id (a CMK alias is preferred over alias/aws/sns) on the aws_sns_topic."
+      ]
+    },
+    {
+      "ruleId": "AWS_SQS_ENCRYPTED",
+      "threat": "An unencrypted SQS queue holds in-flight messages — often containing PII or tokens — without encryption at rest.",
+      "frameworks": ["AWS FSBP SQS.1"],
+      "severity": "MEDIUM",
+      "title": "SQS queue must enable server-side encryption",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_sqs_queue",
+        "require": "sqs_managed_sse_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "sqs_managed_sse_enabled": "true" }
+      },
+      "requiredActions": [
+        "Set sqs_managed_sse_enabled = true (or kms_master_key_id for a CMK) on the aws_sqs_queue."
+      ]
+    },
+    {
+      "ruleId": "AWS_CW_LOG_RETENTION",
+      "threat": "A log group with infinite retention silently accumulates sensitive data forever; one with no retention set defaults to never expire, raising breach blast radius.",
+      "frameworks": ["AWS FSBP CloudWatch.16"],
+      "severity": "LOW",
+      "title": "CloudWatch log group must set a retention period",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_cloudwatch_log_group",
+        "require": "retention_in_days"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "retention_in_days": "365" }
+      },
+      "requiredActions": [
+        "Set retention_in_days on the aws_cloudwatch_log_group (365 is a common compliance baseline) and add kms_key_id for encryption."
+      ]
+    },
+    {
+      "ruleId": "AWS_REDSHIFT_NOT_PUBLIC",
+      "threat": "A publicly accessible Redshift cluster is directly reachable from the internet for brute force and exploitation.",
+      "frameworks": ["AWS FSBP Redshift.1"],
+      "severity": "HIGH",
+      "title": "Redshift cluster must not be publicly accessible",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_redshift_cluster",
+        "forbid": "publicly_accessible\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "publicly_accessible": "false" }
+      },
+      "requiredActions": [
+        "Set publicly_accessible = false on the aws_redshift_cluster and place it in private subnets."
+      ]
+    },
+    {
+      "ruleId": "AWS_REDSHIFT_ENCRYPTED",
+      "threat": "An unencrypted Redshift cluster exposes the data warehouse contents if storage or a snapshot is accessed.",
+      "frameworks": ["AWS FSBP Redshift.10"],
+      "severity": "HIGH",
+      "title": "Redshift cluster must be encrypted",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_redshift_cluster",
+        "require": "encrypted\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "encrypted": "true" }
+      },
+      "requiredActions": [
+        "Set encrypted = true (and kms_key_id) on the aws_redshift_cluster."
+      ]
+    },
+    {
+      "ruleId": "AWS_ELB_DROP_INVALID_HEADERS",
+      "threat": "Without dropping invalid HTTP headers, an ALB can forward request-smuggling payloads to backends.",
+      "frameworks": ["AWS FSBP ELB.4"],
+      "severity": "MEDIUM",
+      "title": "ALB must drop invalid HTTP headers",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_lb",
+        "require": "drop_invalid_header_fields\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "drop_invalid_header_fields": "true" }
+      },
+      "requiredActions": [
+        "Set drop_invalid_header_fields = true on the application aws_lb."
+      ]
+    },
+    {
+      "ruleId": "AWS_DOCDB_ENCRYPTED",
+      "threat": "An unencrypted DocumentDB cluster exposes document data at rest if storage or a snapshot is accessed.",
+      "frameworks": ["AWS FSBP DocumentDB.1"],
+      "severity": "HIGH",
+      "title": "DocumentDB cluster must be encrypted",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_docdb_cluster",
+        "require": "storage_encrypted\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "storage_encrypted": "true" }
+      },
+      "requiredActions": [
+        "Set storage_encrypted = true (and kms_key_id) on the aws_docdb_cluster."
+      ]
+    },
+    {
+      "ruleId": "AWS_ELASTICACHE_ENCRYPTED",
+      "threat": "An ElastiCache replication group without at-rest encryption exposes cached data — often session tokens or PII — if storage is accessed.",
+      "frameworks": ["AWS FSBP ElastiCache.4"],
+      "severity": "MEDIUM",
+      "title": "ElastiCache replication group must encrypt at rest",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_elasticache_replication_group",
+        "require": "at_rest_encryption_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "at_rest_encryption_enabled": "true" }
+      },
+      "requiredActions": [
+        "Set at_rest_encryption_enabled = true (and transit_encryption_enabled = true) on the aws_elasticache_replication_group."
+      ]
+    },
+    {
+      "ruleId": "AWS_SAGEMAKER_NO_DIRECT_INTERNET",
+      "threat": "A SageMaker notebook with direct internet access is an exfiltration and command-and-control channel from within the VPC.",
+      "frameworks": ["AWS FSBP SageMaker.1"],
+      "severity": "MEDIUM",
+      "title": "SageMaker notebook must disable direct internet access",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_sagemaker_notebook_instance",
+        "require": "direct_internet_access\\s*=\\s*\"Disabled\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "direct_internet_access": "\"Disabled\"" }
+      },
+      "requiredActions": [
+        "Set direct_internet_access = \"Disabled\" on the aws_sagemaker_notebook_instance and route egress through a VPC NAT with controls."
+      ]
+    },
+    {
+      "ruleId": "AWS_EBS_DEFAULT_ENCRYPTION",
+      "threat": "Without account-default EBS encryption, any volume created without an explicit flag lands unencrypted.",
+      "frameworks": ["AWS FSBP EC2.7", "CIS AWS Foundations Benchmark 2.2.1"],
+      "severity": "HIGH",
+      "title": "Account default EBS encryption must be enabled",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_ebs_encryption_by_default",
+        "forbid": "enabled\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "enabled": "true" }
+      },
+      "requiredActions": [
+        "Set enabled = true on aws_ebs_encryption_by_default so all new EBS volumes are encrypted by default."
+      ]
+    },
+    {
+      "ruleId": "AWS_RDS_DELETION_PROTECTION",
+      "threat": "Without deletion protection, a compromised credential or accidental apply can destroy the production database.",
+      "frameworks": ["AWS FSBP RDS.8"],
+      "severity": "MEDIUM",
+      "title": "RDS instance must enable deletion protection",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_db_instance",
+        "require": "deletion_protection\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "deletion_protection": "true" }
+      },
+      "requiredActions": [
+        "Set deletion_protection = true on the aws_db_instance."
+      ]
+    },
+    {
+      "ruleId": "AWS_RDS_AUTO_MINOR_UPGRADE",
+      "threat": "Disabling automatic minor version upgrades leaves the database running known-vulnerable engine patch levels.",
+      "frameworks": ["AWS FSBP RDS.13"],
+      "severity": "LOW",
+      "title": "RDS instance must allow automatic minor version upgrades",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_db_instance",
+        "forbid": "auto_minor_version_upgrade\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "auto_minor_version_upgrade": "true" }
+      },
+      "requiredActions": [
+        "Set auto_minor_version_upgrade = true on the aws_db_instance."
+      ]
+    },
+    {
+      "ruleId": "AWS_RDS_BACKUP_RETENTION",
+      "threat": "A zero/short backup retention window means no point-in-time recovery after a destructive or ransomware event.",
+      "frameworks": ["AWS FSBP RDS.11"],
+      "severity": "LOW",
+      "title": "RDS instance must set a backup retention period",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_db_instance",
+        "require": "backup_retention_period"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "backup_retention_period": "7" }
+      },
+      "requiredActions": [
+        "Set backup_retention_period to at least 7 (days) on the aws_db_instance."
+      ]
+    },
+    {
+      "ruleId": "AWS_NEPTUNE_ENCRYPTED",
+      "threat": "An unencrypted Neptune cluster exposes graph data at rest if storage or a snapshot is accessed.",
+      "frameworks": ["AWS FSBP Neptune.1"],
+      "severity": "HIGH",
+      "title": "Neptune cluster must be encrypted",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_neptune_cluster",
+        "require": "storage_encrypted\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "storage_encrypted": "true" }
+      },
+      "requiredActions": [
+        "Set storage_encrypted = true (and kms_key_arn) on the aws_neptune_cluster."
+      ]
+    },
+    {
+      "ruleId": "AWS_GUARDDUTY_ENABLED",
+      "threat": "A disabled GuardDuty detector means no managed threat detection on the account — credential theft and recon go unseen.",
+      "frameworks": ["AWS FSBP GuardDuty.1", "CIS AWS Foundations Benchmark 3.8"],
+      "severity": "MEDIUM",
+      "title": "GuardDuty detector must be enabled",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_guardduty_detector",
+        "forbid": "enable\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "enable": "true" }
+      },
+      "requiredActions": [
+        "Set enable = true on the aws_guardduty_detector."
+      ]
+    },
+    {
+      "ruleId": "AWS_OPENSEARCH_ENCRYPT_AT_REST",
+      "threat": "An OpenSearch domain without at-rest encryption exposes indexed data if the underlying storage is accessed.",
+      "frameworks": ["AWS FSBP OpenSearch.1"],
+      "severity": "HIGH",
+      "title": "OpenSearch domain must encrypt at rest",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_opensearch_domain",
+        "require": "encrypt_at_rest"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "encrypt_at_rest.enabled": "true" }
+      },
+      "requiredActions": [
+        "Add encrypt_at_rest { enabled = true } to the aws_opensearch_domain."
+      ]
+    },
+    {
+      "ruleId": "AWS_OPENSEARCH_NODE_TO_NODE",
+      "threat": "Without node-to-node encryption, intra-cluster OpenSearch traffic is plaintext and sniffable inside the VPC.",
+      "frameworks": ["AWS FSBP OpenSearch.3"],
+      "severity": "MEDIUM",
+      "title": "OpenSearch domain must use node-to-node encryption",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_opensearch_domain",
+        "require": "node_to_node_encryption"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "node_to_node_encryption.enabled": "true" }
+      },
+      "requiredActions": [
+        "Add node_to_node_encryption { enabled = true } to the aws_opensearch_domain."
+      ]
+    },
+    {
+      "ruleId": "AWS_OPENSEARCH_ENFORCE_HTTPS",
+      "threat": "An OpenSearch domain that does not enforce HTTPS accepts plaintext queries carrying credentials and data.",
+      "frameworks": ["AWS FSBP OpenSearch.8"],
+      "severity": "MEDIUM",
+      "title": "OpenSearch domain must enforce HTTPS",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_opensearch_domain",
+        "require": "enforce_https\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "domain_endpoint_options.enforce_https": "true" }
+      },
+      "requiredActions": [
+        "Add domain_endpoint_options { enforce_https = true } to the aws_opensearch_domain."
+      ]
+    },
+    {
+      "ruleId": "AWS_DMS_NOT_PUBLIC",
+      "threat": "A DMS replication instance defaults to publicly accessible, exposing the migration pipeline to the internet.",
+      "frameworks": ["AWS FSBP DMS.1"],
+      "severity": "HIGH",
+      "title": "DMS replication instance must not be publicly accessible",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_dms_replication_instance",
+        "require": "publicly_accessible\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "publicly_accessible": "false" }
+      },
+      "requiredActions": [
+        "Set publicly_accessible = false on the aws_dms_replication_instance (it defaults to true)."
+      ]
+    },
+    {
+      "ruleId": "AWS_APIGW_XRAY",
+      "threat": "Without X-Ray tracing, attack reconnaissance and abuse against API Gateway stages is harder to detect and investigate.",
+      "frameworks": ["AWS FSBP APIGateway.3"],
+      "severity": "LOW",
+      "title": "API Gateway stage should enable X-Ray tracing",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_api_gateway_stage",
+        "require": "xray_tracing_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "xray_tracing_enabled": "true" }
+      },
+      "requiredActions": [
+        "Set xray_tracing_enabled = true on the aws_api_gateway_stage."
+      ]
+    },
+    {
+      "ruleId": "AWS_ALB_DELETION_PROTECTION",
+      "threat": "Without deletion protection, a load balancer fronting production can be destroyed by a compromised credential, causing an outage.",
+      "frameworks": ["AWS FSBP ELB.6"],
+      "severity": "LOW",
+      "title": "Load balancer should enable deletion protection",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_lb",
+        "require": "enable_deletion_protection\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "enable_deletion_protection": "true" }
+      },
+      "requiredActions": [
+        "Set enable_deletion_protection = true on the aws_lb."
+      ]
+    },
+    {
+      "ruleId": "AWS_S3_DEFAULT_ENCRYPTION",
+      "threat": "A bucket without an explicit server-side encryption configuration relies on account defaults that may not use a CMK.",
+      "frameworks": ["AWS FSBP S3.4"],
+      "severity": "LOW",
+      "title": "S3 bucket should declare server-side encryption",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_s3_bucket",
+        "requireCompanionType": "aws_s3_bucket_server_side_encryption_configuration"
+      },
+      "remediate": {
+        "strategy": "companion-resource",
+        "companion": "resource \"aws_s3_bucket_server_side_encryption_configuration\" \"${name}\" {\n  bucket = aws_s3_bucket.${name}.id\n  rule {\n    apply_server_side_encryption_by_default {\n      sse_algorithm = \"aws:kms\"\n    }\n  }\n}"
+      },
+      "requiredActions": [
+        "Add an aws_s3_bucket_server_side_encryption_configuration for this bucket using aws:kms (or AES256)."
+      ]
+    },
+    {
+      "ruleId": "AWS_S3_BUCKET_LOGGING",
+      "threat": "Without access logging, bulk object reads (data exfiltration) leave no forensic trail.",
+      "frameworks": ["AWS FSBP S3.9"],
+      "severity": "LOW",
+      "title": "S3 bucket should enable access logging",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_s3_bucket",
+        "requireCompanionType": "aws_s3_bucket_logging"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add an aws_s3_bucket_logging resource pointing at a dedicated log-archive bucket (target_bucket). Auto-fix cannot choose the log destination."
+      },
+      "requiredActions": [
+        "Add an aws_s3_bucket_logging resource for this bucket. Choose a separate, access-restricted target_bucket for the logs."
+      ]
+    },
+    {
+      "ruleId": "AWS_EKS_PRIVATE_ENDPOINT",
+      "threat": "An EKS cluster API server exposed publicly without a private endpoint is reachable for credential stuffing and CVE exploitation.",
+      "frameworks": ["AWS FSBP EKS.1"],
+      "severity": "MEDIUM",
+      "title": "EKS cluster should enable a private API endpoint",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_eks_cluster",
+        "require": "endpoint_private_access\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "In vpc_config set endpoint_private_access = true and restrict public_access_cidrs to your admin ranges (or disable endpoint_public_access). Networking choices require review."
+      },
+      "requiredActions": [
+        "Enable endpoint_private_access and restrict public_access_cidrs on the aws_eks_cluster vpc_config."
+      ]
+    },
+    {
+      "ruleId": "AWS_ECS_NO_PRIVILEGED",
+      "threat": "A privileged ECS task container has host-level capabilities — a container escape becomes a host compromise.",
+      "frameworks": ["AWS FSBP ECS.4"],
+      "severity": "HIGH",
+      "title": "ECS task definition must not run privileged containers",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_ecs_task_definition",
+        "forbid": "\"privileged\"\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Remove \"privileged\": true from the container_definitions JSON and grant only the specific Linux capabilities required."
+      },
+      "requiredActions": [
+        "Set privileged to false (or remove it) in the container_definitions. Auto-fix does not edit embedded JSON container definitions."
+      ]
+    },
+    {
+      "ruleId": "AWS_SECRETSMANAGER_ROTATION",
+      "threat": "A secret without automated rotation stays valid indefinitely if leaked, maximising the window of a credential compromise.",
+      "frameworks": ["AWS FSBP SecretsManager.1"],
+      "severity": "MEDIUM",
+      "title": "Secrets Manager secret should have rotation configured",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_secretsmanager_secret",
+        "requireCompanionType": "aws_secretsmanager_secret_rotation"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add an aws_secretsmanager_secret_rotation resource with a rotation_lambda_arn and rotation_rules { automatically_after_days = 30 }. The rotation Lambda must be supplied."
+      },
+      "requiredActions": [
+        "Configure automatic rotation for this secret via aws_secretsmanager_secret_rotation."
+      ]
+    },
+    {
+      "ruleId": "AWS_RDS_CLUSTER_ENCRYPTED",
+      "threat": "An unencrypted Aurora cluster exposes the database at rest if storage or a snapshot is accessed.",
+      "frameworks": ["AWS FSBP RDS.27"],
+      "severity": "HIGH",
+      "title": "Aurora/RDS cluster must be encrypted",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_rds_cluster",
+        "require": "storage_encrypted\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "storage_encrypted": "true" }
+      },
+      "requiredActions": [
+        "Set storage_encrypted = true (and kms_key_id) on the aws_rds_cluster."
+      ]
+    },
+    {
+      "ruleId": "AWS_RDS_CLUSTER_DELETION_PROTECTION",
+      "threat": "Without deletion protection, a compromised credential can destroy the entire Aurora cluster.",
+      "frameworks": ["AWS FSBP RDS.7"],
+      "severity": "MEDIUM",
+      "title": "Aurora/RDS cluster must enable deletion protection",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_rds_cluster",
+        "require": "deletion_protection\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "deletion_protection": "true" }
+      },
+      "requiredActions": [
+        "Set deletion_protection = true on the aws_rds_cluster."
+      ]
+    },
+    {
+      "ruleId": "AWS_RDS_CLUSTER_BACKUP_RETENTION",
+      "threat": "A short/zero cluster backup window means no point-in-time recovery after a destructive event.",
+      "frameworks": ["AWS FSBP RDS.11"],
+      "severity": "LOW",
+      "title": "Aurora/RDS cluster must set a backup retention period",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_rds_cluster",
+        "require": "backup_retention_period"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "backup_retention_period": "7" }
+      },
+      "requiredActions": [
+        "Set backup_retention_period to at least 7 on the aws_rds_cluster."
+      ]
+    },
+    {
+      "ruleId": "AWS_RDS_CLUSTER_INSTANCE_NOT_PUBLIC",
+      "threat": "A publicly accessible Aurora cluster instance is directly reachable from the internet.",
+      "frameworks": ["AWS FSBP RDS.2"],
+      "severity": "CRITICAL",
+      "title": "Aurora cluster instance must not be publicly accessible",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_rds_cluster_instance",
+        "forbid": "publicly_accessible\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "publicly_accessible": "false" }
+      },
+      "requiredActions": [
+        "Set publicly_accessible = false on the aws_rds_cluster_instance and place it in private subnets."
+      ]
+    },
+    {
+      "ruleId": "AWS_ELASTICACHE_TRANSIT_ENCRYPTION",
+      "threat": "Without in-transit encryption, ElastiCache traffic — often session tokens — is plaintext on the wire.",
+      "frameworks": ["AWS FSBP ElastiCache.5"],
+      "severity": "MEDIUM",
+      "title": "ElastiCache replication group must encrypt in transit",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_elasticache_replication_group",
+        "require": "transit_encryption_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "transit_encryption_enabled": "true" }
+      },
+      "requiredActions": [
+        "Set transit_encryption_enabled = true on the aws_elasticache_replication_group."
+      ]
+    },
+    {
+      "ruleId": "AWS_ECR_REPOSITORY_ENCRYPTION",
+      "threat": "An ECR repository without an explicit KMS encryption configuration relies on default keys that may not be customer-managed.",
+      "frameworks": ["AWS FSBP ECR.x"],
+      "severity": "LOW",
+      "title": "ECR repository should declare KMS encryption",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_ecr_repository",
+        "require": "encryption_configuration"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "encryption_configuration.encryption_type": "\"KMS\"" }
+      },
+      "requiredActions": [
+        "Add encryption_configuration { encryption_type = \"KMS\" } (and kms_key) to the aws_ecr_repository."
+      ]
+    },
+    {
+      "ruleId": "AWS_KINESIS_ENCRYPTION",
+      "threat": "An unencrypted Kinesis stream stores records in plaintext at rest.",
+      "frameworks": ["AWS FSBP Kinesis.1"],
+      "severity": "MEDIUM",
+      "title": "Kinesis stream must enable server-side encryption",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_kinesis_stream",
+        "require": "encryption_type\\s*=\\s*\"KMS\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "encryption_type": "\"KMS\"", "kms_key_id": "\"alias/aws/kinesis\"" }
+      },
+      "requiredActions": [
+        "Set encryption_type = \"KMS\" (and kms_key_id) on the aws_kinesis_stream."
+      ]
+    },
+    {
+      "ruleId": "AWS_LAMBDA_XRAY_TRACING",
+      "threat": "Without X-Ray active tracing, abuse and exploitation of a Lambda is harder to detect and trace.",
+      "frameworks": ["AWS FSBP Lambda.x"],
+      "severity": "LOW",
+      "title": "Lambda function should enable active tracing",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_lambda_function",
+        "require": "tracing_config"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "tracing_config.mode": "\"Active\"" }
+      },
+      "requiredActions": [
+        "Add tracing_config { mode = \"Active\" } to the aws_lambda_function."
+      ]
+    },
+    {
+      "ruleId": "AWS_VPC_FLOW_LOGS",
+      "threat": "Without VPC Flow Logs there is no network-level record of exfiltration or lateral movement.",
+      "frameworks": ["AWS FSBP EC2.6", "CIS AWS Foundations Benchmark 3.9"],
+      "severity": "MEDIUM",
+      "title": "VPC should enable flow logs",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_vpc",
+        "requireCompanionType": "aws_flow_log"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add an aws_flow_log for this VPC writing to CloudWatch Logs or S3. Auto-fix cannot choose the log destination / IAM role."
+      },
+      "requiredActions": [
+        "Add an aws_flow_log resource for this aws_vpc with a log destination and IAM role."
+      ]
+    },
+    {
+      "ruleId": "AWS_CLOUDFRONT_WAF",
+      "threat": "A CloudFront distribution without a WAF web ACL has no managed protection against L7 attacks (injection, bots, DDoS).",
+      "frameworks": ["AWS FSBP CloudFront.6"],
+      "severity": "LOW",
+      "title": "CloudFront distribution should attach a WAF web ACL",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_cloudfront_distribution",
+        "require": "web_acl_id"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set web_acl_id to an aws_wafv2_web_acl (scope = CLOUDFRONT) ARN. The WAF rule set must be designed for the app."
+      },
+      "requiredActions": [
+        "Attach a WAFv2 web ACL via web_acl_id on the aws_cloudfront_distribution."
+      ]
+    },
+    {
+      "ruleId": "AWS_CODEBUILD_ENCRYPTED",
+      "threat": "A CodeBuild project without a CMK encrypts artifacts/logs with default keys that may be broadly accessible.",
+      "frameworks": ["AWS FSBP CodeBuild.x"],
+      "severity": "LOW",
+      "title": "CodeBuild project should use a customer-managed key",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_codebuild_project",
+        "require": "encryption_key"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set encryption_key to a customer-managed aws_kms_key ARN on the aws_codebuild_project."
+      },
+      "requiredActions": [
+        "Set encryption_key to a CMK ARN on the aws_codebuild_project."
+      ]
+    },
+    {
+      "ruleId": "AWS_IAM_PASSWORD_MIN_LENGTH",
+      "threat": "A short minimum password length makes console credentials trivially brute-forceable.",
+      "frameworks": ["CIS AWS Foundations Benchmark 1.8"],
+      "severity": "MEDIUM",
+      "title": "IAM password policy must require length >= 14",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_iam_account_password_policy",
+        "forbid": "minimum_password_length\\s*=\\s*([0-9]|1[0-3])\\b"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "minimum_password_length": "14" }
+      },
+      "requiredActions": [
+        "Set minimum_password_length = 14 (or higher) on the aws_iam_account_password_policy."
+      ]
+    },
+    {
+      "ruleId": "AWS_IAM_PASSWORD_REUSE",
+      "threat": "Without password-reuse prevention, users can cycle back to a known-compromised password.",
+      "frameworks": ["CIS AWS Foundations Benchmark 1.9"],
+      "severity": "LOW",
+      "title": "IAM password policy must prevent password reuse",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_iam_account_password_policy",
+        "require": "password_reuse_prevention"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "password_reuse_prevention": "24" }
+      },
+      "requiredActions": [
+        "Set password_reuse_prevention = 24 on the aws_iam_account_password_policy."
+      ]
+    },
+    {
+      "ruleId": "AWS_DAX_ENCRYPTION",
+      "threat": "An unencrypted DAX cluster caches DynamoDB data — often PII — in plaintext at rest.",
+      "frameworks": ["AWS FSBP DynamoDB.x"],
+      "severity": "MEDIUM",
+      "title": "DAX cluster must encrypt at rest",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_dax_cluster",
+        "require": "server_side_encryption"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "server_side_encryption.enabled": "true" }
+      },
+      "requiredActions": [
+        "Add server_side_encryption { enabled = true } to the aws_dax_cluster."
+      ]
+    },
+    {
+      "ruleId": "AWS_ECR_REPO_POLICY_NO_PUBLIC",
+      "threat": "An ECR repository policy allowing Principal \"*\" lets any AWS account pull (or push) images.",
+      "frameworks": ["AWS FSBP ECR.x"],
+      "severity": "HIGH",
+      "title": "ECR repository policy must not allow any principal",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_ecr_repository_policy",
+        "forbid": "\"AWS\"\\s*:\\s*\"\\*\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Replace Principal { AWS = \"*\" } with the specific account/role ARNs allowed to pull. Auto-fix cannot infer the correct principals."
+      },
+      "requiredActions": [
+        "Scope the aws_ecr_repository_policy to explicit account/role principals."
+      ]
+    },
+    {
+      "ruleId": "AWS_SNS_TOPIC_POLICY_NO_PUBLIC",
+      "threat": "An SNS topic policy with Principal \"*\" and no source condition lets any account publish or subscribe.",
+      "frameworks": ["AWS FSBP SNS.x"],
+      "severity": "HIGH",
+      "title": "SNS topic policy must not allow any principal",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_sns_topic_policy",
+        "forbid": "\"AWS\"\\s*:\\s*\"\\*\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add an aws:SourceOwner / aws:SourceArn condition or scope the Principal. Auto-fix cannot infer the correct condition."
+      },
+      "requiredActions": [
+        "Scope the aws_sns_topic_policy Principal or add a source-account condition."
+      ]
+    },
+    {
+      "ruleId": "AWS_SQS_QUEUE_POLICY_NO_PUBLIC",
+      "threat": "An SQS queue policy with Principal \"*\" and no source condition lets any account read or send messages.",
+      "frameworks": ["AWS FSBP SQS.x"],
+      "severity": "HIGH",
+      "title": "SQS queue policy must not allow any principal",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_sqs_queue_policy",
+        "forbid": "\"AWS\"\\s*:\\s*\"\\*\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add an aws:SourceArn / aws:SourceAccount condition or scope the Principal on the aws_sqs_queue_policy."
+      },
+      "requiredActions": [
+        "Scope the aws_sqs_queue_policy Principal or add a source condition."
+      ]
+    },
+    {
+      "ruleId": "AWS_EBS_SNAPSHOT_NOT_PUBLIC",
+      "threat": "A publicly shared EBS snapshot lets any AWS account restore a full copy of the volume's data.",
+      "frameworks": ["AWS FSBP EC2.x"],
+      "severity": "CRITICAL",
+      "title": "EBS snapshot must not be publicly shared",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_snapshot_create_volume_permission",
+        "forbid": "account_id\\s*=\\s*\"all\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Remove the 'all' account_id from aws_snapshot_create_volume_permission and share only with specific account IDs."
+      },
+      "requiredActions": [
+        "Restrict snapshot sharing to specific account IDs; never 'all'."
+      ]
+    },
+    {
+      "ruleId": "AWS_EMR_BLOCK_PUBLIC_ACCESS",
+      "threat": "Without EMR account block-public-access, a cluster security group can expose Hadoop/Spark UIs to the internet.",
+      "frameworks": ["AWS FSBP EMR.2"],
+      "severity": "MEDIUM",
+      "title": "EMR block public access must be enabled",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_emr_block_public_access_configuration",
+        "forbid": "block_public_security_group_rules\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "block_public_security_group_rules": "true" }
+      },
+      "requiredActions": [
+        "Set block_public_security_group_rules = true on the aws_emr_block_public_access_configuration."
+      ]
+    },
+    {
+      "ruleId": "AWS_MQ_NOT_PUBLIC",
+      "threat": "A publicly accessible Amazon MQ broker is reachable from the internet for brute force and protocol abuse.",
+      "frameworks": ["AWS FSBP MQ.x"],
+      "severity": "HIGH",
+      "title": "Amazon MQ broker must not be publicly accessible",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_mq_broker",
+        "forbid": "publicly_accessible\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "publicly_accessible": "false" }
+      },
+      "requiredActions": [
+        "Set publicly_accessible = false on the aws_mq_broker and place it in private subnets."
+      ]
+    },
+    {
+      "ruleId": "AWS_MEMORYDB_TLS",
+      "threat": "A MemoryDB cluster without TLS sends cache traffic — often tokens — in plaintext on the wire.",
+      "frameworks": ["AWS FSBP MemoryDB.x"],
+      "severity": "MEDIUM",
+      "title": "MemoryDB cluster must enable TLS",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_memorydb_cluster",
+        "require": "tls_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "tls_enabled": "true" }
+      },
+      "requiredActions": [
+        "Set tls_enabled = true on the aws_memorydb_cluster."
+      ]
+    },
+    {
+      "ruleId": "AWS_ATHENA_ENFORCE_CONFIG",
+      "threat": "Without enforced workgroup configuration, clients can override the encryption/output settings and write unencrypted query results.",
+      "frameworks": ["AWS FSBP Athena.x"],
+      "severity": "LOW",
+      "title": "Athena workgroup must enforce its configuration",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_athena_workgroup",
+        "require": "enforce_workgroup_configuration\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "configuration.enforce_workgroup_configuration": "true" }
+      },
+      "requiredActions": [
+        "Set configuration { enforce_workgroup_configuration = true } on the aws_athena_workgroup (and configure result encryption)."
+      ]
+    },
+    {
+      "ruleId": "AWS_REDSHIFT_ENHANCED_VPC",
+      "threat": "Without enhanced VPC routing, Redshift COPY/UNLOAD traffic leaves the VPC and bypasses VPC-level egress controls.",
+      "frameworks": ["AWS FSBP Redshift.7"],
+      "severity": "LOW",
+      "title": "Redshift cluster should use enhanced VPC routing",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_redshift_cluster",
+        "require": "enhanced_vpc_routing\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "enhanced_vpc_routing": "true" }
+      },
+      "requiredActions": [
+        "Set enhanced_vpc_routing = true on the aws_redshift_cluster."
+      ]
+    },
+    {
+      "ruleId": "AWS_NEPTUNE_BACKUP_RETENTION",
+      "threat": "A short Neptune backup window means no point-in-time recovery after a destructive event.",
+      "frameworks": ["AWS FSBP Neptune.x"],
+      "severity": "LOW",
+      "title": "Neptune cluster must set a backup retention period",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_neptune_cluster",
+        "require": "backup_retention_period"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "backup_retention_period": "7" }
+      },
+      "requiredActions": [
+        "Set backup_retention_period to at least 7 on the aws_neptune_cluster."
+      ]
+    },
+    {
+      "ruleId": "AWS_DOCDB_BACKUP_RETENTION",
+      "threat": "A short DocumentDB backup window means no point-in-time recovery after a destructive event.",
+      "frameworks": ["AWS FSBP DocumentDB.x"],
+      "severity": "LOW",
+      "title": "DocumentDB cluster must set a backup retention period",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_docdb_cluster",
+        "require": "backup_retention_period"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "backup_retention_period": "7" }
+      },
+      "requiredActions": [
+        "Set backup_retention_period to at least 7 on the aws_docdb_cluster."
+      ]
+    },
+    {
+      "ruleId": "AWS_ELASTICSEARCH_ENCRYPT_AT_REST",
+      "threat": "A legacy Elasticsearch domain without at-rest encryption exposes indexed data if storage is accessed.",
+      "frameworks": ["AWS FSBP ES.1"],
+      "severity": "HIGH",
+      "title": "Elasticsearch domain must encrypt at rest",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_elasticsearch_domain",
+        "require": "encrypt_at_rest"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "encrypt_at_rest.enabled": "true" }
+      },
+      "requiredActions": [
+        "Add encrypt_at_rest { enabled = true } to the aws_elasticsearch_domain (migrate to aws_opensearch_domain where possible)."
+      ]
+    },
+    {
+      "ruleId": "AWS_MQ_ENCRYPTION",
+      "threat": "An Amazon MQ broker without a customer-managed key encrypts messages with default keys that may be broadly accessible.",
+      "frameworks": ["AWS FSBP MQ.x"],
+      "severity": "LOW",
+      "title": "Amazon MQ broker should use a customer-managed key",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_mq_broker",
+        "require": "encryption_options"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add encryption_options { kms_key_id = <cmk-arn>, use_aws_owned_key = false } to the aws_mq_broker."
+      },
+      "requiredActions": [
+        "Configure encryption_options with a CMK on the aws_mq_broker."
+      ]
+    },
+    {
+      "ruleId": "AWS_CLOUDFRONT_LOGGING",
+      "threat": "A CloudFront distribution without access logging leaves no record of abuse, scraping, or attack traffic.",
+      "frameworks": ["AWS FSBP CloudFront.5"],
+      "severity": "LOW",
+      "title": "CloudFront distribution should enable access logging",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_cloudfront_distribution",
+        "require": "logging_config"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add logging_config { bucket = <log-bucket>.s3.amazonaws.com, include_cookies = false } to the aws_cloudfront_distribution. Choose a dedicated log bucket."
+      },
+      "requiredActions": [
+        "Add a logging_config block pointing at a dedicated log bucket on the aws_cloudfront_distribution."
+      ]
+    },
+    {
+      "ruleId": "AWS_SAGEMAKER_NOTEBOOK_ROOT_ACCESS",
+      "threat": "Root access on a SageMaker notebook lets a user (or attacker who lands in it) install kernels/agents and tamper with the instance.",
+      "frameworks": ["AWS FSBP SageMaker.3"],
+      "severity": "MEDIUM",
+      "title": "SageMaker notebook must disable root access",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_sagemaker_notebook_instance",
+        "forbid": "root_access\\s*=\\s*\"Enabled\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "root_access": "\"Disabled\"" }
+      },
+      "requiredActions": [
+        "Set root_access = \"Disabled\" on the aws_sagemaker_notebook_instance."
+      ]
+    },
+    {
+      "ruleId": "AWS_WORKSPACES_VOLUME_ENCRYPTION",
+      "threat": "An unencrypted WorkSpaces volume exposes user data at rest if the underlying storage is accessed.",
+      "frameworks": ["AWS FSBP WorkSpaces.1", "AWS FSBP WorkSpaces.2"],
+      "severity": "MEDIUM",
+      "title": "WorkSpaces volumes must be encrypted",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_workspaces_workspace",
+        "require": "user_volume_encryption_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "user_volume_encryption_enabled": "true",
+          "root_volume_encryption_enabled": "true"
+        }
+      },
+      "requiredActions": [
+        "Set user_volume_encryption_enabled = true and root_volume_encryption_enabled = true on the aws_workspaces_workspace."
+      ]
+    },
+    {
+      "ruleId": "AWS_ECS_SERVICE_NO_PUBLIC_IP",
+      "threat": "An ECS service assigning public IPs to tasks places workloads directly on the internet, widening the attack surface.",
+      "frameworks": ["AWS FSBP ECS.2"],
+      "severity": "MEDIUM",
+      "title": "ECS service must not assign public IPs to tasks",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_ecs_service",
+        "forbid": "assign_public_ip\\s*=\\s*\"ENABLED\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "network_configuration.assign_public_ip": "\"DISABLED\"" }
+      },
+      "requiredActions": [
+        "Set network_configuration { assign_public_ip = \"DISABLED\" } on the aws_ecs_service and use private subnets with NAT."
+      ]
+    },
+    {
+      "ruleId": "AWS_CLOUDWATCH_LOG_KMS",
+      "threat": "A log group without a KMS key stores potentially sensitive log data unencrypted with broad default access.",
+      "frameworks": ["AWS FSBP CloudWatch.x"],
+      "severity": "LOW",
+      "title": "CloudWatch log group should be encrypted with a CMK",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_cloudwatch_log_group",
+        "require": "kms_key_id"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set kms_key_id to a customer-managed aws_kms_key ARN on the aws_cloudwatch_log_group (the key policy must allow the logs service)."
+      },
+      "requiredActions": [
+        "Set kms_key_id (CMK) on the aws_cloudwatch_log_group."
+      ]
+    },
+    {
+      "ruleId": "AWS_SECRETSMANAGER_KMS",
+      "threat": "A secret encrypted with the default key is readable by anyone with broad KMS access rather than a scoped CMK policy.",
+      "frameworks": ["AWS FSBP SecretsManager.x"],
+      "severity": "LOW",
+      "title": "Secrets Manager secret should use a customer-managed key",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_secretsmanager_secret",
+        "require": "kms_key_id"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set kms_key_id to a customer-managed aws_kms_key ARN on the aws_secretsmanager_secret with a tightly scoped key policy."
+      },
+      "requiredActions": [
+        "Set kms_key_id (CMK) on the aws_secretsmanager_secret."
+      ]
+    },
+    {
+      "ruleId": "AWS_EKS_CONTROL_PLANE_LOGGING",
+      "threat": "Without control-plane logging, API server audit events (auth, RBAC, admission) are not recorded for detection or forensics.",
+      "frameworks": ["AWS FSBP EKS.8"],
+      "severity": "MEDIUM",
+      "title": "EKS cluster should enable control plane logging",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_eks_cluster",
+        "require": "enabled_cluster_log_types"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set enabled_cluster_log_types = [\"api\",\"audit\",\"authenticator\",\"controllerManager\",\"scheduler\"] on the aws_eks_cluster."
+      },
+      "requiredActions": [
+        "Enable enabled_cluster_log_types (at least api and audit) on the aws_eks_cluster."
+      ]
+    },
+    {
+      "ruleId": "AWS_LB_LISTENER_HTTPS",
+      "threat": "An HTTP load balancer listener that is not a redirect serves application traffic in plaintext.",
+      "frameworks": ["AWS FSBP ELB.1"],
+      "severity": "MEDIUM",
+      "title": "Load balancer listener should use HTTPS",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_lb_listener",
+        "forbid": "protocol\\s*=\\s*\"HTTP\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Use protocol = \"HTTPS\" with an ACM certificate, OR keep the HTTP listener only as a redirect (default_action type = \"redirect\" to HTTPS). Auto-fix cannot tell a redirect listener from a plaintext one."
+      },
+      "requiredActions": [
+        "Serve traffic over HTTPS; keep any HTTP listener as a redirect-only to HTTPS."
+      ]
+    },
+    {
+      "ruleId": "AWS_API_GW_METHOD_AUTH",
+      "threat": "An API Gateway method with authorization NONE is an unauthenticated endpoint — only acceptable for intentionally public routes.",
+      "frameworks": ["AWS FSBP APIGateway.x"],
+      "severity": "MEDIUM",
+      "title": "API Gateway method should require authorization",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_api_gateway_method",
+        "forbid": "authorization\\s*=\\s*\"NONE\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set authorization to AWS_IAM / a Cognito or Lambda authorizer, or document the route as intentionally public with api_key_required = true. Auto-fix cannot decide the auth model."
+      },
+      "requiredActions": [
+        "Require authorization on the aws_api_gateway_method unless the route is intentionally public."
+      ]
+    },
+    {
+      "ruleId": "AWS_QLDB_DELETION_PROTECTION",
+      "threat": "Disabling QLDB deletion protection lets a compromised credential destroy the immutable ledger and its audit history.",
+      "frameworks": ["AWS FSBP QLDB.x"],
+      "severity": "MEDIUM",
+      "title": "QLDB ledger must keep deletion protection",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_qldb_ledger",
+        "forbid": "deletion_protection\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "deletion_protection": "true" }
+      },
+      "requiredActions": [
+        "Set deletion_protection = true on the aws_qldb_ledger."
+      ]
+    },
+    {
+      "ruleId": "AWS_EFS_BACKUP_POLICY",
+      "threat": "An EFS file system without automatic backups cannot be restored after a destructive or ransomware event.",
+      "frameworks": ["AWS FSBP EFS.2"],
+      "severity": "LOW",
+      "title": "EFS file system should enable automatic backups",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_efs_backup_policy",
+        "forbid": "status\\s*=\\s*\"DISABLED\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "backup_policy.status": "\"ENABLED\"" }
+      },
+      "requiredActions": [
+        "Set backup_policy { status = \"ENABLED\" } on the aws_efs_backup_policy."
+      ]
+    },
+    {
+      "ruleId": "AWS_NEPTUNE_INSTANCE_NOT_PUBLIC",
+      "threat": "A publicly accessible Neptune cluster instance is directly reachable from the internet.",
+      "frameworks": ["AWS FSBP Neptune.x"],
+      "severity": "HIGH",
+      "title": "Neptune cluster instance must not be publicly accessible",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_neptune_cluster_instance",
+        "forbid": "publicly_accessible\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "publicly_accessible": "false" }
+      },
+      "requiredActions": [
+        "Set publicly_accessible = false on the aws_neptune_cluster_instance."
+      ]
+    },
+    {
+      "ruleId": "AWS_DOCDB_DELETION_PROTECTION",
+      "threat": "Without deletion protection, a compromised credential can destroy the entire DocumentDB cluster.",
+      "frameworks": ["AWS FSBP DocumentDB.x"],
+      "severity": "MEDIUM",
+      "title": "DocumentDB cluster must enable deletion protection",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_docdb_cluster",
+        "require": "deletion_protection\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "deletion_protection": "true" }
+      },
+      "requiredActions": [
+        "Set deletion_protection = true on the aws_docdb_cluster."
+      ]
+    },
+    {
+      "ruleId": "AWS_CLOUDTRAIL_KMS",
+      "threat": "A CloudTrail without a CMK encrypts logs with default keys, weakening protection of the forensic record.",
+      "frameworks": ["AWS FSBP CloudTrail.2", "CIS AWS Foundations Benchmark 3.7"],
+      "severity": "MEDIUM",
+      "title": "CloudTrail should be encrypted with a CMK",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_cloudtrail",
+        "require": "kms_key_id"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set kms_key_id to a customer-managed aws_kms_key ARN on the aws_cloudtrail (key policy must allow CloudTrail)."
+      },
+      "requiredActions": [
+        "Set kms_key_id (CMK) on the aws_cloudtrail."
+      ]
+    },
+    {
+      "ruleId": "AWS_CLOUDTRAIL_CW_LOGS",
+      "threat": "Without CloudWatch Logs integration, CloudTrail events are not available for real-time alerting on suspicious API activity.",
+      "frameworks": ["CIS AWS Foundations Benchmark 3.4"],
+      "severity": "LOW",
+      "title": "CloudTrail should deliver to CloudWatch Logs",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_cloudtrail",
+        "require": "cloud_watch_logs_group_arn"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set cloud_watch_logs_group_arn and cloud_watch_logs_role_arn on the aws_cloudtrail to enable metric-filter alerting."
+      },
+      "requiredActions": [
+        "Integrate the aws_cloudtrail with a CloudWatch Logs group for alerting."
+      ]
+    },
+    {
+      "ruleId": "AWS_MSK_ENCRYPTION_IN_TRANSIT",
+      "threat": "An MSK cluster allowing plaintext broker traffic exposes Kafka messages to interception inside the VPC.",
+      "frameworks": ["AWS FSBP MSK.1"],
+      "severity": "MEDIUM",
+      "title": "MSK cluster must encrypt data in transit",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_msk_cluster",
+        "require": "encryption_in_transit"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add encryption_info { encryption_in_transit { client_broker = \"TLS\", in_cluster = true } } to the aws_msk_cluster."
+      },
+      "requiredActions": [
+        "Set encryption_in_transit client_broker = TLS on the aws_msk_cluster."
+      ]
+    },
+    {
+      "ruleId": "AWS_APPSYNC_LOGGING",
+      "threat": "An AppSync GraphQL API without logging leaves abuse, introspection, and injection attempts unrecorded.",
+      "frameworks": ["AWS FSBP AppSync.x"],
+      "severity": "LOW",
+      "title": "AppSync GraphQL API should enable logging",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_appsync_graphql_api",
+        "require": "log_config"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add log_config { field_log_level = \"ERROR\", cloudwatch_logs_role_arn = <role> } to the aws_appsync_graphql_api."
+      },
+      "requiredActions": [
+        "Add a log_config block to the aws_appsync_graphql_api."
+      ]
+    }
+  ]
+}

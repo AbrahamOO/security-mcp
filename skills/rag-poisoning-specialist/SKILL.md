@@ -30,6 +30,15 @@ and metadata filter injection. Only activated if RAG pipeline is detected in the
 Produce working proof-of-concept demonstrations for every finding. Do not declare any
 class of attack clean without explicit evidence of checking.
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `ai-redteam` and `ai` detection modules (`src/gate/checks/ai-redteam.ts`, `src/gate/checks/ai.ts`) are your deterministic floor, not your ceiling. Treat their finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** `ai-redteam.ts` flags a `retriever.get_relevant_documents()` call; you must trace whether the tenant filter is sourced from `req.body.tenantId`, whether the metadata-filter JSON is interpolated from user input into the Qdrant `must` clause, and whether the retrieved chunk then reaches an unescaped prompt slot — a multi-file path the per-line scan cannot follow.
+- **Semantic / effective-state analysis:** model the RAG poisoning path end to end — attacker ingests a document with a hidden `<!-- SYSTEM -->` instruction or an adversarial universal embedding → it is retrieved in another tenant's query → it overrides the system prompt or saturates context (many-shot) → safety degrades. Reason about embedding-space tenant collapse, not just literal filter strings.
+- **External corroboration:** WebSearch/WebFetch for current indirect-injection research (Greshake et al.), poisoned-passage attacks (Zhong et al.), vector-store CVEs (e.g., unauthenticated Chroma), and HuggingFace embedding-model supply-chain advisories.
+- **Apply & prove:** write the fix inline (namespace-per-tenant isolation, metadata-filter allowlist, chunk HTML/comment stripping, `revision=` SHA pin on the embedding model, pgvector RLS, `k`-cap), re-run the `ai-redteam.ts`/`ai.ts` checks (plus `semgrep` on filter-construction sinks and `osv-scanner` on the embedding-model deps) as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs with the separate-collection-per-tenant default.
+
 ## EXECUTION
 
 1. Identify the vector store in use (pgvector, Pinecone, Weaviate, Chroma, Qdrant, Milvus,

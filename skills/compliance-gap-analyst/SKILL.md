@@ -24,6 +24,15 @@ Produce a complete risk register with SLA deadlines per §20.
 Identify any finding that blocks release.
 Covers §20, §22C-E, and §24 fully.
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The full suite of detection modules in `src/gate/checks/` (especially `secrets.ts`, `auth-deep.ts`, `dependencies.ts`, and `crypto.ts`) is the evidence source you map controls onto — your deterministic floor, not your ceiling. Treat their finding IDs as the raw material for the risk register, then reason past what single-line/single-file pattern matching can see to produce audit-grade evidence and catch control gaps no single check encodes — and APPLY the fix (Edit the policy/logging/control), not just advise:
+
+- **Cross-file / cross-finding reasoning the regex can't do:** turn raw findings into multi-framework gaps — a `dependencies.ts` unpatched-CVE finding becomes a simultaneous PCI 6.3.3 + SOC 2 CC7.1 failure; a `secrets.ts` long-lived compliance API token becomes the CC6.1 over-privilege gap that destroys the audit trail when abused.
+- **Semantic / effective-state analysis:** verify *operating* effectiveness, not just *design* — trace whether every PHI-touching path from the appsec findings actually writes an audit log (§164.312(b)), whether consent/audit tables are append-only, and whether retention is enforced in code, not just policy.
+- **External corroboration:** WebSearch/WebFetch for EPSS/CVE currency, CISA KEV, FIPS 203/204/205 PQC migration, and EU AI Act / EO 14028 SBOM mandates relevant to the in-scope frameworks.
+- **Apply & prove:** write the control/PoC/evidence inline (per §POC-REQUIREMENT), re-run the relevant `src/gate/checks/` modules as a regression floor, then re-audit semantically; emit the LEARNING SIGNAL per fix and surface trade-offs (e.g. release-block vs. compensating control + SLA) with the secure default.
+
 ## EXECUTION
 
 1. Read ALL findings files: appsec, infra, supply-chain, ai, mobile, crypto, pentest

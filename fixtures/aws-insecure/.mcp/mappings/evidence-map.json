@@ -1,0 +1,4 @@
+{
+  "secret_manager_refs": ["terraform/**", "infra/**"],
+  "tls_config_verified": ["terraform/**/tls*.tf", "infra/**/tls*"]
+}

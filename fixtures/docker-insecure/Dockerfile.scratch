@@ -1,0 +1,4 @@
+# Fixture: FROM scratch + ADD remote (no CA store, no integrity check).
+FROM scratch
+ADD https://example.com/static-binary /app/binary
+ENTRYPOINT ["/app/binary"]

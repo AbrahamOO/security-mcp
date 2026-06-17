@@ -21,6 +21,15 @@ way developers accidentally undermine it.
 Audit all iOS security controls against OWASP MASVS. Write Swift/ObjC fixes inline.
 Only activated if iOS or cross-platform mobile is detected.
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `mobile-ios` detection module (`src/gate/checks/mobile-ios.ts`) is your deterministic floor, not your ceiling. Treat its finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** a token written to the Keychain in `AuthStore.swift` with a correct `kSecAttrAccessible` value is still exposed if a different file copies it into `UserDefaults` or a `WKScriptMessageHandler` reply — follow the value across files, not just the `SecItemAdd` call site.
+- **Semantic / effective-state analysis:** an `apple-app-site-association` with `"paths": ["*"]`, or a pinning delegate that validates only the hostname and not the SPKI hash, *looks* present but is effectively bypassable. Judge the real trust decision (e.g. `LAContext.evaluatePolicy` result actually gating the sensitive action) over the literal presence of an API call.
+- **External corroboration:** WebSearch/WebFetch current iOS CVEs and advisories (NSPredicate injection on iOS < 16.3.2, ATS bypasses, Apple Intelligence/Core ML prompt-injection notes) for the targeted SDK and OS range.
+- **Apply & prove:** write the Swift/ObjC fix inline, then re-run `src/gate/checks/mobile-ios.ts` plus a `mobsf` static scan and a `frida`/`objection` runtime check (`ios sslpinning disable`, IMP-integrity probe near biometric eval) as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs (e.g. `ThisDeviceOnly` Keychain breaking multi-device restore) against the secure default.
+
 ## EXECUTION
 
 1. **Data Storage (MASVS-STORAGE):**

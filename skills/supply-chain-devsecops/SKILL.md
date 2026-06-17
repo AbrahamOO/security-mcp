@@ -22,6 +22,15 @@ SKILL.md §5, §6, §18, and §21 are the minimum. You go beyond them.
 90% fixing — you update lockfiles, pin Actions, harden pipeline YAML, generate SBOMs.
 Every dependency finding includes: CVSSv4, EPSS score, CISA KEV status, and fix version.
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+As lead over the `dependencies`, `sbom`, `supply-chain-deep`, and `ci-pipeline` detection modules (`src/gate/checks/dependencies.ts`, `src/gate/checks/sbom.ts`, `src/gate/checks/supply-chain-deep.ts`, `src/gate/checks/ci-pipeline.ts`), treat their finding IDs as your deterministic floor, not your ceiling. Reason past single-line/single-file pattern matching across all three sub-agents — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / multi-step reasoning the regex can't do:** `dependencies.ts` can pin a version, but it cannot correlate that a `private: true` package name in one `package.json` is resolvable from the *public* registry because `.npmrc` (another file) lacks scope-to-registry binding (dependency confusion), or that a `pull_request_target` workflow checks out untrusted head and then consumes an org secret. Trace the resolution + permissions graph across lockfiles, registry config, and every CI workflow.
+- **Semantic / effective-state analysis:** verify the full SLSA provenance graph and the *effective* trust chain — a maintainer-compromise scenario's earliest CI detection point, a poisoned BuildKit/npm cache on a persistent self-hosted runner surviving `--no-cache`, AI-hallucinated ("slopsquatted") package names < 30 days old, and ECDSA-signed SBOMs vulnerable to retroactive forgery (harvest-now-break-later).
+- **External corroboration:** WebSearch/WebFetch for current CVEs/advisories/standards for the dependency tree (CISA KEV JSON, OSV.dev, OpenSSF Scorecard, GitHub Advisory DB, US EO 14028 / EU CRA SBOM mandates).
+- **Apply & prove:** write the fix inline (update lockfile, scope `.npmrc`, pin Actions to SHAs, harden `pull_request_target`, wire SBOM generation), re-run the `dependencies`/`sbom`/`supply-chain-deep`/`ci-pipeline` checks plus `osv-scanner --sbom`, `cosign verify`, and `slsa-verifier` as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs against the secure default (private-registry allowlist vs. upstream-package velocity).
+
 ## ACTIVATION PROTOCOL
 
 1. Call `orchestration.update_agent_status(agentRunId, "supply-chain-devsecops", "running")`

@@ -34,6 +34,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The full suite of detection modules in `src/gate/checks/` (especially `injection-deep.ts`, `infra.ts`, `runtime.ts`, and `auth-deep.ts`) is the deterministic input you score — their finding IDs are your floor, not your ceiling. Treat every emitted finding as the minimum population, then reason past single-line/single-file pattern matching when calibrating each D/R/E/A/D dimension — and APPLY the score-driven re-prioritisation (Edit the risk register), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** a SQLi finding from `injection-deep.ts` and an IAM `iam:PassRole` finding from `infra.ts` may each be HIGH alone but compose into a 50/50 chain — score the chain, not the parts. Raise Affected-Users / Damage when the data-flow connects two single-file findings.
+- **Semantic / effective-state analysis:** recompute Discoverability for public/open-source code (LLM-fuzzing lifts D=3→7), apply the TOCTOU Reproducibility correction for race findings, and record a temporal-DREAD score for harvest-now-decrypt-later crypto findings.
+- **External corroboration:** WebSearch/WebFetch for CISA KEV, EPSS, and active-exploitation status to anchor Exploitability and Discoverability against real-world data, not assumption.
+- **Apply & prove:** write the re-ranked register inline, re-run the upstream module checks (e.g. `injection-deep`/`runtime`) so the scored finding set matches a regression floor, then re-audit ordering against CVSS. Emit the LEARNING SIGNAL per scored finding; surface trade-offs where DREAD and CVSS diverge.
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

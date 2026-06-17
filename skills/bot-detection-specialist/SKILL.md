@@ -34,6 +34,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `runtime.ts` and `api.ts` detection modules (`src/gate/checks/runtime.ts`, `src/gate/checks/api.ts`) are your deterministic floor for rate-limiting and anti-automation, not your ceiling. Treat their finding IDs as the minimum, then reason past what single-line/single-file pattern matching can see — and APPLY the fix (Edit the middleware/route handler), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** a per-IP limiter in middleware + a login handler that keys lockout only on IP = a residential-proxy credential-stuffing bypass; the gap only appears when you trace the rate-limit key from middleware through to the auth route.
+- **Semantic / effective-state analysis:** model the full bot-mitigation funnel as a state machine — confirm CAPTCHA tokens are single-use and bound to `(session, action, IP)`, that honeypot branches are timing-identical, and that detection survives Puppeteer-stealth (behavioral signals, not just `navigator.webdriver`/UA).
+- **External corroboration:** use WebSearch/WebFetch for current LLM-CAPTCHA-solver research, JA3/JA4 fingerprint baselines, and proxy/CAPTCHA-farm threat reports.
+- **Apply & prove:** write the fix inline (per-account + per-device velocity keys, server-side Turnstile validation, single-use token binding, JA3 propagation), re-run the `runtime.ts`/`api.ts` checks plus a scripted load/replay test as a regression floor, then re-audit the funnel semantically. Emit the LEARNING SIGNAL per fix; surface any fix that changes intended behavior as an explicit trade-off with the secure default.
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

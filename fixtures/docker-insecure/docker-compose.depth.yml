@@ -1,0 +1,51 @@
+# Fixture: Round-2 docker-compose / runtime depth checks.
+version: "3.9"
+
+services:
+  worker:
+    image: myorg/worker:1.0
+    # 30. container user root
+    user: "0"
+    # 26. ipc host
+    ipc: host
+    # 27. host device mapping
+    devices:
+      - "/dev/sda:/dev/sda"
+      - "/dev/mem:/dev/mem"
+    # 28. sensitive host bind mounts
+    volumes:
+      - "/:/host"
+      - "/etc:/etc"
+      - "/root:/root"
+      - "/proc:/host/proc"
+      - "/sys:/host/sys"
+      - "~/.ssh:/root/.ssh"
+    # 29. env_file referencing committed secret
+    env_file:
+      - secrets.env
+    # 31. healthcheck disabled
+    healthcheck:
+      disable: true
+    # 32. extra_hosts spoof
+    extra_hosts:
+      - "api.internal:10.0.0.5"
+    # 32. untrusted dns
+    dns:
+      - "8.8.8.8"
+    # 32. label leaking secret
+    labels:
+      com.example.db_password: "hunter2supersecret"
+    # 33. tmpfs with exec
+    tmpfs:
+      - "/run:exec,size=64m"
+    # 34. unbounded resources -> DoS
+    mem_limit: 0
+    cpus: 0
+
+  builder:
+    build:
+      context: .
+      # 35. build args passing secrets
+      args:
+        NPM_TOKEN: "abc123tokenvalue"
+        DB_PASSWORD: "p@ssw0rd"

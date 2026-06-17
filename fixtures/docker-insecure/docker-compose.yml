@@ -1,0 +1,35 @@
+# Fixture: intentionally insecure docker-compose to exercise checkDockerDeep.
+version: "3.9"
+
+services:
+  app:
+    image: myorg/app:latest
+    # 11. compose privileged
+    privileged: true
+    # 7a. dangerous capability
+    cap_add:
+      - SYS_ADMIN
+      - NET_ADMIN
+    # 7b. seccomp / apparmor unconfined
+    security_opt:
+      - seccomp:unconfined
+      - apparmor:unconfined
+    # 7c. host namespaces
+    pid: host
+    network_mode: host
+    userns_mode: host
+    # 8b. bind to all interfaces
+    ports:
+      - "0.0.0.0:5432:5432"
+
+  dind:
+    image: docker:dind
+    # 8a. exposed Docker daemon TCP port (unauthenticated)
+    ports:
+      - "2375:2375"
+    environment:
+      DOCKER_HOST: "tcp://0.0.0.0:2375"
+
+  browser:
+    image: chromium:stable
+    command: chromium --no-sandbox --headless

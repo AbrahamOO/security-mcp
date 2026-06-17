@@ -1,0 +1,17 @@
+# INSECURE FIXTURE — Windows hostProcess container
+apiVersion: v1
+kind: Pod
+metadata:
+  name: win-hostprocess
+  namespace: app
+spec:
+  securityContext:
+    windowsOptions:
+      hostProcess: true
+      runAsUserName: "NT AUTHORITY\\SYSTEM"
+  hostNetwork: true
+  nodeSelector:
+    kubernetes.io/os: windows
+  containers:
+    - name: host-agent
+      image: mcr.microsoft.com/windows/nanoserver:ltsc2022

@@ -34,6 +34,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `secrets` detection module (`src/gate/checks/secrets.ts`) is your deterministic floor, not your ceiling — and note it scans the working tree, not history. Treat its finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the action (Edit the `.gitleaks.toml`, pre-commit hook, `.gitignore`; generate the rotation checklist), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** a secret deleted from the current file still lives in `git log -p`, merge parents, orphan PR refs, reflog, stashes, dangling blobs, git notes, and binary/LFS objects — `secrets.ts` sees none of these. Walk the full object graph, not the checked-out file set.
+- **Semantic / effective-state analysis:** detect split/concatenated and base64/hex-obfuscated secrets via Shannon-entropy (>4.2) analysis that line-regex misses; assess effective exposure — is the leaked credential still live at the provider (rotation required even after history rewrite, which never fully removes it)?
+- **External corroboration:** WebSearch/WebFetch to verify whether a found credential pattern maps to a known provider format and check provider advisories; a `trufflehog --only-verified` pass corroborates live validity.
+- **Apply & prove:** write the prevention config inline and the rotation checklist per secret, re-run `secrets.ts` plus a `gitleaks detect --log-opts=--all` and `trufflehog git` full-history scan as a regression floor, then re-audit (including `git fsck --unreachable`). Emit the LEARNING SIGNAL per finding; surface that rotation — not history rewrite — is the secure default.
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

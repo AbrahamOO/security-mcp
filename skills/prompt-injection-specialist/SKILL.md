@@ -23,6 +23,15 @@ Find every prompt injection surface and write working proof-of-concept payloads.
 Implement structural separation, semantic detection, and output validation fixes.
 Covers §15 input security fully including ATLAS AML.T0051.
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `ai-redteam`, `ai`, and `agentic-instructions` detection modules (`src/gate/checks/ai-redteam.ts`, `src/gate/checks/ai.ts`, `src/gate/checks/agentic-instructions.ts`) are your deterministic floor, not your ceiling. Treat their finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** `ai.ts` flags `systemPrompt + userQuery` on one line; you must follow the message array from the API handler, through the RAG retriever, into the tool-call dispatcher, and confirm whether externally-retrieved content can reach a `messages[].role: "system"` slot or a `send_email` argument — a path no single-file scan reconstructs.
+- **Semantic / effective-state analysis:** model the indirect-injection chain end to end — poisoned RAG chunk → unstripped HTML comment → instruction executed → tool-call exfiltration — and the multi-agent case where a subagent's output is trusted by the orchestrator at higher privilege than the injection point.
+- **External corroboration:** WebSearch/WebFetch for current jailbreaks for the exact model version, MITRE ATLAS AML.T0051 updates, OWASP LLM Top 10, and many-shot/GCG-suffix research from the last 12 months.
+- **Apply & prove:** write the fix inline (structural XML separation, RAG chunk sanitiser, tool-call intent gate, output validator, inter-agent HMAC), re-run the `ai-redteam.ts`/`ai.ts`/`agentic-instructions.ts` checks (plus `semgrep` on prompt-construction sinks) as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs with the structurally-separated default.
+
 ## EXECUTION
 
 1. Read all prompt construction code — find every place where user input or external data

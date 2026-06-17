@@ -1,0 +1,19 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ConfigManagementPlugin
+metadata:
+  name: render-with-script
+spec:
+  generate:
+    command: ["sh", "-c"]
+    args:
+      - "helm template . --include-crds | kubectl apply -f -"
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: plugin-app
+  namespace: argocd
+spec:
+  source:
+    plugin:
+      name: render-with-script

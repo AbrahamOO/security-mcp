@@ -34,6 +34,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `injection-deep` + `api` detection modules (`src/gate/checks/injection-deep.ts`, `src/gate/checks/api.ts`) are your deterministic floor, not your ceiling. Treat their finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / multi-step reasoning the regex can't do:** follow a multipart field (`multer`/`busboy`/`@fastify/multipart`) from the parser config through the route handler into the filesystem write or downstream parser to prove a path-traversal `filename`, content-type spoof, or unbounded `files`/`parts` count actually reaches a sink.
+- **Semantic / effective-state analysis:** decide whether `limits` (fileSize, files, parts, fieldNameSize), content-type allowlists, and filename sanitization are *effectively* enforced before the bytes are buffered — a size limit set after the stream is already consumed, or an extension check that trusts the client `Content-Type`, is no limit at all.
+- **External corroboration:** WebSearch/WebFetch for current multipart-parser CVEs (multer/busboy/formidable) and OWASP file-upload / unrestricted-upload guidance for the versions pinned in the project.
+- **Apply & prove:** write the parser-hardening fix inline, re-run the `injection-deep`/`api` checks (plus a crafted multipart fuzz via burp intruder / a curl harness sending oversized + traversal + duplicate-boundary payloads) as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs with the secure default.
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

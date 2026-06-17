@@ -1,0 +1,898 @@
+{
+  "version": "1.0.0",
+  "rules": [
+    {
+      "ruleId": "AZURE_STORAGE_HTTPS_ONLY",
+      "threat": "A storage account that allows plaintext HTTP lets blob traffic and SAS tokens be intercepted on the wire.",
+      "frameworks": ["CIS Azure Foundations Benchmark 3.1", "Microsoft Cloud Security Benchmark DP-3"],
+      "severity": "HIGH",
+      "title": "Storage account must require secure transfer (HTTPS only)",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_storage_account",
+        "forbid": "enable_https_traffic_only\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "enable_https_traffic_only": "true" }
+      },
+      "requiredActions": [
+        "Set enable_https_traffic_only = true on the azurerm_storage_account so only TLS connections are accepted."
+      ]
+    },
+    {
+      "ruleId": "AZURE_STORAGE_MIN_TLS12",
+      "threat": "Allowing TLS 1.0/1.1 to a storage account exposes data to downgrade and known TLS weaknesses.",
+      "frameworks": ["CIS Azure Foundations Benchmark 3.12", "Microsoft Cloud Security Benchmark DP-3"],
+      "severity": "MEDIUM",
+      "title": "Storage account must require TLS 1.2 minimum",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_storage_account",
+        "require": "min_tls_version\\s*=\\s*\"TLS1_2\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "min_tls_version": "\"TLS1_2\"" }
+      },
+      "requiredActions": [
+        "Set min_tls_version = \"TLS1_2\" on the azurerm_storage_account."
+      ]
+    },
+    {
+      "ruleId": "AZURE_STORAGE_NO_PUBLIC_BLOB",
+      "threat": "Allowing public blob containers lets anonymous users enumerate and download objects.",
+      "frameworks": ["CIS Azure Foundations Benchmark 3.7"],
+      "severity": "HIGH",
+      "title": "Storage account must disallow public blob access",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_storage_account",
+        "forbid": "allow_nested_items_to_be_public\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "allow_nested_items_to_be_public": "false" }
+      },
+      "requiredActions": [
+        "Set allow_nested_items_to_be_public = false on the azurerm_storage_account."
+      ]
+    },
+    {
+      "ruleId": "AZURE_KV_PURGE_PROTECTION",
+      "threat": "Without purge protection, an attacker (or accident) can permanently delete the Key Vault and its secrets, destroying recovery options.",
+      "frameworks": ["CIS Azure Foundations Benchmark 8.5"],
+      "severity": "MEDIUM",
+      "title": "Key Vault must enable purge protection",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_key_vault",
+        "require": "purge_protection_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "purge_protection_enabled": "true" }
+      },
+      "requiredActions": [
+        "Set purge_protection_enabled = true on the azurerm_key_vault."
+      ]
+    },
+    {
+      "ruleId": "AZURE_KV_SOFT_DELETE",
+      "threat": "Without a soft-delete retention window, deleted secrets/keys cannot be recovered after a destructive action.",
+      "frameworks": ["CIS Azure Foundations Benchmark 8.4"],
+      "severity": "LOW",
+      "title": "Key Vault must set a soft-delete retention period",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_key_vault",
+        "require": "soft_delete_retention_days"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "soft_delete_retention_days": "90" }
+      },
+      "requiredActions": [
+        "Set soft_delete_retention_days = 90 on the azurerm_key_vault."
+      ]
+    },
+    {
+      "ruleId": "AZURE_SQL_NO_PUBLIC_ACCESS",
+      "threat": "An Azure SQL server with public network access enabled is reachable from the internet for brute force and exploitation.",
+      "frameworks": ["CIS Azure Foundations Benchmark 4.1", "Microsoft Cloud Security Benchmark NS-1"],
+      "severity": "HIGH",
+      "title": "Azure SQL server must disable public network access",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_mssql_server",
+        "forbid": "public_network_access_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "public_network_access_enabled": "false" }
+      },
+      "requiredActions": [
+        "Set public_network_access_enabled = false on the azurerm_mssql_server and use a private endpoint."
+      ]
+    },
+    {
+      "ruleId": "AZURE_AKS_RBAC",
+      "threat": "An AKS cluster without Kubernetes RBAC grants flat, unscoped access — any compromised credential is cluster-admin equivalent.",
+      "frameworks": ["CIS Azure Foundations Benchmark 8.7"],
+      "severity": "HIGH",
+      "title": "AKS cluster must enable role-based access control",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_kubernetes_cluster",
+        "require": "role_based_access_control_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "role_based_access_control_enabled": "true" }
+      },
+      "requiredActions": [
+        "Set role_based_access_control_enabled = true on the azurerm_kubernetes_cluster."
+      ]
+    },
+    {
+      "ruleId": "AZURE_STORAGE_INFRA_ENCRYPTION",
+      "threat": "Without infrastructure encryption, storage data has only a single encryption layer — defense-in-depth at rest is reduced.",
+      "frameworks": ["CIS Azure Foundations Benchmark 3.2", "Microsoft Cloud Security Benchmark DP-4"],
+      "severity": "LOW",
+      "title": "Storage account should enable infrastructure encryption",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_storage_account",
+        "require": "infrastructure_encryption_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "infrastructure_encryption_enabled": "true" }
+      },
+      "requiredActions": [
+        "Set infrastructure_encryption_enabled = true on the azurerm_storage_account (set at creation time)."
+      ]
+    },
+    {
+      "ruleId": "AZURE_POSTGRES_SSL",
+      "threat": "A PostgreSQL server without SSL enforcement accepts plaintext connections, exposing credentials and data on the wire.",
+      "frameworks": ["CIS Azure Foundations Benchmark 4.3.1"],
+      "severity": "MEDIUM",
+      "title": "PostgreSQL server must enforce SSL",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_postgresql_server",
+        "require": "ssl_enforcement_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "ssl_enforcement_enabled": "true" }
+      },
+      "requiredActions": [
+        "Set ssl_enforcement_enabled = true on the azurerm_postgresql_server."
+      ]
+    },
+    {
+      "ruleId": "AZURE_MYSQL_SSL",
+      "threat": "A MySQL server without SSL enforcement accepts plaintext connections, exposing credentials and data on the wire.",
+      "frameworks": ["CIS Azure Foundations Benchmark 4.4.1"],
+      "severity": "MEDIUM",
+      "title": "MySQL server must enforce SSL",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_mysql_server",
+        "require": "ssl_enforcement_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "ssl_enforcement_enabled": "true" }
+      },
+      "requiredActions": [
+        "Set ssl_enforcement_enabled = true on the azurerm_mysql_server."
+      ]
+    },
+    {
+      "ruleId": "AZURE_REDIS_SSL_ONLY",
+      "threat": "Enabling the non-SSL Redis port lets cache traffic — often session tokens — be intercepted in plaintext.",
+      "frameworks": ["CIS Azure Foundations Benchmark 4.x", "Microsoft Cloud Security Benchmark DP-3"],
+      "severity": "MEDIUM",
+      "title": "Redis cache must disable the non-SSL port",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_redis_cache",
+        "forbid": "enable_non_ssl_port\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "enable_non_ssl_port": "false" }
+      },
+      "requiredActions": [
+        "Set enable_non_ssl_port = false on the azurerm_redis_cache."
+      ]
+    },
+    {
+      "ruleId": "AZURE_APP_SERVICE_HTTPS_ONLY",
+      "threat": "An App Service that accepts HTTP exposes session cookies and credentials to interception and downgrade.",
+      "frameworks": ["CIS Azure Foundations Benchmark 9.1"],
+      "severity": "MEDIUM",
+      "title": "App Service must be HTTPS-only",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_app_service",
+        "require": "https_only\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "https_only": "true" }
+      },
+      "requiredActions": [
+        "Set https_only = true on the azurerm_app_service."
+      ]
+    },
+    {
+      "ruleId": "AZURE_LINUX_WEBAPP_HTTPS_ONLY",
+      "threat": "A Linux web app that accepts HTTP exposes session cookies and credentials to interception and downgrade.",
+      "frameworks": ["CIS Azure Foundations Benchmark 9.1"],
+      "severity": "MEDIUM",
+      "title": "Linux web app must be HTTPS-only",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_linux_web_app",
+        "require": "https_only\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "https_only": "true" }
+      },
+      "requiredActions": [
+        "Set https_only = true on the azurerm_linux_web_app."
+      ]
+    },
+    {
+      "ruleId": "AZURE_FUNCTION_HTTPS_ONLY",
+      "threat": "A Function App that accepts HTTP exposes function keys and payloads to interception.",
+      "frameworks": ["CIS Azure Foundations Benchmark 9.1"],
+      "severity": "MEDIUM",
+      "title": "Function App must be HTTPS-only",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_function_app",
+        "require": "https_only\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "https_only": "true" }
+      },
+      "requiredActions": [
+        "Set https_only = true on the azurerm_function_app."
+      ]
+    },
+    {
+      "ruleId": "AZURE_KV_NETWORK_ACLS",
+      "threat": "A Key Vault with default-allow networking is reachable from any network — one leaked token away from secret exfiltration.",
+      "frameworks": ["CIS Azure Foundations Benchmark 8.6", "Microsoft Cloud Security Benchmark NS-2"],
+      "severity": "MEDIUM",
+      "title": "Key Vault should restrict network access",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_key_vault",
+        "require": "network_acls"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add network_acls { default_action = \"Deny\", bypass = \"AzureServices\", ip_rules = [...] } or a private endpoint. The allowed IPs/subnets must be chosen by a human."
+      },
+      "requiredActions": [
+        "Add network_acls with default_action = Deny (and a private endpoint) to the azurerm_key_vault."
+      ]
+    },
+    {
+      "ruleId": "AZURE_NSG_NO_OPEN_ADMIN",
+      "threat": "An NSG rule with source '*' on admin ports (22/3389) exposes SSH/RDP to the entire internet for brute force.",
+      "frameworks": ["CIS Azure Foundations Benchmark 6.1", "CIS Azure Foundations Benchmark 6.2"],
+      "severity": "HIGH",
+      "title": "NSG rule must not allow admin ports from any source",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_network_security_rule",
+        "forbid": "source_address_prefix\\s*=\\s*\"\\*\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Replace source_address_prefix = \"*\" with specific corporate CIDRs, or use Azure Bastion / JIT access for 22 and 3389. Auto-fix cannot choose a safe source."
+      },
+      "requiredActions": [
+        "Restrict source_address_prefix to known ranges on the azurerm_network_security_rule (especially for ports 22 and 3389)."
+      ]
+    },
+    {
+      "ruleId": "AZURE_MARIADB_SSL",
+      "threat": "A MariaDB server without SSL enforcement accepts plaintext connections, exposing credentials and data.",
+      "frameworks": ["CIS Azure Foundations Benchmark 4.5.1"],
+      "severity": "MEDIUM",
+      "title": "MariaDB server must enforce SSL",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_mariadb_server",
+        "require": "ssl_enforcement_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "ssl_enforcement_enabled": "true" }
+      },
+      "requiredActions": [
+        "Set ssl_enforcement_enabled = true on the azurerm_mariadb_server."
+      ]
+    },
+    {
+      "ruleId": "AZURE_COSMOSDB_NO_PUBLIC",
+      "threat": "A Cosmos DB account with public network access is reachable from the internet for credential abuse and exfiltration.",
+      "frameworks": ["CIS Azure Foundations Benchmark 4.x", "Microsoft Cloud Security Benchmark NS-2"],
+      "severity": "MEDIUM",
+      "title": "Cosmos DB account must disable public network access",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_cosmosdb_account",
+        "require": "public_network_access_enabled\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "public_network_access_enabled": "false" }
+      },
+      "requiredActions": [
+        "Set public_network_access_enabled = false on the azurerm_cosmosdb_account and use a private endpoint."
+      ]
+    },
+    {
+      "ruleId": "AZURE_APP_SERVICE_MIN_TLS",
+      "threat": "An App Service allowing TLS 1.0/1.1 exposes traffic to downgrade and known TLS weaknesses.",
+      "frameworks": ["CIS Azure Foundations Benchmark 9.3"],
+      "severity": "MEDIUM",
+      "title": "App Service must require TLS 1.2 minimum",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_app_service",
+        "require": "min_tls_version\\s*=\\s*\"1.2\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "site_config.min_tls_version": "\"1.2\"" }
+      },
+      "requiredActions": [
+        "Set site_config { min_tls_version = \"1.2\" } on the azurerm_app_service."
+      ]
+    },
+    {
+      "ruleId": "AZURE_LINUX_WEBAPP_MIN_TLS",
+      "threat": "A Linux web app allowing TLS 1.0/1.1 exposes traffic to downgrade and known TLS weaknesses.",
+      "frameworks": ["CIS Azure Foundations Benchmark 9.3"],
+      "severity": "MEDIUM",
+      "title": "Linux web app must require TLS 1.2 minimum",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_linux_web_app",
+        "require": "minimum_tls_version\\s*=\\s*\"1.2\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "site_config.minimum_tls_version": "\"1.2\"" }
+      },
+      "requiredActions": [
+        "Set site_config { minimum_tls_version = \"1.2\" } on the azurerm_linux_web_app."
+      ]
+    },
+    {
+      "ruleId": "AZURE_VM_NO_PASSWORD_AUTH",
+      "threat": "A Linux VM that allows password authentication is exposed to SSH brute force and credential stuffing.",
+      "frameworks": ["CIS Azure Foundations Benchmark 8.x", "Microsoft Cloud Security Benchmark IM-6"],
+      "severity": "MEDIUM",
+      "title": "Linux VM must disable password authentication",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_linux_virtual_machine",
+        "forbid": "disable_password_authentication\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "disable_password_authentication": "true" }
+      },
+      "requiredActions": [
+        "Set disable_password_authentication = true on the azurerm_linux_virtual_machine and use SSH keys."
+      ]
+    },
+    {
+      "ruleId": "AZURE_SQL_TDE",
+      "threat": "Without Transparent Data Encryption, Azure SQL data files are unencrypted at rest.",
+      "frameworks": ["CIS Azure Foundations Benchmark 4.1.3"],
+      "severity": "MEDIUM",
+      "title": "Azure SQL database must enable Transparent Data Encryption",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_mssql_database",
+        "requireCompanionType": "azurerm_mssql_database_extended_auditing_policy"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "TDE is on by default for new azurerm_mssql_database; confirm transparent_data_encryption_enabled = true and configure azurerm_mssql_server_transparent_data_encryption with a CMK if required."
+      },
+      "requiredActions": [
+        "Confirm Transparent Data Encryption is enabled (CMK if required) for the azurerm_mssql_database."
+      ]
+    },
+    {
+      "ruleId": "AZURE_SQL_AUDITING",
+      "threat": "Without server auditing, malicious queries and data exfiltration against Azure SQL leave no trail.",
+      "frameworks": ["CIS Azure Foundations Benchmark 4.1.1"],
+      "severity": "MEDIUM",
+      "title": "Azure SQL server should enable auditing",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_mssql_server",
+        "requireCompanionType": "azurerm_mssql_server_extended_auditing_policy"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add an azurerm_mssql_server_extended_auditing_policy for this server writing to a storage account / Log Analytics. The audit destination must be chosen."
+      },
+      "requiredActions": [
+        "Add an azurerm_mssql_server_extended_auditing_policy for the azurerm_mssql_server."
+      ]
+    },
+    {
+      "ruleId": "AZURE_AKS_AZURE_POLICY",
+      "threat": "Without Azure Policy add-on, the cluster has no admission-time guardrails against insecure workloads.",
+      "frameworks": ["CIS Azure Foundations Benchmark 8.x"],
+      "severity": "LOW",
+      "title": "AKS cluster should enable the Azure Policy add-on",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_kubernetes_cluster",
+        "require": "azure_policy_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "azure_policy_enabled": "true" }
+      },
+      "requiredActions": [
+        "Set azure_policy_enabled = true on the azurerm_kubernetes_cluster."
+      ]
+    },
+    {
+      "ruleId": "AZURE_AKS_LOCAL_ACCOUNTS_DISABLED",
+      "threat": "AKS local accounts bypass Entra ID/RBAC — a leaked kubeconfig grants standing cluster access with no central revocation.",
+      "frameworks": ["CIS Azure Foundations Benchmark 8.x"],
+      "severity": "MEDIUM",
+      "title": "AKS cluster should disable local accounts",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_kubernetes_cluster",
+        "require": "local_account_disabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "local_account_disabled": "true" }
+      },
+      "requiredActions": [
+        "Set local_account_disabled = true on the azurerm_kubernetes_cluster and use Entra ID integration."
+      ]
+    },
+    {
+      "ruleId": "AZURE_STORAGE_BLOB_SOFT_DELETE",
+      "threat": "Without blob soft delete, an overwrite or deletion (accidental or ransomware) is unrecoverable.",
+      "frameworks": ["CIS Azure Foundations Benchmark 3.11"],
+      "severity": "LOW",
+      "title": "Storage account should enable blob soft delete",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_storage_account",
+        "require": "delete_retention_policy"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "blob_properties.delete_retention_policy.days": "7" }
+      },
+      "requiredActions": [
+        "Add blob_properties { delete_retention_policy { days = 7 } } to the azurerm_storage_account."
+      ]
+    },
+    {
+      "ruleId": "AZURE_APP_SERVICE_FTPS_ONLY",
+      "threat": "Allowing plain FTP deployment exposes credentials and content over an unencrypted channel.",
+      "frameworks": ["CIS Azure Foundations Benchmark 9.x"],
+      "severity": "LOW",
+      "title": "App Service should restrict FTP to FTPS",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_app_service",
+        "require": "ftps_state\\s*=\\s*\"(FtpsOnly|Disabled)\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "site_config.ftps_state": "\"FtpsOnly\"" }
+      },
+      "requiredActions": [
+        "Set site_config { ftps_state = \"FtpsOnly\" } (or \"Disabled\") on the azurerm_app_service."
+      ]
+    },
+    {
+      "ruleId": "AZURE_SQL_AAD_ADMIN",
+      "threat": "An Azure SQL server without an Entra ID administrator relies solely on SQL logins, weakening central identity control.",
+      "frameworks": ["CIS Azure Foundations Benchmark 4.1.x"],
+      "severity": "LOW",
+      "title": "Azure SQL server should have an Entra ID administrator",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_mssql_server",
+        "require": "azuread_administrator"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add an azuread_administrator block (or azurerm_mssql_server_microsoft_support_auditing_policy) referencing a specific Entra ID principal/object_id. Auto-fix cannot choose the admin identity."
+      },
+      "requiredActions": [
+        "Configure an Entra ID administrator for the azurerm_mssql_server."
+      ]
+    },
+    {
+      "ruleId": "AZURE_KEY_VAULT_RBAC",
+      "threat": "Vault access policies are coarse and hard to audit; RBAC gives scoped, centrally-managed, revocable access.",
+      "frameworks": ["CIS Azure Foundations Benchmark 8.x"],
+      "severity": "LOW",
+      "title": "Key Vault should use RBAC authorization",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_key_vault",
+        "require": "enable_rbac_authorization\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set enable_rbac_authorization = true and migrate existing access_policy blocks to azurerm_role_assignment. Flipping this without migrating breaks access, so apply manually."
+      },
+      "requiredActions": [
+        "Migrate the azurerm_key_vault to enable_rbac_authorization = true and role assignments."
+      ]
+    },
+    {
+      "ruleId": "AZURE_ACR_NO_ADMIN_USER",
+      "threat": "The ACR admin user is a shared static credential; if leaked it grants full push/pull, enabling image tampering.",
+      "frameworks": ["CIS Azure Foundations Benchmark 8.x", "Microsoft Cloud Security Benchmark IM-7"],
+      "severity": "MEDIUM",
+      "title": "Container Registry must disable the admin user",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_container_registry",
+        "forbid": "admin_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "admin_enabled": "false" }
+      },
+      "requiredActions": [
+        "Set admin_enabled = false on the azurerm_container_registry and use Entra ID / managed identity authentication."
+      ]
+    },
+    {
+      "ruleId": "AZURE_ACR_NO_PUBLIC",
+      "threat": "A Container Registry with public network access can be reached for anonymous/credential-based pulls and pushes from the internet.",
+      "frameworks": ["CIS Azure Foundations Benchmark 8.x", "Microsoft Cloud Security Benchmark NS-2"],
+      "severity": "MEDIUM",
+      "title": "Container Registry should disable public network access",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_container_registry",
+        "require": "public_network_access_enabled\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "public_network_access_enabled": "false" }
+      },
+      "requiredActions": [
+        "Set public_network_access_enabled = false on the azurerm_container_registry and use a private endpoint."
+      ]
+    },
+    {
+      "ruleId": "AZURE_STORAGE_BLOB_VERSIONING",
+      "threat": "Without blob versioning, an overwrite (accidental or malicious) destroys the prior object with no rollback.",
+      "frameworks": ["CIS Azure Foundations Benchmark 3.x"],
+      "severity": "LOW",
+      "title": "Storage account should enable blob versioning",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_storage_account",
+        "require": "versioning_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "blob_properties.versioning_enabled": "true" }
+      },
+      "requiredActions": [
+        "Add blob_properties { versioning_enabled = true } to the azurerm_storage_account."
+      ]
+    },
+    {
+      "ruleId": "AZURE_STORAGE_CONTAINER_SOFT_DELETE",
+      "threat": "Without container soft delete, a deleted container and all its blobs are unrecoverable.",
+      "frameworks": ["CIS Azure Foundations Benchmark 3.x"],
+      "severity": "LOW",
+      "title": "Storage account should enable container soft delete",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_storage_account",
+        "require": "container_delete_retention_policy"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "blob_properties.container_delete_retention_policy.days": "7" }
+      },
+      "requiredActions": [
+        "Add blob_properties { container_delete_retention_policy { days = 7 } } to the azurerm_storage_account."
+      ]
+    },
+    {
+      "ruleId": "AZURE_FUNCTION_MIN_TLS",
+      "threat": "A Function App allowing TLS 1.0/1.1 exposes traffic to downgrade and known TLS weaknesses.",
+      "frameworks": ["CIS Azure Foundations Benchmark 9.3"],
+      "severity": "MEDIUM",
+      "title": "Function App must require TLS 1.2 minimum",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_function_app",
+        "require": "min_tls_version\\s*=\\s*\"1.2\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "site_config.min_tls_version": "\"1.2\"" }
+      },
+      "requiredActions": [
+        "Set site_config { min_tls_version = \"1.2\" } on the azurerm_function_app."
+      ]
+    },
+    {
+      "ruleId": "AZURE_MANAGED_DISK_CMK",
+      "threat": "A managed disk encrypted only with platform-managed keys offers less key control and revocation than a customer-managed key.",
+      "frameworks": ["CIS Azure Foundations Benchmark 7.x"],
+      "severity": "LOW",
+      "title": "Managed disk should use a customer-managed key",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_managed_disk",
+        "require": "disk_encryption_set_id"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set disk_encryption_set_id to an azurerm_disk_encryption_set backed by a Key Vault CMK. The DES resource must be supplied."
+      },
+      "requiredActions": [
+        "Attach a disk_encryption_set_id (CMK) to the azurerm_managed_disk."
+      ]
+    },
+    {
+      "ruleId": "AZURE_KV_SECRET_EXPIRY",
+      "threat": "A Key Vault secret with no expiration date stays valid forever if leaked, maximising the compromise window.",
+      "frameworks": ["CIS Azure Foundations Benchmark 8.1", "CIS Azure Foundations Benchmark 8.2"],
+      "severity": "LOW",
+      "title": "Key Vault secrets/keys should set an expiration date",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_key_vault_secret",
+        "require": "expiration_date"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set expiration_date (RFC3339) on the azurerm_key_vault_secret and rotate before expiry. Auto-fix cannot choose a meaningful expiry."
+      },
+      "requiredActions": [
+        "Set an expiration_date on the azurerm_key_vault_secret."
+      ]
+    },
+    {
+      "ruleId": "AZURE_APP_SERVICE_NO_REMOTE_DEBUG",
+      "threat": "Remote debugging on an App Service exposes an attach point that can be abused to inspect or alter the running app.",
+      "frameworks": ["CIS Azure Foundations Benchmark 9.x"],
+      "severity": "LOW",
+      "title": "App Service must disable remote debugging",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_app_service",
+        "forbid": "remote_debugging_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "site_config.remote_debugging_enabled": "false" }
+      },
+      "requiredActions": [
+        "Set site_config { remote_debugging_enabled = false } on the azurerm_app_service."
+      ]
+    },
+    {
+      "ruleId": "AZURE_AKS_NO_HTTP_APP_ROUTING",
+      "threat": "The AKS HTTP application routing add-on creates a public DNS zone and ingress with weak controls, expanding exposure.",
+      "frameworks": ["CIS Azure Foundations Benchmark 8.x"],
+      "severity": "LOW",
+      "title": "AKS cluster must disable HTTP application routing",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_kubernetes_cluster",
+        "forbid": "http_application_routing_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "http_application_routing_enabled": "false" }
+      },
+      "requiredActions": [
+        "Set http_application_routing_enabled = false on the azurerm_kubernetes_cluster and use a managed ingress controller."
+      ]
+    },
+    {
+      "ruleId": "AZURE_REDIS_MIN_TLS",
+      "threat": "A Redis cache allowing TLS 1.0/1.1 exposes traffic to downgrade and known TLS weaknesses.",
+      "frameworks": ["CIS Azure Foundations Benchmark 4.x"],
+      "severity": "MEDIUM",
+      "title": "Redis cache must require TLS 1.2 minimum",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_redis_cache",
+        "require": "minimum_tls_version\\s*=\\s*\"1.2\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "minimum_tls_version": "\"1.2\"" }
+      },
+      "requiredActions": [
+        "Set minimum_tls_version = \"1.2\" on the azurerm_redis_cache."
+      ]
+    },
+    {
+      "ruleId": "AZURE_STORAGE_SHARED_KEY_DISABLED",
+      "threat": "Shared-key access lets anyone with the account key bypass Entra ID/RBAC entirely — a leaked key is full data access.",
+      "frameworks": ["CIS Azure Foundations Benchmark 3.x", "Microsoft Cloud Security Benchmark IM-1"],
+      "severity": "MEDIUM",
+      "title": "Storage account should disable shared key access",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_storage_account",
+        "require": "shared_access_key_enabled\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "shared_access_key_enabled": "false" }
+      },
+      "requiredActions": [
+        "Set shared_access_key_enabled = false on the azurerm_storage_account and use Entra ID authentication (confirm all clients support it first)."
+      ]
+    },
+    {
+      "ruleId": "AZURE_SQL_FIREWALL_NO_ALL",
+      "threat": "A SQL firewall rule spanning 0.0.0.0 (Allow Azure Services) or 0.0.0.0-255.255.255.255 exposes the database broadly.",
+      "frameworks": ["CIS Azure Foundations Benchmark 4.1.x"],
+      "severity": "HIGH",
+      "title": "Azure SQL firewall must not allow all addresses",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_mssql_firewall_rule",
+        "forbid": "start_ip_address\\s*=\\s*\"0.0.0.0\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Remove the 0.0.0.0 rule (Allow Azure Services) and the 0.0.0.0-255.255.255.255 rule; use specific IPs or a private endpoint. Auto-fix cannot choose a safe range."
+      },
+      "requiredActions": [
+        "Replace the broad azurerm_mssql_firewall_rule with specific source IPs or a private endpoint."
+      ]
+    },
+    {
+      "ruleId": "AZURE_KV_NO_PUBLIC_NETWORK",
+      "threat": "A Key Vault with public network access is reachable from the internet — one leaked token from secret exfiltration.",
+      "frameworks": ["CIS Azure Foundations Benchmark 8.6", "Microsoft Cloud Security Benchmark NS-2"],
+      "severity": "MEDIUM",
+      "title": "Key Vault should disable public network access",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_key_vault",
+        "require": "public_network_access_enabled\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set public_network_access_enabled = false and add a private endpoint + network_acls. Confirm all clients reach the vault privately before applying."
+      },
+      "requiredActions": [
+        "Disable public network access on the azurerm_key_vault and use a private endpoint."
+      ]
+    },
+    {
+      "ruleId": "AZURE_SERVICEBUS_NO_PUBLIC",
+      "threat": "A Service Bus namespace with public network access is reachable from the internet for credential abuse and message tampering.",
+      "frameworks": ["Microsoft Cloud Security Benchmark NS-2"],
+      "severity": "MEDIUM",
+      "title": "Service Bus namespace should disable public network access",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_servicebus_namespace",
+        "require": "public_network_access_enabled\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "public_network_access_enabled": "false" }
+      },
+      "requiredActions": [
+        "Set public_network_access_enabled = false on the azurerm_servicebus_namespace and use a private endpoint."
+      ]
+    },
+    {
+      "ruleId": "AZURE_EVENTHUB_NO_PUBLIC",
+      "threat": "An Event Hub namespace with public network access is reachable from the internet for credential abuse and data interception.",
+      "frameworks": ["Microsoft Cloud Security Benchmark NS-2"],
+      "severity": "MEDIUM",
+      "title": "Event Hub namespace should disable public network access",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_eventhub_namespace",
+        "require": "public_network_access_enabled\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "public_network_access_enabled": "false" }
+      },
+      "requiredActions": [
+        "Set public_network_access_enabled = false on the azurerm_eventhub_namespace and use a private endpoint."
+      ]
+    },
+    {
+      "ruleId": "AZURE_COSMOSDB_LOCAL_AUTH_DISABLED",
+      "threat": "Cosmos DB local (key-based) auth bypasses Entra ID/RBAC — a leaked key is full, non-revocable data access.",
+      "frameworks": ["Microsoft Cloud Security Benchmark IM-1"],
+      "severity": "MEDIUM",
+      "title": "Cosmos DB should disable local (key) authentication",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_cosmosdb_account",
+        "require": "local_authentication_disabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "local_authentication_disabled": "true" }
+      },
+      "requiredActions": [
+        "Set local_authentication_disabled = true on the azurerm_cosmosdb_account and use Entra ID RBAC (confirm clients support it first)."
+      ]
+    },
+    {
+      "ruleId": "AZURE_DATA_FACTORY_NO_PUBLIC",
+      "threat": "A Data Factory with public network access exposes its managed integration runtime and linked-service credentials.",
+      "frameworks": ["Microsoft Cloud Security Benchmark NS-2"],
+      "severity": "MEDIUM",
+      "title": "Data Factory should disable public network access",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_data_factory",
+        "require": "public_network_enabled\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "public_network_enabled": "false" }
+      },
+      "requiredActions": [
+        "Set public_network_enabled = false on the azurerm_data_factory and use a managed private endpoint."
+      ]
+    },
+    {
+      "ruleId": "AZURE_APP_CONFIG_NO_PUBLIC",
+      "threat": "An App Configuration store with public access exposes feature flags and configuration — sometimes containing secrets — to the internet.",
+      "frameworks": ["Microsoft Cloud Security Benchmark NS-2"],
+      "severity": "MEDIUM",
+      "title": "App Configuration should disable public network access",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_app_configuration",
+        "require": "public_network_access\\s*=\\s*\"Disabled\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "public_network_access": "\"Disabled\"" }
+      },
+      "requiredActions": [
+        "Set public_network_access = \"Disabled\" on the azurerm_app_configuration and use a private endpoint."
+      ]
+    }
+  ]
+}

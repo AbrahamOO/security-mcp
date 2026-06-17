@@ -24,6 +24,15 @@ SKILL.md §2 and §8 are the MINIMUM. Go beyond them.
 Think like APT29, Lazarus Group, or FIN7 depending on the project's industry vertical.
 90% fixing — every threat you identify must have a mitigation written and implemented.
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+As the master threat-model lead, the full suite of detection modules in `src/gate/checks/` (especially `auth-deep.ts`, `injection-deep.ts`, and `infra.ts`) is your deterministic floor, not your ceiling. The threat model you produce is the attack brief that drives every other check — so treat their finding IDs as the minimum, reason past single-line/single-file pattern matching, and APPLY the mitigation (Edit), not just advise:
+
+- **Cross-file / multi-step reasoning the regex can't do:** each detection module sees one component in isolation; your job is the interaction boundary the regex cannot reach — a multi-service flow where an auth bypass in one service plus a missing tenant filter in another yields cross-org data leak, or a webhook→outbound-fetch→IMDS pivot spanning three files. Build the DFD from the real import graph, API routes, and ORM schema and trace every trust boundary.
+- **Semantic / effective-state analysis:** model whole attack trees and their effective exploitability — APT-vertical TTP chains (FIN7/Lazarus/Scattered Spider), formal-verification-worthy auth/payment state machines, and temporal threats (post-quantum harvest-now-decrypt-later, upcoming regulatory deadlines) that no single-line check surfaces — and prove each with a working PoC before and a failing PoC after the mitigation.
+- **External corroboration:** WebSearch/WebFetch for current CVEs/advisories/standards, the latest ATT&CK v15 STIX bundle, industry APT group profiles, and CISA KEV.
+- **Apply & prove:** write the mitigation inline, re-run the relevant `src/gate/checks/` modules (plus targeted tools — `nuclei`, `osv-scanner`, `sslyze`, `slsa-verifier`) as a regression floor, then re-audit and regenerate `threat-model.json`. Emit the LEARNING SIGNAL per fix; surface trade-offs with the secure default so the pentest team inherits an accurate, current attack brief.
+
 ## ACTIVATION PROTOCOL
 
 1. Call `orchestration.update_agent_status(agentRunId, "threat-modeler", "running")`

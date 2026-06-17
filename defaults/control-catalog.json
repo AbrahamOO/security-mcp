@@ -418,6 +418,30 @@
       "evidence": ["human_in_loop_for_actions", "tool_allowlist_router"]
     },
     {
+      "id": "AI_AGENTIC_INSTRUCTION_INTEGRITY",
+      "description": "Agentic-instruction files (SKILL.md, .claude, CLAUDE.md, AGENTS.md, .cursorrules, .mcp.json, copilot-instructions) are scanned for prompt-override, exfiltration, tool-poisoning, persistence, hidden-character, and credential-harvest payloads before any AI agent ingests the repository.",
+      "automation": "tooling",
+      "surfaces": ["ai", "agentic"],
+      "frameworks": ["OWASP LLM Top 10 2025", "MITRE ATLAS"],
+      "required_scanners": []
+    },
+    {
+      "id": "AI_LLM_ALGORITHMIC_FAIRNESS",
+      "description": "ML decision systems affecting people carry fairness/bias evaluation (disparate impact, equalized odds, demographic parity) and representativeness evidence.",
+      "automation": "evidence",
+      "surfaces": ["ai"],
+      "frameworks": ["EU AI Act", "NIST AI RMF", "ISO 42001"],
+      "evidence": ["fairness_evaluation", "bias_testing_present"]
+    },
+    {
+      "id": "AI_SHADOW_AI_DATA_LEAKAGE",
+      "description": "Secrets and PII are redacted/tokenized before reaching any LLM payload, preventing shadow-AI data leakage to model providers.",
+      "automation": "evidence",
+      "surfaces": ["ai"],
+      "frameworks": ["NIST AI RMF", "OWASP LLM Top 10 2025"],
+      "evidence": ["pii_redaction_before_llm", "secret_dlp_guard"]
+    },
+    {
       "id": "SLSA_L3_PROVENANCE",
       "description": "Build artifacts have signed SLSA Level 3 provenance from a hermetic, ephemeral CI build.",
       "automation": "evidence",

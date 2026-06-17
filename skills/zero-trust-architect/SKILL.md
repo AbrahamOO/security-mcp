@@ -34,6 +34,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+As LEAD over the full suite of detection modules in `src/gate/checks/` (especially `infra.ts`, `k8s.ts`, `auth-deep.ts`, and `gitops.ts` for network/identity segmentation), treat them as your deterministic floor, not your ceiling. Treat every emitted finding ID as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / multi-step reasoning the regex can't do:** ZTA failures are almost never single-line — a regex confirms Istio is installed (k8s) but cannot prove *every* namespace is `PeerAuthentication mode: STRICT`, that NetworkPolicy `egress` is not `0.0.0.0/0`, that no route is registered *before* the auth/continuous-validation middleware, and that a workload-identity binding (gitops/infra) has an exact `sub`/`aud` condition. Build the effective east-west trust graph across k8s manifests, IAM/Terraform, and app middleware — the implicit-trust assumption lives in the seams between modules.
+- **Semantic / effective-state analysis:** map the zero-trust segmentation gaps — compose an IP-trust finding (infra) with a long-lived service credential (auth-deep) into a concrete lateral-movement chain no single module scores; verify continuous validation actually consults the revocation cache on *every* request (not just at session creation) and that sidecar-bypass via direct pod-IP call is blocked.
+- **External corroboration:** WebSearch/WebFetch for current CVEs/advisories/standards for zero trust — NIST SP 800-207 tenets, workload-identity-federation attacks (CircleCI-class), eBPF sidecar-bypass (CVE-2023-2728), and PQ-TLS (FIPS 203) mesh migration guidance.
+- **Apply & prove:** write the control inline (PeerAuthentication STRICT, default-deny NetworkPolicy, AuthorizationPolicy least-privilege, Workload Identity binding conditions, continuous-validation middleware) and regenerate `docs/security/zero-trust-roadmap.md`; re-run the relevant `src/gate/checks/` modules plus active probes (`kubectl get peerauthentication/networkpolicy -A -o json | jq`, direct pod-port `curl` bypass test, OIDC token-exchange forgery test) as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs with the secure default (e.g. STRICT mTLS vs. legacy non-mesh client compatibility).
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

@@ -21,6 +21,15 @@ RCE candidate and every RegExp as a potential DoS weapon.
 Find and fix deserialization, prototype pollution, ReDoS, and memory safety vulnerabilities.
 Write working exploits (prototype chain manipulation, regex payloads) before fixes.
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `injection-deep` detection module (`src/gate/checks/injection-deep.ts`) is your deterministic floor, not your ceiling. Treat its finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** `injection-deep.ts` flags an `_.merge()` call; you must trace whether the merged object is user-controlled JSON from a request body and whether the polluted `__proto__` property later flows into a `child_process.spawn` options object in an entirely different module — the gadget chain spanning files that a single-line scan cannot follow.
+- **Semantic / effective-state analysis:** trace the deserialization gadget chain end to end — `node-serialize` IIFE → `unserialize()` execution, `pickle.loads` `__reduce__` → `os.system`, `js-yaml` v4 `yaml.load` → `!!js/function`, or a symlink-based zip-slip entry that writes through a clean-named symlink — reasoning about the reachable sink and effective runtime state, not the literal API name.
+- **External corroboration:** WebSearch/WebFetch for current deserialization CVEs (e.g., `vm2` escapes, `tar` symlink CVE-2023-32002), ReDoS advisories, and POP-Miner-class automated gadget-chain research.
+- **Apply & prove:** write the fix inline (`JSON.parse` + zod schema, `Object.freeze(Object.prototype)` at bootstrap, `path.resolve` base-dir guard, `re2`/`safe-regex` rewrite, `FAILSAFE_SCHEMA` for YAML), re-run the `injection-deep.ts` checks (plus `semgrep --config=p/javascript` prototype-pollution ruleset and `safe-regex`) as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs with the safe-parser default.
+
 ## EXECUTION
 
 1. **Prototype Pollution:**

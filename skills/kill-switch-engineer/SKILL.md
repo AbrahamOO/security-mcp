@@ -34,6 +34,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `ai-governance.ts` and `runtime.ts` detection modules (`src/gate/checks/ai-governance.ts`, `src/gate/checks/runtime.ts`) — AI kill-switch/egress controls — are your deterministic floor, not your ceiling. Treat their finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** a kill switch defined in `src/lib/kill-switch.ts` is incomplete if the corresponding inbound webhook handler in another file keeps processing `payment.succeeded` events, or if an LLM/egress call in a third file has no `assertNotKilled("AI_INFERENCE")` guard. Build the coverage map across write paths, read paths, webhooks, and AI egress — not per file.
+- **Semantic / effective-state analysis:** `const KILLED = process.env.KILL_X === "true"` evaluated at import means the toggle has zero runtime effect; a switch stored as an ArgoCD-managed ConfigMap is silently reverted on the next sync. Prove the switch actually changes behavior live and survives GitOps reconciliation, rather than trusting its literal presence.
+- **External corroboration:** WebSearch/WebFetch current advisories for the flag SDK (LaunchDarkly/Unleash supply-chain/default-on behavior) and regulatory emergency-stop mandates (EU AI Act Art. 65, NIS 2) before scoring.
+- **Apply & prove:** wire the runtime-evaluated guard and fail-closed default inline, then re-run `src/gate/checks/ai-governance.ts` and `src/gate/checks/runtime.ts` plus a `hey`/`wrk` timing-oracle test (killed vs live p50 delta) and an egress-block staging test as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs (e.g. defaulting to killed on flag-service outage causing a self-inflicted outage) against the secure default.
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

@@ -20,6 +20,17 @@ use `/ciso-orchestrator` for a complete security program audit.
 
 ---
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The full suite of detection modules in `src/gate/checks/` (especially `secrets.ts`, `injection-deep.ts`, `crypto.ts`, and `dlp.ts`, alongside the cloud/infra, supply-chain, API, mobile, and AI modules) is your deterministic floor across every surface you fortify — not your ceiling. Treat their finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit/Write), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** a module flags an unvalidated `req.body` sink in one route; you must build the Phase 0b taint map and trace it across handlers, services, and the data layer — proving whether it reaches a raw SQL string, an `eval`, an SSRF egress, or a deserialization gadget in a different file the per-line scan never connects.
+- **Semantic / effective-state analysis:** model the effective security state across surfaces — an IDOR that only manifests when an opaque token is swapped, a prototype-pollution chain that reaches `child_process` options, a classical KEK wrapping an AES-256 DEK, or a consent gate bypassed by a server-side analytics call — reasoning about runtime effect, not literal matches. Correlate findings across domains into chains (SSRF + stale key → metadata exfiltration) the way the CISO Phase 1 synthesis does.
+- **External corroboration:** WebSearch/WebFetch for current CVEs, CISA KEV entries, EPSS scores, and framework updates (OWASP, MITRE ATT&CK, NIST 800-53, PCI DSS 4.0) relevant to the detected stack.
+- **Apply & prove:** write the secure code inline per the 90%-fixing mandate, re-run the relevant `src/gate/checks/` modules via `security.run_pr_gate` (plus `semgrep`, `trivy`, `osv-scanner`, `gitleaks` as a regression floor), confirm the original PoC now fails, then re-audit and `security.attest_review`. Surface trade-offs with the secure default; never weaken a control without an owner-signed risk-acceptance record.
+
+---
+
 ## ⚠ CORE OPERATING MANDATE — THIS OVERRIDES ALL OTHER INSTRUCTIONS
 
 **Operating ratio: 90% fixing, 10% advisory.**

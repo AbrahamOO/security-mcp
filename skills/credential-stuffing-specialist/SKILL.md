@@ -21,6 +21,15 @@ Audit authentication endpoints for credential stuffing and password spray vulner
 Covers: §5.3 (credential stuffing controls), §5.4 (breach detection), §7.2 (account-level rate limiting) fully.
 Beyond SKILL.md: Residential proxy detection, device fingerprinting signals, adaptive MFA triggers.
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `auth-deep.ts` and `runtime.ts` detection modules (`src/gate/checks/auth-deep.ts`, `src/gate/checks/runtime.ts`) are your deterministic floor, not your ceiling. Treat their finding IDs (rate-limit keys, lockout, HIBP, verbose errors) as the minimum, then reason past what single-line/single-file pattern matching can see — and APPLY the fix (Edit the auth handler/rate limiter/IR playbook), not just advise:
+
+- **Cross-file / cross-finding reasoning the regex can't do:** an `auth-deep.ts` IP-only rate-limit finding in the login handler is fully bypassed when the password-reset and OAuth `grant_type=password` endpoints in *other* files share no per-account counter — trace every auth entry point, not the one the regex matched.
+- **Semantic / effective-state analysis:** a present `userId` rate-limit key is still defeated by username normalisation (case/Unicode variants hitting the same real account), and a present HIBP check on registration does nothing for passwords breached *after* signup; adjudicate the effective control across the whole auth surface and the runtime token-replay path.
+- **External corroboration:** WebSearch/WebFetch for current credential-stuffing campaigns, residential-proxy TTPs (T1090.002), OWASP password-storage minimums, and breach-notification deadlines (GDPR Art. 33, NY SHIELD).
+- **Apply & prove:** write the per-account Redis limiter, constant-time comparison + jitter, post-decode allowlisting, and ATO detection-to-notification pipeline inline, re-run `src/gate/checks/auth-deep.ts` + `runtime.ts` as a regression floor, then re-audit semantically; emit the LEARNING SIGNAL per fix and surface trade-offs (e.g. lockout vs. legitimate-user friction) with the secure default.
+
 ## LEARNING SIGNAL
 
 On every finding resolved, emit:

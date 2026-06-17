@@ -34,6 +34,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `crypto.ts` detection module (`src/gate/checks/crypto.ts`) — supported by `mobile-android.ts` and `mobile-ios.ts` for the pinning configs — is your deterministic floor, not your ceiling. Treat its finding IDs as the minimum, then reason past what single-line/single-file pattern matching can see — and APPLY the fix (Edit the pinning config / rotation runbook), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** a `fetchPinUpdate()` that returns `null` on error in one file, wired to a pin-enforcement path in another, is a fail-open MitM window — the regex sees "safe error handling," not "pinning disabled."
+- **Semantic / effective-state analysis:** verify each pinned hash is a *SPKI* hash (not a leaf-cert fingerprint that breaks on renewal), that the backup pin value is genuinely distinct from the primary, that the OTA config is signature-verified before acceptance, and that the `expiration` date leaves real rotation headroom.
+- **External corroboration:** use WebSearch/WebFetch for the CA/B Forum 90-day-cert ballot, CT-log monitoring APIs (crt.sh), and FIPS 203/204 post-quantum migration guidance for pinned key algorithms.
+- **Apply & prove:** write the fix inline (add a distinct SPKI backup pin, make the OTA path fail-closed, add signature verification, wire a CI expiration-check gate), re-run the `crypto.ts` checks plus an `openssl` SPKI-extraction + duplicate-pin diff as a regression floor, then re-audit the rotation lifecycle semantically. Emit the LEARNING SIGNAL per fix; surface any fix that changes intended behavior as an explicit trade-off with the secure default.
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

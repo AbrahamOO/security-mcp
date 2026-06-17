@@ -34,6 +34,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `supply-chain-deep`, `sbom`, and `ci-pipeline` detection modules (`src/gate/checks/supply-chain-deep.ts`, `src/gate/checks/sbom.ts`, `src/gate/checks/ci-pipeline.ts`) are your deterministic floor, not your ceiling. Treat their finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / multi-step reasoning the regex can't do:** `ci-pipeline.ts` can flag a missing `id-token: write`, but it cannot trace that a `build` job emits one hash while the downstream `provenance` job consumes a *different* artifact after a concurrent-run namespace collision, or that an `on: workflow_run` listener in a second file inherits write permissions from a fork PR. Follow the job DAG across every workflow file.
+- **Semantic / effective-state analysis:** verify the full SLSA provenance graph — assert each `.intoto.jsonl` `builderID` is the canonical `slsa-github-generator` OIDC URI (not a fork), that every release `runs-on` is github-hosted (no self-hosted fallback), and that two-party review is actually enforced by branch protection, not merely declared.
+- **External corroboration:** WebSearch/WebFetch for current CVEs/advisories/standards for SLSA L3 (slsa.dev threat model INT-*, GitHub Actions security advisories, NIST SP 800-218, EU CRA Art. 13).
+- **Apply & prove:** write the hardened workflow/branch-protection fix inline, re-run the `supply-chain-deep`/`sbom`/`ci-pipeline` checks plus `slsa-verifier verify-artifact` and `cosign verify-attestation` as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs against the secure default (hermetic `--network=none` builds vs. registry-fetch convenience).
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

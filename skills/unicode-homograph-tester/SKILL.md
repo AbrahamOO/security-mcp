@@ -34,6 +34,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `injection-deep` detection module (`src/gate/checks/injection-deep.ts`) is your deterministic floor, not your ceiling. Treat its finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / multi-step reasoning the regex can't do:** a regex confirms `.normalize("NFC")` exists *somewhere*, but cannot prove it runs on *every* username/email/filename/URL write path before the DB insert, nor that normalization happens before — not after — the validation regex (the classic order bug). Trace each user-controlled string from its handler through validation into storage and back to the render sink, and confirm normalization + confusable-skeleton matching is applied at every entry, including second-order (stored-then-rendered) paths.
+- **Semantic / effective-state analysis:** model the homoglyph filter-bypass — submit composed/decomposed and mixed-script confusables (Cyrillic 'а' U+0430, fullwidth ＜ U+FF1C, Ⅰ U+2160) and BiDi overrides (U+202E) and verify the *effective* stored/displayed value cannot impersonate an existing identity; check IDN/punycode (`xn--`) equivalents of allowlisted domains and ZWJ (U+200D) byte-level token forgery.
+- **External corroboration:** WebSearch/WebFetch for current CVEs/advisories/standards for Unicode security — UTS#39 confusables, Trojan Source (CVE-2021-42574), IDNA 2008 vs UTS#46 divergence, and current ICU `SpoofChecker` flags.
+- **Apply & prove:** write the sanitizer inline, re-run the `injection-deep` checks (plus a `semgrep` rule for un-normalized input sinks and a homoglyph/BiDi fuzz corpus driven through the endpoint) as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs with the secure default (e.g. NFKC aggressiveness vs. legitimate non-ASCII names).
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

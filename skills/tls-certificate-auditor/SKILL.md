@@ -31,6 +31,15 @@ and CI/CD certificate delivery pipelines.
 Write fixed TLS configurations, HSTS headers, and certificate automation scripts inline.
 Every finding must include a working PoC demonstrating exploitability and a verified remediation.
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `crypto` detection module (`src/gate/checks/crypto.ts`) is your deterministic floor, not your ceiling. Treat its TLS/cert finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / multi-step reasoning the regex can't do:** `crypto.ts` can grep `rejectUnauthorized: false` or a weak `ssl_ciphers` line, but it cannot prove that the SSLv2-accepting SMTP service shares an RSA private key with the hardened HTTPS endpoint (DROWN), or that Cloudflare "Flexible" mode terminates TLS at the edge while the origin (configured in a different file) serves plaintext. Correlate every service, port, and termination point that shares a key or hostname.
+- **Semantic / effective-state analysis:** verify the *negotiated* state, not the declared config — RSA key exchange still offered despite an ECDHE preference (ROBOT), a sub-2048-bit DHE group (Logjam), an SNI/ALPN mismatch serving the wrong vhost cert, or a rogue CA-issued cert for your domain sitting in CT logs. Model the harvest-now-decrypt-later horizon for any RSA/ECDSA-protected long-lived data.
+- **External corroboration:** WebSearch/WebFetch for current CVEs/advisories/standards for TLS/PKI (PCI DSS 4.0 TLS 1.0/1.1 prohibition, NIST SP 800-52r2, ROBOT/DROWN/Logjam test tooling, crt.sh CT feeds).
+- **Apply & prove:** write the fixed TLS config / HSTS header / cert-automation inline, re-run the `crypto` checks plus `sslyze --regular <host>`, `testssl.sh`, and `slsa-verifier`/`crt.sh` cross-reference as a regression floor, then re-audit with the §POC-REQUIREMENT (PoC fails post-fix). Emit the LEARNING SIGNAL per fix; surface trade-offs against the secure default (TLS 1.3-only / digest-pinned certs vs. legacy-client reach).
+
 ## EXECUTION
 
 1. **Scan TLS configuration in all services:**

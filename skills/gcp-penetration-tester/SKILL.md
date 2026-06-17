@@ -27,6 +27,15 @@ Find every GCP misconfiguration that enables privilege escalation or data exfilt
 Write the Terraform fix or IAM binding correction inline. Every CRITICAL or HIGH finding
 MUST include a working PoC payload before any fix is written.
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `infra` + `iac` + `k8s` detection modules (`src/gate/checks/infra.ts`, `src/gate/checks/iac.ts`, `src/gate/checks/k8s.ts`) are your deterministic floor, not your ceiling. Treat their finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** a default compute SA with `roles/editor` in one `.tf` becomes full project takeover only when combined with a node pool carrying `cloud-platform` scope and missing `workload_metadata_config` in another file — correlate the IAM binding, the node-pool config, and any SSRF surface into one metadata-server-to-token attack path.
+- **Semantic / effective-state analysis:** model the privilege-escalation graph — `iam.serviceAccounts.signBlob` → SA impersonation, Cloud Build default SA → secret exfil, VPC-SC perimeter gap → exfil via unlisted API (Sheets/Drive), Binary Authorization `ALWAYS_ALLOW` → unsigned image deploy. Compute effective reachable privilege, not the literal role string.
+- **External corroboration:** WebSearch/WebFetch for the current CIS GCP Foundation Benchmark, GCP security advisories (last 90 days), and GCP IAM privesc technique updates.
+- **Apply & prove:** write the Terraform/gcloud fix inline (drop default-SA editor, `GKE_METADATA` mode, VPC-SC restricted_services, org-policy constraints), re-run the `infra`/`iac`/`k8s` checks plus `tfsec`/`checkov` and a `scoutsuite --provider gcp` audit as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs with the secure default.
+
 ## EXECUTION
 
 1. Scan all Terraform and GCP config files for resources
@@ -518,3 +527,45 @@ On every finding resolved, emit:
 }
 ```
 Call `security.record_outcome` with this payload so the routing engine learns which agent resolves each finding class most successfully. If a finding is a false positive, set `falsePositive: true` — this prevents the false-positive pattern from being routed here again.
+
+---
+
+## §AUTOHARDEN-RULESET
+
+Your authoritative threat-rule set for GCP config drift is the registry at
+`defaults/cloud-controls/gcp.json`. It enumerates CIS GCP Foundations rules as detections paired
+with auto-remediations. Treat each rule as an attack surface, not a compliance checkbox: if a
+resource matches the insecure pattern it is exploitable — detect it, then fix it.
+
+### Execution
+
+1. Run the engine over the working tree: `npx -y security-mcp@latest autoharden` (`--dry-run` to
+   preview). It rewrites Terraform in place for every `set-attr`, `insert-block`, and
+   `companion-resource` rule and reports `[MANUAL]` rules (e.g. removing an `allUsers` /
+   `allAuthenticatedUsers` IAM grant where the correct principals must be chosen by a human).
+2. Every auto-applied fix is verified by re-running its own detector before being kept; an edit
+   that does not clear the finding is reverted and reported manual.
+3. The read-only PR gate (`security.run_pr_gate` → the `cloud-controls` check) emits the same rules
+   as findings without mutating files — use it to confirm a clean tree post-fix.
+
+### Rule record contract (each entry in gcp.json)
+
+- `ruleId` — also the gate Finding id
+- `threat` — the attack the misconfig enables (the "why")
+- `frameworks` — e.g. ["CIS GCP Foundations Benchmark 6.5"] — context labels
+- `detect` — { target, resourceType, forbid?, require?, requireCompanionType? }
+- `remediate` — { strategy, ensure? | companion? | snippet? }
+
+### Worked example (auto-applied, deep nesting)
+
+`GCP_SQL_NO_PUBLIC_IP` — threat: a public-IP Cloud SQL instance is internet-reachable. The engine
+rewrites `settings { ip_configuration { ipv4_enabled = true } }` to `false` in place (arbitrary
+nesting depth is supported), then re-scans the block clean.
+
+### Coverage discipline (ties into §ZERO-MISS-MANDATE)
+
+You CANNOT declare GCP clean without running the full ruleset. For each rule output one of:
+`APPLIED: <ruleId> | <file> | re-scan CLEAN`, `MANUAL: <ruleId> | snippet emitted | <reason>`,
+`CLEAN: <ruleId> | 0 violations`, or `N/A: <ruleId> | not applicable: <evidence>`. Silent skip =
+FAILED COVERAGE. To extend coverage, add a record to `defaults/cloud-controls/gcp.json` — no code
+change required; the engine consumes it on next run.

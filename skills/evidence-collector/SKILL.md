@@ -23,6 +23,15 @@ Assess and implement the complete logging and audit trail infrastructure.
 Covers §19 Observability and Incident Response fully.
 Write logging middleware, structured event schemas, and monitoring alert configurations.
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The full suite of detection modules in `src/gate/checks/` (especially `dlp.ts`, `auth-deep.ts`, and `runtime.ts`) is your deterministic floor for what must be logged and what must never be logged — their finding IDs are the minimum, not the ceiling. Reason past single-line/single-file pattern matching, then APPLY the fix (Edit the logging middleware / schema / alert rule), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** a redaction transform in the logger config is worthless if a route handler in another file logs `req.body` or a `dlp.ts`-flagged PII field upstream — trace the sensitive value from its source to every `logger.*`/`console.*` sink across files; conversely, confirm every auth-failure and admin-action path actually emits a structured event.
+- **Semantic / effective-state analysis:** model the audit trail as evidence — is it immutable (WORM/Object Lock), retained ≥13 months, tamper-evident, and forwarded off-host within seconds? A log that can be cleared (ATT&CK T1070) or that drops events at rotation is not audit-grade; assess the effective integrity, not the presence of a logging call.
+- **External corroboration:** WebSearch/WebFetch for current SOC 2 / PCI DSS / HIPAA logging requirements and log-injection (Log4Shell-class) advisories for the logging stack in use.
+- **Apply & prove:** write the structured schema, redaction rules, immutable-storage config, and SIEM alert rules inline, re-run the relevant `dlp`/`auth-deep`/`runtime` checks plus a `gitleaks`/`semgrep` scan for PII-in-logs as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs with the secure default.
+
 ## EXECUTION
 
 1. Identify the logging library in use: Winston, Pino, Bunyan, Morgan, console.log (bad),

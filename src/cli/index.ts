@@ -18,6 +18,7 @@ import { homedir, platform } from "node:os";
 import { runInstall } from "./install.js";
 import { main as runServer } from "../mcp/server.js";
 import { notifyIfUpdateAvailable } from "./update.js";
+import { autoHardenTree } from "../gate/cloud-controls/apply.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -63,6 +64,7 @@ COMMANDS
   install-global   Install using the globally installed security-mcp binary
   config           Print MCP config JSON for manual editor setup
   doctor           Verify the installation is working correctly
+  autoharden       Auto-apply FSBP/CIS hardening fixes to Terraform (use --dry-run to preview)
 
 OPTIONS (install)
   --claude-code        Write config for Claude Code only
@@ -193,6 +195,23 @@ function runDoctor(): void {
   }
 }
 
+async function runAutoHarden(dryRun: boolean): Promise<void> {
+  const report = await autoHardenTree({ write: !dryRun });
+  const verb = dryRun ? "Would apply" : "Applied";
+  process.stdout.write(`\nsecurity-mcp autoharden v${VERSION}\n`);
+  process.stdout.write("=".repeat(40) + "\n\n");
+  process.stdout.write(`${verb} ${report.applied.length} fix(es) across ${report.filesChanged.length} file(s).\n`);
+  for (const fix of report.applied) {
+    process.stdout.write(`  [FIX]    ${fix.ruleId}  ${fix.resource}  (${fix.file})\n`);
+  }
+  for (const m of report.manual) {
+    process.stdout.write(`  [MANUAL] ${m.ruleId}  ${m.resource}  (${m.file}) — ${m.reason}\n`);
+    if (m.snippet) process.stdout.write(`           ${m.snippet}\n`);
+  }
+  if (dryRun) process.stdout.write("\nDry run — no files were modified. Re-run without --dry-run to apply.\n");
+  process.stdout.write("\n");
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const useGlobalBinary = args.includes("--use-global-binary");
@@ -267,6 +286,11 @@ async function main(): Promise<void> {
     case "doctor":
     case "verify": {
       runDoctor();
+      break;
+    }
+
+    case "autoharden": {
+      await runAutoHarden(args.includes("--dry-run"));
       break;
     }
 

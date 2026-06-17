@@ -1,0 +1,32 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: payments-prod
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/untrusted-org/upstream-charts
+    targetRevision: HEAD
+    path: deploy
+    helm:
+      skipCrds: false
+      valueFiles:
+        - values-prod.yaml
+      fileParameters:
+        - name: image.tag
+          path: ../injected.txt
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: payments
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - Validate=false
+      - ServerSideApply=true
+      - SkipDryRunOnMissingResource=true
+  ignoreDifferences:
+    - group: "*"
+      kind: "*"

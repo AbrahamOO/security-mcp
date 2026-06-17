@@ -22,6 +22,15 @@ Find and fix every authentication and session management vulnerability.
 §12 Auth, Data, Secrets is the minimum — apply all controls and test all bypass vectors.
 Write working exploits before fixes.
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `auth-deep.ts` detection module (`src/gate/checks/auth-deep.ts`) is your deterministic floor, not your ceiling. Treat its finding IDs as the minimum, then reason past what single-line/single-file pattern matching can see — and APPLY the fix (Edit the code/config), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** a `jwt.verify` call missing an `algorithms` pin in one module, combined with a public key loaded from config in another, is an RS256→HS256 confusion forgery the static check can't connect — trace the key material from source to verification sink.
+- **Semantic / effective-state analysis:** model the auth/session state machine — walk every multi-step flow (login → MFA → session-issue) and prove a step can't be skipped, replayed, or session-puzzled by manipulating server-side state between requests.
+- **External corroboration:** use WebSearch/WebFetch for current CVEs and advisories on the detected auth libraries (jsonwebtoken, next-auth, passport, OAuth/OIDC servers) and OAuth Security WG guidance.
+- **Apply & prove:** write the fix inline (pin algorithms, enforce exact redirect_uri, regenerate session on login, rotate refresh tokens), re-run the `auth-deep.ts` checks plus semgrep as a regression floor, then re-audit the flow semantically. Emit the LEARNING SIGNAL per fix; surface any fix that changes intended behavior as an explicit trade-off with the secure default.
+
 ## EXECUTION
 
 1. Enumerate all authentication mechanisms in the codebase

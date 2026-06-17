@@ -35,6 +35,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `infra` + `iac` detection modules (`src/gate/checks/infra.ts`, `src/gate/checks/iac.ts`) are your deterministic floor, not your ceiling. Treat their finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** a single `iam:PassRole` statement is benign in isolation; it is CRITICAL only when another file grants `ec2:RunInstances` (or `lambda:CreateFunction`, or `cloudformation:CreateStack` to a `cfn-exec-role`) to the same identity — these modules flag each line, but only graph traversal across all policy files reveals the 2-hop path to admin.
+- **Semantic / effective-state analysis:** actually build the IAM privesc graph — follow `sts:AssumeRole` chains across account boundaries, resolve OIDC wildcard `sub` claims (fork/branch overmatch), model dormant `SetDefaultPolicyVersion` flips and cross-cloud WIF (GCP→AWS) edges. Compute effective reachable privilege, not the literal action string.
+- **External corroboration:** WebSearch/WebFetch for Rhino Security Labs' privesc technique list and current AWS/GCP IAM condition-key and managed-policy changes that widen existing grants.
+- **Apply & prove:** write the least-privilege fix inline (scope wildcards, constrain `PassRole` resource ARNs, attach permission boundaries, tighten OIDC `sub`), re-run the `infra`/`iac` checks plus `tfsec`/`checkov` and a `pmapper analysis --privesc` (or `cloudsplaining`) graph pass as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs with the secure default.
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

@@ -1,0 +1,20 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: api
+  namespace: flux-system
+spec:
+  interval: 1m
+  chart:
+    spec:
+      chart: api
+      version: '>=2.0.0'
+      sourceRef:
+        kind: HelmRepository
+        name: charts
+  values:
+    database:
+      password: inline-plaintext-password
+      apiKey: AKIAINLINEKEYNOTSECRET
+    auth:
+      token: abc123def456

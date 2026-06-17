@@ -34,6 +34,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `auth-deep` detection module (`src/gate/checks/auth-deep.ts`) is your deterministic floor, not your ceiling. Treat its step-up/re-auth finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / multi-step reasoning the regex can't do:** `auth-deep.ts` can spot a `requireStepUp` call on one route, but it cannot enumerate *every* high-value operation (payment-method add, MFA disable, email change, data export, impersonate) across the codebase and prove each is gated — nor catch a sensitive mutation reachable via a Server Action or direct dispatch that skips the middleware. Map all sensitive sinks to their gate.
+- **Semantic / effective-state analysis:** model the step-up lifecycle and its freshness window — confirm the `stepUpAt` token is cryptographically bound to the session ID and regenerated post-challenge (defeats CVE-2023-29489-style fixation), that OIDC `acr`/`amr` claims are verified inside a signed JWT against issuer JWKS (not trusted from a cookie), and that WebAuthn `signCount` monotonicity is enforced to block assertion replay.
+- **External corroboration:** WebSearch/WebFetch for current CVEs/advisories/standards for step-up auth (OIDC ACR/AMR forgery research, FIDO2 CTAP2 replay, NIST IA-2/AC-11, PCI DSS 8.4.2).
+- **Apply & prove:** write the `requireStepUp` middleware and `/auth/step-up` route inline and wire them at the framework routing layer, re-run the `auth-deep` checks plus a live "stale session → 403 step_up_required → challenge → success → expiry" test as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs against the secure default (5-min freshness window vs. repeated-challenge friction).
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

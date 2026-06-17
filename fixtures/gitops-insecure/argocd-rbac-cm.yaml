@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-rbac-cm
+  namespace: argocd
+data:
+  policy.default: role:readonly
+  policy.csv: |
+    p, role:admin, applications, *, */*, allow
+    g, everyone@example.com, role:admin
+    g, *, role:admin
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cm
+  namespace: argocd
+data:
+  server.insecure: "true"
+  users.anonymous.enabled: "true"
+  resource.customizations: |
+    apps/Deployment:
+      health.lua: |
+        return { status = "Healthy" }

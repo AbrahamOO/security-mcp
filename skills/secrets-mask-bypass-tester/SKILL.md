@@ -34,6 +34,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `secrets` and `dlp` detection modules (`src/gate/checks/secrets.ts`, `src/gate/checks/dlp.ts`) are your deterministic floor, not your ceiling. Treat their finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** `secrets.ts` flags a masking regex that matches `password=`; you must follow the secret from the request body, through the masking middleware, into the Pino/Winston serializer (which may field-alias `password → pwd`), and on to the Fluentd shipper that re-serializes and drops the mask — a multi-hop pipeline the single-line scan never traverses.
+- **Semantic / effective-state analysis:** model the effective unmasked state — a secret split across two buffered log lines, a URL-encoded `password%253D` variant, a Unicode-escaped `secret` in a JSON body, or an Axios `err.config` object serialized whole with its `Authorization` header — reasoning about what actually reaches the SIEM index, not what the literal key name is.
+- **External corroboration:** WebSearch/WebFetch for current log-injection CVEs (Log4Shell-class `${jndi:}`), masking-library advisories, and AI-log-analytics (DevOps Guru/Datadog AI) data-governance requirements.
+- **Apply & prove:** write the fix inline (recursive case-insensitive `sanitizeForLog`, serialization-time masking, `::add-mask::` before any secret reference, canary-credential end-to-end test), re-run the `secrets.ts`/`dlp.ts` checks (plus `gitleaks detect` and a `trufflehog --only-verified` pass over the log fixtures) as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs with the never-log-secrets-at-all default.
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance
