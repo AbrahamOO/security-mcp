@@ -4,7 +4,10 @@
     {
       "ruleId": "AZURE_STORAGE_HTTPS_ONLY",
       "threat": "A storage account that allows plaintext HTTP lets blob traffic and SAS tokens be intercepted on the wire.",
-      "frameworks": ["CIS Azure Foundations Benchmark 3.1", "Microsoft Cloud Security Benchmark DP-3"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 3.1",
+        "Microsoft Cloud Security Benchmark DP-3"
+      ],
       "severity": "HIGH",
       "title": "Storage account must require secure transfer (HTTPS only)",
       "detect": {
@@ -14,7 +17,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "enable_https_traffic_only": "true" }
+        "ensure": {
+          "enable_https_traffic_only": "true"
+        }
       },
       "requiredActions": [
         "Set enable_https_traffic_only = true on the azurerm_storage_account so only TLS connections are accepted."
@@ -23,7 +28,10 @@
     {
       "ruleId": "AZURE_STORAGE_MIN_TLS12",
       "threat": "Allowing TLS 1.0/1.1 to a storage account exposes data to downgrade and known TLS weaknesses.",
-      "frameworks": ["CIS Azure Foundations Benchmark 3.12", "Microsoft Cloud Security Benchmark DP-3"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 3.12",
+        "Microsoft Cloud Security Benchmark DP-3"
+      ],
       "severity": "MEDIUM",
       "title": "Storage account must require TLS 1.2 minimum",
       "detect": {
@@ -33,7 +41,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "min_tls_version": "\"TLS1_2\"" }
+        "ensure": {
+          "min_tls_version": "\"TLS1_2\""
+        }
       },
       "requiredActions": [
         "Set min_tls_version = \"TLS1_2\" on the azurerm_storage_account."
@@ -42,7 +52,9 @@
     {
       "ruleId": "AZURE_STORAGE_NO_PUBLIC_BLOB",
       "threat": "Allowing public blob containers lets anonymous users enumerate and download objects.",
-      "frameworks": ["CIS Azure Foundations Benchmark 3.7"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 3.7"
+      ],
       "severity": "HIGH",
       "title": "Storage account must disallow public blob access",
       "detect": {
@@ -52,7 +64,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "allow_nested_items_to_be_public": "false" }
+        "ensure": {
+          "allow_nested_items_to_be_public": "false"
+        }
       },
       "requiredActions": [
         "Set allow_nested_items_to_be_public = false on the azurerm_storage_account."
@@ -61,7 +75,9 @@
     {
       "ruleId": "AZURE_KV_PURGE_PROTECTION",
       "threat": "Without purge protection, an attacker (or accident) can permanently delete the Key Vault and its secrets, destroying recovery options.",
-      "frameworks": ["CIS Azure Foundations Benchmark 8.5"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.5"
+      ],
       "severity": "MEDIUM",
       "title": "Key Vault must enable purge protection",
       "detect": {
@@ -71,7 +87,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "purge_protection_enabled": "true" }
+        "ensure": {
+          "purge_protection_enabled": "true"
+        }
       },
       "requiredActions": [
         "Set purge_protection_enabled = true on the azurerm_key_vault."
@@ -80,7 +98,9 @@
     {
       "ruleId": "AZURE_KV_SOFT_DELETE",
       "threat": "Without a soft-delete retention window, deleted secrets/keys cannot be recovered after a destructive action.",
-      "frameworks": ["CIS Azure Foundations Benchmark 8.4"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.4"
+      ],
       "severity": "LOW",
       "title": "Key Vault must set a soft-delete retention period",
       "detect": {
@@ -90,7 +110,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "soft_delete_retention_days": "90" }
+        "ensure": {
+          "soft_delete_retention_days": "90"
+        }
       },
       "requiredActions": [
         "Set soft_delete_retention_days = 90 on the azurerm_key_vault."
@@ -99,7 +121,10 @@
     {
       "ruleId": "AZURE_SQL_NO_PUBLIC_ACCESS",
       "threat": "An Azure SQL server with public network access enabled is reachable from the internet for brute force and exploitation.",
-      "frameworks": ["CIS Azure Foundations Benchmark 4.1", "Microsoft Cloud Security Benchmark NS-1"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.1",
+        "Microsoft Cloud Security Benchmark NS-1"
+      ],
       "severity": "HIGH",
       "title": "Azure SQL server must disable public network access",
       "detect": {
@@ -109,7 +134,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "public_network_access_enabled": "false" }
+        "ensure": {
+          "public_network_access_enabled": "false"
+        }
       },
       "requiredActions": [
         "Set public_network_access_enabled = false on the azurerm_mssql_server and use a private endpoint."
@@ -118,7 +145,9 @@
     {
       "ruleId": "AZURE_AKS_RBAC",
       "threat": "An AKS cluster without Kubernetes RBAC grants flat, unscoped access — any compromised credential is cluster-admin equivalent.",
-      "frameworks": ["CIS Azure Foundations Benchmark 8.7"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.7"
+      ],
       "severity": "HIGH",
       "title": "AKS cluster must enable role-based access control",
       "detect": {
@@ -128,7 +157,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "role_based_access_control_enabled": "true" }
+        "ensure": {
+          "role_based_access_control_enabled": "true"
+        }
       },
       "requiredActions": [
         "Set role_based_access_control_enabled = true on the azurerm_kubernetes_cluster."
@@ -137,7 +168,10 @@
     {
       "ruleId": "AZURE_STORAGE_INFRA_ENCRYPTION",
       "threat": "Without infrastructure encryption, storage data has only a single encryption layer — defense-in-depth at rest is reduced.",
-      "frameworks": ["CIS Azure Foundations Benchmark 3.2", "Microsoft Cloud Security Benchmark DP-4"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 3.2",
+        "Microsoft Cloud Security Benchmark DP-4"
+      ],
       "severity": "LOW",
       "title": "Storage account should enable infrastructure encryption",
       "detect": {
@@ -147,7 +181,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "infrastructure_encryption_enabled": "true" }
+        "ensure": {
+          "infrastructure_encryption_enabled": "true"
+        }
       },
       "requiredActions": [
         "Set infrastructure_encryption_enabled = true on the azurerm_storage_account (set at creation time)."
@@ -156,7 +192,9 @@
     {
       "ruleId": "AZURE_POSTGRES_SSL",
       "threat": "A PostgreSQL server without SSL enforcement accepts plaintext connections, exposing credentials and data on the wire.",
-      "frameworks": ["CIS Azure Foundations Benchmark 4.3.1"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.3.1"
+      ],
       "severity": "MEDIUM",
       "title": "PostgreSQL server must enforce SSL",
       "detect": {
@@ -166,7 +204,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "ssl_enforcement_enabled": "true" }
+        "ensure": {
+          "ssl_enforcement_enabled": "true"
+        }
       },
       "requiredActions": [
         "Set ssl_enforcement_enabled = true on the azurerm_postgresql_server."
@@ -175,7 +215,9 @@
     {
       "ruleId": "AZURE_MYSQL_SSL",
       "threat": "A MySQL server without SSL enforcement accepts plaintext connections, exposing credentials and data on the wire.",
-      "frameworks": ["CIS Azure Foundations Benchmark 4.4.1"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.4.1"
+      ],
       "severity": "MEDIUM",
       "title": "MySQL server must enforce SSL",
       "detect": {
@@ -185,7 +227,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "ssl_enforcement_enabled": "true" }
+        "ensure": {
+          "ssl_enforcement_enabled": "true"
+        }
       },
       "requiredActions": [
         "Set ssl_enforcement_enabled = true on the azurerm_mysql_server."
@@ -194,7 +238,10 @@
     {
       "ruleId": "AZURE_REDIS_SSL_ONLY",
       "threat": "Enabling the non-SSL Redis port lets cache traffic — often session tokens — be intercepted in plaintext.",
-      "frameworks": ["CIS Azure Foundations Benchmark 4.x", "Microsoft Cloud Security Benchmark DP-3"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.x",
+        "Microsoft Cloud Security Benchmark DP-3"
+      ],
       "severity": "MEDIUM",
       "title": "Redis cache must disable the non-SSL port",
       "detect": {
@@ -204,7 +251,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "enable_non_ssl_port": "false" }
+        "ensure": {
+          "enable_non_ssl_port": "false"
+        }
       },
       "requiredActions": [
         "Set enable_non_ssl_port = false on the azurerm_redis_cache."
@@ -213,7 +262,9 @@
     {
       "ruleId": "AZURE_APP_SERVICE_HTTPS_ONLY",
       "threat": "An App Service that accepts HTTP exposes session cookies and credentials to interception and downgrade.",
-      "frameworks": ["CIS Azure Foundations Benchmark 9.1"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9.1"
+      ],
       "severity": "MEDIUM",
       "title": "App Service must be HTTPS-only",
       "detect": {
@@ -223,7 +274,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "https_only": "true" }
+        "ensure": {
+          "https_only": "true"
+        }
       },
       "requiredActions": [
         "Set https_only = true on the azurerm_app_service."
@@ -232,7 +285,9 @@
     {
       "ruleId": "AZURE_LINUX_WEBAPP_HTTPS_ONLY",
       "threat": "A Linux web app that accepts HTTP exposes session cookies and credentials to interception and downgrade.",
-      "frameworks": ["CIS Azure Foundations Benchmark 9.1"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9.1"
+      ],
       "severity": "MEDIUM",
       "title": "Linux web app must be HTTPS-only",
       "detect": {
@@ -242,7 +297,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "https_only": "true" }
+        "ensure": {
+          "https_only": "true"
+        }
       },
       "requiredActions": [
         "Set https_only = true on the azurerm_linux_web_app."
@@ -251,7 +308,9 @@
     {
       "ruleId": "AZURE_FUNCTION_HTTPS_ONLY",
       "threat": "A Function App that accepts HTTP exposes function keys and payloads to interception.",
-      "frameworks": ["CIS Azure Foundations Benchmark 9.1"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9.1"
+      ],
       "severity": "MEDIUM",
       "title": "Function App must be HTTPS-only",
       "detect": {
@@ -261,7 +320,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "https_only": "true" }
+        "ensure": {
+          "https_only": "true"
+        }
       },
       "requiredActions": [
         "Set https_only = true on the azurerm_function_app."
@@ -270,7 +331,10 @@
     {
       "ruleId": "AZURE_KV_NETWORK_ACLS",
       "threat": "A Key Vault with default-allow networking is reachable from any network — one leaked token away from secret exfiltration.",
-      "frameworks": ["CIS Azure Foundations Benchmark 8.6", "Microsoft Cloud Security Benchmark NS-2"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.6",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
       "severity": "MEDIUM",
       "title": "Key Vault should restrict network access",
       "detect": {
@@ -289,7 +353,10 @@
     {
       "ruleId": "AZURE_NSG_NO_OPEN_ADMIN",
       "threat": "An NSG rule with source '*' on admin ports (22/3389) exposes SSH/RDP to the entire internet for brute force.",
-      "frameworks": ["CIS Azure Foundations Benchmark 6.1", "CIS Azure Foundations Benchmark 6.2"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 6.1",
+        "CIS Azure Foundations Benchmark 6.2"
+      ],
       "severity": "HIGH",
       "title": "NSG rule must not allow admin ports from any source",
       "detect": {
@@ -308,7 +375,9 @@
     {
       "ruleId": "AZURE_MARIADB_SSL",
       "threat": "A MariaDB server without SSL enforcement accepts plaintext connections, exposing credentials and data.",
-      "frameworks": ["CIS Azure Foundations Benchmark 4.5.1"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.5.1"
+      ],
       "severity": "MEDIUM",
       "title": "MariaDB server must enforce SSL",
       "detect": {
@@ -318,7 +387,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "ssl_enforcement_enabled": "true" }
+        "ensure": {
+          "ssl_enforcement_enabled": "true"
+        }
       },
       "requiredActions": [
         "Set ssl_enforcement_enabled = true on the azurerm_mariadb_server."
@@ -327,7 +398,10 @@
     {
       "ruleId": "AZURE_COSMOSDB_NO_PUBLIC",
       "threat": "A Cosmos DB account with public network access is reachable from the internet for credential abuse and exfiltration.",
-      "frameworks": ["CIS Azure Foundations Benchmark 4.x", "Microsoft Cloud Security Benchmark NS-2"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
       "severity": "MEDIUM",
       "title": "Cosmos DB account must disable public network access",
       "detect": {
@@ -337,7 +411,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "public_network_access_enabled": "false" }
+        "ensure": {
+          "public_network_access_enabled": "false"
+        }
       },
       "requiredActions": [
         "Set public_network_access_enabled = false on the azurerm_cosmosdb_account and use a private endpoint."
@@ -346,7 +422,9 @@
     {
       "ruleId": "AZURE_APP_SERVICE_MIN_TLS",
       "threat": "An App Service allowing TLS 1.0/1.1 exposes traffic to downgrade and known TLS weaknesses.",
-      "frameworks": ["CIS Azure Foundations Benchmark 9.3"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9.3"
+      ],
       "severity": "MEDIUM",
       "title": "App Service must require TLS 1.2 minimum",
       "detect": {
@@ -356,7 +434,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "site_config.min_tls_version": "\"1.2\"" }
+        "ensure": {
+          "site_config.min_tls_version": "\"1.2\""
+        }
       },
       "requiredActions": [
         "Set site_config { min_tls_version = \"1.2\" } on the azurerm_app_service."
@@ -365,7 +445,9 @@
     {
       "ruleId": "AZURE_LINUX_WEBAPP_MIN_TLS",
       "threat": "A Linux web app allowing TLS 1.0/1.1 exposes traffic to downgrade and known TLS weaknesses.",
-      "frameworks": ["CIS Azure Foundations Benchmark 9.3"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9.3"
+      ],
       "severity": "MEDIUM",
       "title": "Linux web app must require TLS 1.2 minimum",
       "detect": {
@@ -375,7 +457,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "site_config.minimum_tls_version": "\"1.2\"" }
+        "ensure": {
+          "site_config.minimum_tls_version": "\"1.2\""
+        }
       },
       "requiredActions": [
         "Set site_config { minimum_tls_version = \"1.2\" } on the azurerm_linux_web_app."
@@ -384,7 +468,10 @@
     {
       "ruleId": "AZURE_VM_NO_PASSWORD_AUTH",
       "threat": "A Linux VM that allows password authentication is exposed to SSH brute force and credential stuffing.",
-      "frameworks": ["CIS Azure Foundations Benchmark 8.x", "Microsoft Cloud Security Benchmark IM-6"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.x",
+        "Microsoft Cloud Security Benchmark IM-6"
+      ],
       "severity": "MEDIUM",
       "title": "Linux VM must disable password authentication",
       "detect": {
@@ -394,7 +481,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "disable_password_authentication": "true" }
+        "ensure": {
+          "disable_password_authentication": "true"
+        }
       },
       "requiredActions": [
         "Set disable_password_authentication = true on the azurerm_linux_virtual_machine and use SSH keys."
@@ -403,7 +492,9 @@
     {
       "ruleId": "AZURE_SQL_TDE",
       "threat": "Without Transparent Data Encryption, Azure SQL data files are unencrypted at rest.",
-      "frameworks": ["CIS Azure Foundations Benchmark 4.1.3"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.1.3"
+      ],
       "severity": "MEDIUM",
       "title": "Azure SQL database must enable Transparent Data Encryption",
       "detect": {
@@ -422,7 +513,9 @@
     {
       "ruleId": "AZURE_SQL_AUDITING",
       "threat": "Without server auditing, malicious queries and data exfiltration against Azure SQL leave no trail.",
-      "frameworks": ["CIS Azure Foundations Benchmark 4.1.1"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.1.1"
+      ],
       "severity": "MEDIUM",
       "title": "Azure SQL server should enable auditing",
       "detect": {
@@ -441,7 +534,9 @@
     {
       "ruleId": "AZURE_AKS_AZURE_POLICY",
       "threat": "Without Azure Policy add-on, the cluster has no admission-time guardrails against insecure workloads.",
-      "frameworks": ["CIS Azure Foundations Benchmark 8.x"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.x"
+      ],
       "severity": "LOW",
       "title": "AKS cluster should enable the Azure Policy add-on",
       "detect": {
@@ -451,7 +546,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "azure_policy_enabled": "true" }
+        "ensure": {
+          "azure_policy_enabled": "true"
+        }
       },
       "requiredActions": [
         "Set azure_policy_enabled = true on the azurerm_kubernetes_cluster."
@@ -460,7 +557,9 @@
     {
       "ruleId": "AZURE_AKS_LOCAL_ACCOUNTS_DISABLED",
       "threat": "AKS local accounts bypass Entra ID/RBAC — a leaked kubeconfig grants standing cluster access with no central revocation.",
-      "frameworks": ["CIS Azure Foundations Benchmark 8.x"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.x"
+      ],
       "severity": "MEDIUM",
       "title": "AKS cluster should disable local accounts",
       "detect": {
@@ -470,7 +569,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "local_account_disabled": "true" }
+        "ensure": {
+          "local_account_disabled": "true"
+        }
       },
       "requiredActions": [
         "Set local_account_disabled = true on the azurerm_kubernetes_cluster and use Entra ID integration."
@@ -479,7 +580,9 @@
     {
       "ruleId": "AZURE_STORAGE_BLOB_SOFT_DELETE",
       "threat": "Without blob soft delete, an overwrite or deletion (accidental or ransomware) is unrecoverable.",
-      "frameworks": ["CIS Azure Foundations Benchmark 3.11"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 3.11"
+      ],
       "severity": "LOW",
       "title": "Storage account should enable blob soft delete",
       "detect": {
@@ -489,7 +592,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "blob_properties.delete_retention_policy.days": "7" }
+        "ensure": {
+          "blob_properties.delete_retention_policy.days": "7"
+        }
       },
       "requiredActions": [
         "Add blob_properties { delete_retention_policy { days = 7 } } to the azurerm_storage_account."
@@ -498,7 +603,9 @@
     {
       "ruleId": "AZURE_APP_SERVICE_FTPS_ONLY",
       "threat": "Allowing plain FTP deployment exposes credentials and content over an unencrypted channel.",
-      "frameworks": ["CIS Azure Foundations Benchmark 9.x"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9.x"
+      ],
       "severity": "LOW",
       "title": "App Service should restrict FTP to FTPS",
       "detect": {
@@ -508,7 +615,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "site_config.ftps_state": "\"FtpsOnly\"" }
+        "ensure": {
+          "site_config.ftps_state": "\"FtpsOnly\""
+        }
       },
       "requiredActions": [
         "Set site_config { ftps_state = \"FtpsOnly\" } (or \"Disabled\") on the azurerm_app_service."
@@ -517,7 +626,9 @@
     {
       "ruleId": "AZURE_SQL_AAD_ADMIN",
       "threat": "An Azure SQL server without an Entra ID administrator relies solely on SQL logins, weakening central identity control.",
-      "frameworks": ["CIS Azure Foundations Benchmark 4.1.x"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.1.x"
+      ],
       "severity": "LOW",
       "title": "Azure SQL server should have an Entra ID administrator",
       "detect": {
@@ -536,7 +647,9 @@
     {
       "ruleId": "AZURE_KEY_VAULT_RBAC",
       "threat": "Vault access policies are coarse and hard to audit; RBAC gives scoped, centrally-managed, revocable access.",
-      "frameworks": ["CIS Azure Foundations Benchmark 8.x"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.x"
+      ],
       "severity": "LOW",
       "title": "Key Vault should use RBAC authorization",
       "detect": {
@@ -555,7 +668,10 @@
     {
       "ruleId": "AZURE_ACR_NO_ADMIN_USER",
       "threat": "The ACR admin user is a shared static credential; if leaked it grants full push/pull, enabling image tampering.",
-      "frameworks": ["CIS Azure Foundations Benchmark 8.x", "Microsoft Cloud Security Benchmark IM-7"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.x",
+        "Microsoft Cloud Security Benchmark IM-7"
+      ],
       "severity": "MEDIUM",
       "title": "Container Registry must disable the admin user",
       "detect": {
@@ -565,7 +681,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "admin_enabled": "false" }
+        "ensure": {
+          "admin_enabled": "false"
+        }
       },
       "requiredActions": [
         "Set admin_enabled = false on the azurerm_container_registry and use Entra ID / managed identity authentication."
@@ -574,7 +692,10 @@
     {
       "ruleId": "AZURE_ACR_NO_PUBLIC",
       "threat": "A Container Registry with public network access can be reached for anonymous/credential-based pulls and pushes from the internet.",
-      "frameworks": ["CIS Azure Foundations Benchmark 8.x", "Microsoft Cloud Security Benchmark NS-2"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
       "severity": "MEDIUM",
       "title": "Container Registry should disable public network access",
       "detect": {
@@ -584,7 +705,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "public_network_access_enabled": "false" }
+        "ensure": {
+          "public_network_access_enabled": "false"
+        }
       },
       "requiredActions": [
         "Set public_network_access_enabled = false on the azurerm_container_registry and use a private endpoint."
@@ -593,7 +716,9 @@
     {
       "ruleId": "AZURE_STORAGE_BLOB_VERSIONING",
       "threat": "Without blob versioning, an overwrite (accidental or malicious) destroys the prior object with no rollback.",
-      "frameworks": ["CIS Azure Foundations Benchmark 3.x"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 3.x"
+      ],
       "severity": "LOW",
       "title": "Storage account should enable blob versioning",
       "detect": {
@@ -603,7 +728,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "blob_properties.versioning_enabled": "true" }
+        "ensure": {
+          "blob_properties.versioning_enabled": "true"
+        }
       },
       "requiredActions": [
         "Add blob_properties { versioning_enabled = true } to the azurerm_storage_account."
@@ -612,7 +739,9 @@
     {
       "ruleId": "AZURE_STORAGE_CONTAINER_SOFT_DELETE",
       "threat": "Without container soft delete, a deleted container and all its blobs are unrecoverable.",
-      "frameworks": ["CIS Azure Foundations Benchmark 3.x"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 3.x"
+      ],
       "severity": "LOW",
       "title": "Storage account should enable container soft delete",
       "detect": {
@@ -622,7 +751,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "blob_properties.container_delete_retention_policy.days": "7" }
+        "ensure": {
+          "blob_properties.container_delete_retention_policy.days": "7"
+        }
       },
       "requiredActions": [
         "Add blob_properties { container_delete_retention_policy { days = 7 } } to the azurerm_storage_account."
@@ -631,7 +762,9 @@
     {
       "ruleId": "AZURE_FUNCTION_MIN_TLS",
       "threat": "A Function App allowing TLS 1.0/1.1 exposes traffic to downgrade and known TLS weaknesses.",
-      "frameworks": ["CIS Azure Foundations Benchmark 9.3"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9.3"
+      ],
       "severity": "MEDIUM",
       "title": "Function App must require TLS 1.2 minimum",
       "detect": {
@@ -641,7 +774,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "site_config.min_tls_version": "\"1.2\"" }
+        "ensure": {
+          "site_config.min_tls_version": "\"1.2\""
+        }
       },
       "requiredActions": [
         "Set site_config { min_tls_version = \"1.2\" } on the azurerm_function_app."
@@ -650,7 +785,9 @@
     {
       "ruleId": "AZURE_MANAGED_DISK_CMK",
       "threat": "A managed disk encrypted only with platform-managed keys offers less key control and revocation than a customer-managed key.",
-      "frameworks": ["CIS Azure Foundations Benchmark 7.x"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 7.x"
+      ],
       "severity": "LOW",
       "title": "Managed disk should use a customer-managed key",
       "detect": {
@@ -669,7 +806,10 @@
     {
       "ruleId": "AZURE_KV_SECRET_EXPIRY",
       "threat": "A Key Vault secret with no expiration date stays valid forever if leaked, maximising the compromise window.",
-      "frameworks": ["CIS Azure Foundations Benchmark 8.1", "CIS Azure Foundations Benchmark 8.2"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.1",
+        "CIS Azure Foundations Benchmark 8.2"
+      ],
       "severity": "LOW",
       "title": "Key Vault secrets/keys should set an expiration date",
       "detect": {
@@ -688,7 +828,9 @@
     {
       "ruleId": "AZURE_APP_SERVICE_NO_REMOTE_DEBUG",
       "threat": "Remote debugging on an App Service exposes an attach point that can be abused to inspect or alter the running app.",
-      "frameworks": ["CIS Azure Foundations Benchmark 9.x"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9.x"
+      ],
       "severity": "LOW",
       "title": "App Service must disable remote debugging",
       "detect": {
@@ -698,7 +840,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "site_config.remote_debugging_enabled": "false" }
+        "ensure": {
+          "site_config.remote_debugging_enabled": "false"
+        }
       },
       "requiredActions": [
         "Set site_config { remote_debugging_enabled = false } on the azurerm_app_service."
@@ -707,7 +851,9 @@
     {
       "ruleId": "AZURE_AKS_NO_HTTP_APP_ROUTING",
       "threat": "The AKS HTTP application routing add-on creates a public DNS zone and ingress with weak controls, expanding exposure.",
-      "frameworks": ["CIS Azure Foundations Benchmark 8.x"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.x"
+      ],
       "severity": "LOW",
       "title": "AKS cluster must disable HTTP application routing",
       "detect": {
@@ -717,7 +863,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "http_application_routing_enabled": "false" }
+        "ensure": {
+          "http_application_routing_enabled": "false"
+        }
       },
       "requiredActions": [
         "Set http_application_routing_enabled = false on the azurerm_kubernetes_cluster and use a managed ingress controller."
@@ -726,7 +874,9 @@
     {
       "ruleId": "AZURE_REDIS_MIN_TLS",
       "threat": "A Redis cache allowing TLS 1.0/1.1 exposes traffic to downgrade and known TLS weaknesses.",
-      "frameworks": ["CIS Azure Foundations Benchmark 4.x"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.x"
+      ],
       "severity": "MEDIUM",
       "title": "Redis cache must require TLS 1.2 minimum",
       "detect": {
@@ -736,7 +886,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "minimum_tls_version": "\"1.2\"" }
+        "ensure": {
+          "minimum_tls_version": "\"1.2\""
+        }
       },
       "requiredActions": [
         "Set minimum_tls_version = \"1.2\" on the azurerm_redis_cache."
@@ -745,7 +897,10 @@
     {
       "ruleId": "AZURE_STORAGE_SHARED_KEY_DISABLED",
       "threat": "Shared-key access lets anyone with the account key bypass Entra ID/RBAC entirely — a leaked key is full data access.",
-      "frameworks": ["CIS Azure Foundations Benchmark 3.x", "Microsoft Cloud Security Benchmark IM-1"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 3.x",
+        "Microsoft Cloud Security Benchmark IM-1"
+      ],
       "severity": "MEDIUM",
       "title": "Storage account should disable shared key access",
       "detect": {
@@ -755,7 +910,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "shared_access_key_enabled": "false" }
+        "ensure": {
+          "shared_access_key_enabled": "false"
+        }
       },
       "requiredActions": [
         "Set shared_access_key_enabled = false on the azurerm_storage_account and use Entra ID authentication (confirm all clients support it first)."
@@ -764,7 +921,9 @@
     {
       "ruleId": "AZURE_SQL_FIREWALL_NO_ALL",
       "threat": "A SQL firewall rule spanning 0.0.0.0 (Allow Azure Services) or 0.0.0.0-255.255.255.255 exposes the database broadly.",
-      "frameworks": ["CIS Azure Foundations Benchmark 4.1.x"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.1.x"
+      ],
       "severity": "HIGH",
       "title": "Azure SQL firewall must not allow all addresses",
       "detect": {
@@ -783,7 +942,10 @@
     {
       "ruleId": "AZURE_KV_NO_PUBLIC_NETWORK",
       "threat": "A Key Vault with public network access is reachable from the internet — one leaked token from secret exfiltration.",
-      "frameworks": ["CIS Azure Foundations Benchmark 8.6", "Microsoft Cloud Security Benchmark NS-2"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.6",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
       "severity": "MEDIUM",
       "title": "Key Vault should disable public network access",
       "detect": {
@@ -802,7 +964,9 @@
     {
       "ruleId": "AZURE_SERVICEBUS_NO_PUBLIC",
       "threat": "A Service Bus namespace with public network access is reachable from the internet for credential abuse and message tampering.",
-      "frameworks": ["Microsoft Cloud Security Benchmark NS-2"],
+      "frameworks": [
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
       "severity": "MEDIUM",
       "title": "Service Bus namespace should disable public network access",
       "detect": {
@@ -812,7 +976,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "public_network_access_enabled": "false" }
+        "ensure": {
+          "public_network_access_enabled": "false"
+        }
       },
       "requiredActions": [
         "Set public_network_access_enabled = false on the azurerm_servicebus_namespace and use a private endpoint."
@@ -821,7 +987,9 @@
     {
       "ruleId": "AZURE_EVENTHUB_NO_PUBLIC",
       "threat": "An Event Hub namespace with public network access is reachable from the internet for credential abuse and data interception.",
-      "frameworks": ["Microsoft Cloud Security Benchmark NS-2"],
+      "frameworks": [
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
       "severity": "MEDIUM",
       "title": "Event Hub namespace should disable public network access",
       "detect": {
@@ -831,7 +999,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "public_network_access_enabled": "false" }
+        "ensure": {
+          "public_network_access_enabled": "false"
+        }
       },
       "requiredActions": [
         "Set public_network_access_enabled = false on the azurerm_eventhub_namespace and use a private endpoint."
@@ -840,7 +1010,9 @@
     {
       "ruleId": "AZURE_COSMOSDB_LOCAL_AUTH_DISABLED",
       "threat": "Cosmos DB local (key-based) auth bypasses Entra ID/RBAC — a leaked key is full, non-revocable data access.",
-      "frameworks": ["Microsoft Cloud Security Benchmark IM-1"],
+      "frameworks": [
+        "Microsoft Cloud Security Benchmark IM-1"
+      ],
       "severity": "MEDIUM",
       "title": "Cosmos DB should disable local (key) authentication",
       "detect": {
@@ -850,7 +1022,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "local_authentication_disabled": "true" }
+        "ensure": {
+          "local_authentication_disabled": "true"
+        }
       },
       "requiredActions": [
         "Set local_authentication_disabled = true on the azurerm_cosmosdb_account and use Entra ID RBAC (confirm clients support it first)."
@@ -859,7 +1033,9 @@
     {
       "ruleId": "AZURE_DATA_FACTORY_NO_PUBLIC",
       "threat": "A Data Factory with public network access exposes its managed integration runtime and linked-service credentials.",
-      "frameworks": ["Microsoft Cloud Security Benchmark NS-2"],
+      "frameworks": [
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
       "severity": "MEDIUM",
       "title": "Data Factory should disable public network access",
       "detect": {
@@ -869,7 +1045,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "public_network_enabled": "false" }
+        "ensure": {
+          "public_network_enabled": "false"
+        }
       },
       "requiredActions": [
         "Set public_network_enabled = false on the azurerm_data_factory and use a managed private endpoint."
@@ -878,7 +1056,9 @@
     {
       "ruleId": "AZURE_APP_CONFIG_NO_PUBLIC",
       "threat": "An App Configuration store with public access exposes feature flags and configuration — sometimes containing secrets — to the internet.",
-      "frameworks": ["Microsoft Cloud Security Benchmark NS-2"],
+      "frameworks": [
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
       "severity": "MEDIUM",
       "title": "App Configuration should disable public network access",
       "detect": {
@@ -888,7 +1068,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "public_network_access": "\"Disabled\"" }
+        "ensure": {
+          "public_network_access": "\"Disabled\""
+        }
       },
       "requiredActions": [
         "Set public_network_access = \"Disabled\" on the azurerm_app_configuration and use a private endpoint."
@@ -897,7 +1079,9 @@
     {
       "ruleId": "AZURE_DEFENDER_PLAN_STANDARD",
       "threat": "A Defender for Cloud plan left on the Free tier means no threat detection for that resource type — attacks go unalerted.",
-      "frameworks": ["CIS Azure Foundations Benchmark 2.1"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 2.1"
+      ],
       "severity": "MEDIUM",
       "title": "Defender for Cloud plans must be on the Standard tier",
       "detect": {
@@ -907,7 +1091,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "tier": "\"Standard\"" }
+        "ensure": {
+          "tier": "\"Standard\""
+        }
       },
       "requiredActions": [
         "Set tier = \"Standard\" on the azurerm_security_center_subscription_pricing for each resource_type (VirtualMachines, SqlServers, StorageAccounts, KeyVaults, Containers, AppServices, etc.)."
@@ -916,7 +1102,9 @@
     {
       "ruleId": "AZURE_APP_SERVICE_CLIENT_CERT",
       "threat": "Without incoming client certificates, an App Service cannot enforce mutual TLS for service-to-service callers.",
-      "frameworks": ["CIS Azure Foundations Benchmark 9.x"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9.x"
+      ],
       "severity": "LOW",
       "title": "App Service should require incoming client certificates",
       "detect": {
@@ -926,7 +1114,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "client_cert_enabled": "true" }
+        "ensure": {
+          "client_cert_enabled": "true"
+        }
       },
       "requiredActions": [
         "Set client_cert_enabled = true on the azurerm_app_service (for internal/mTLS apps)."
@@ -935,7 +1125,9 @@
     {
       "ruleId": "AZURE_SECURITY_CONTACT_EMAIL",
       "threat": "Without a security contact, Defender for Cloud alerts (including active-attack notifications) are not delivered to anyone.",
-      "frameworks": ["CIS Azure Foundations Benchmark 2.x"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 2.x"
+      ],
       "severity": "LOW",
       "title": "Defender for Cloud should have a security contact",
       "detect": {
@@ -954,7 +1146,9 @@
     {
       "ruleId": "AZURE_PG_FLEX_SSL",
       "threat": "A PostgreSQL Flexible Server allowing non-TLS connections exposes credentials and data on the wire.",
-      "frameworks": ["CIS Azure Foundations Benchmark 4.3.x"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.3.x"
+      ],
       "severity": "MEDIUM",
       "title": "PostgreSQL Flexible Server must require TLS",
       "detect": {
@@ -973,7 +1167,9 @@
     {
       "ruleId": "AZURE_SEARCH_NO_PUBLIC",
       "threat": "A Cognitive/AI Search service with public network access is reachable from the internet for query abuse and data exfiltration.",
-      "frameworks": ["Microsoft Cloud Security Benchmark NS-2"],
+      "frameworks": [
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
       "severity": "MEDIUM",
       "title": "Search service should disable public network access",
       "detect": {
@@ -983,7 +1179,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "public_network_access_enabled": "false" }
+        "ensure": {
+          "public_network_access_enabled": "false"
+        }
       },
       "requiredActions": [
         "Set public_network_access_enabled = false on the azurerm_search_service and use a private endpoint."
@@ -992,7 +1190,9 @@
     {
       "ruleId": "AZURE_EVENTHUB_MIN_TLS",
       "threat": "An Event Hub namespace allowing TLS 1.0/1.1 exposes traffic to downgrade and known TLS weaknesses.",
-      "frameworks": ["Microsoft Cloud Security Benchmark DP-3"],
+      "frameworks": [
+        "Microsoft Cloud Security Benchmark DP-3"
+      ],
       "severity": "LOW",
       "title": "Event Hub namespace must require TLS 1.2 minimum",
       "detect": {
@@ -1002,7 +1202,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "minimum_tls_version": "\"1.2\"" }
+        "ensure": {
+          "minimum_tls_version": "\"1.2\""
+        }
       },
       "requiredActions": [
         "Set minimum_tls_version = \"1.2\" on the azurerm_eventhub_namespace."
@@ -1011,7 +1213,9 @@
     {
       "ruleId": "AZURE_SERVICEBUS_MIN_TLS",
       "threat": "A Service Bus namespace allowing TLS 1.0/1.1 exposes traffic to downgrade and known TLS weaknesses.",
-      "frameworks": ["Microsoft Cloud Security Benchmark DP-3"],
+      "frameworks": [
+        "Microsoft Cloud Security Benchmark DP-3"
+      ],
       "severity": "LOW",
       "title": "Service Bus namespace must require TLS 1.2 minimum",
       "detect": {
@@ -1021,7 +1225,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "minimum_tls_version": "\"1.2\"" }
+        "ensure": {
+          "minimum_tls_version": "\"1.2\""
+        }
       },
       "requiredActions": [
         "Set minimum_tls_version = \"1.2\" on the azurerm_servicebus_namespace."
@@ -1030,7 +1236,9 @@
     {
       "ruleId": "AZURE_COSMOSDB_MIN_TLS",
       "threat": "A Cosmos DB account allowing TLS 1.0/1.1 exposes traffic to downgrade and known TLS weaknesses.",
-      "frameworks": ["Microsoft Cloud Security Benchmark DP-3"],
+      "frameworks": [
+        "Microsoft Cloud Security Benchmark DP-3"
+      ],
       "severity": "LOW",
       "title": "Cosmos DB account must require TLS 1.2 minimum",
       "detect": {
@@ -1040,7 +1248,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "minimal_tls_version": "\"Tls12\"" }
+        "ensure": {
+          "minimal_tls_version": "\"Tls12\""
+        }
       },
       "requiredActions": [
         "Set minimal_tls_version = \"Tls12\" on the azurerm_cosmosdb_account."
@@ -1049,7 +1259,9 @@
     {
       "ruleId": "AZURE_AKS_API_AUTHORIZED_IP",
       "threat": "An AKS API server reachable from any IP is exposed to credential stuffing and API exploitation.",
-      "frameworks": ["CIS Azure Foundations Benchmark 8.x"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.x"
+      ],
       "severity": "MEDIUM",
       "title": "AKS API server should restrict authorized IP ranges",
       "detect": {
@@ -1068,7 +1280,9 @@
     {
       "ruleId": "AZURE_APP_GATEWAY_WAF",
       "threat": "An Application Gateway without WAF has no managed protection against L7 attacks (injection, bots).",
-      "frameworks": ["Microsoft Cloud Security Benchmark NS-6"],
+      "frameworks": [
+        "Microsoft Cloud Security Benchmark NS-6"
+      ],
       "severity": "MEDIUM",
       "title": "Application Gateway should attach a WAF policy",
       "detect": {
@@ -1087,7 +1301,9 @@
     {
       "ruleId": "AZURE_MSSQL_MIN_TLS",
       "threat": "An Azure SQL server allowing TLS 1.0/1.1 exposes database connections to downgrade and known TLS weaknesses.",
-      "frameworks": ["CIS Azure Foundations Benchmark 4.1.x"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.1.x"
+      ],
       "severity": "MEDIUM",
       "title": "Azure SQL server must require TLS 1.2 minimum",
       "detect": {
@@ -1097,7 +1313,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "minimum_tls_version": "\"1.2\"" }
+        "ensure": {
+          "minimum_tls_version": "\"1.2\""
+        }
       },
       "requiredActions": [
         "Set minimum_tls_version = \"1.2\" on the azurerm_mssql_server."
@@ -1106,7 +1324,9 @@
     {
       "ruleId": "AZURE_REDIS_NO_PUBLIC",
       "threat": "A Redis cache with public network access is reachable from the internet for brute force and abuse.",
-      "frameworks": ["Microsoft Cloud Security Benchmark NS-2"],
+      "frameworks": [
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
       "severity": "MEDIUM",
       "title": "Redis cache should disable public network access",
       "detect": {
@@ -1116,7 +1336,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "public_network_access_enabled": "false" }
+        "ensure": {
+          "public_network_access_enabled": "false"
+        }
       },
       "requiredActions": [
         "Set public_network_access_enabled = false on the azurerm_redis_cache and use a private endpoint."
@@ -1125,7 +1347,9 @@
     {
       "ruleId": "AZURE_STORAGE_CROSS_TENANT_REPLICATION",
       "threat": "Cross-tenant object replication can move data out to an attacker-controlled tenant.",
-      "frameworks": ["CIS Azure Foundations Benchmark 3.x"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 3.x"
+      ],
       "severity": "LOW",
       "title": "Storage account should disable cross-tenant replication",
       "detect": {
@@ -1135,7 +1359,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "cross_tenant_replication_enabled": "false" }
+        "ensure": {
+          "cross_tenant_replication_enabled": "false"
+        }
       },
       "requiredActions": [
         "Set cross_tenant_replication_enabled = false on the azurerm_storage_account."
@@ -1144,7 +1370,10 @@
     {
       "ruleId": "AZURE_POSTGRES_NO_PUBLIC",
       "threat": "A PostgreSQL server with public network access is reachable from the internet for brute force and exploitation.",
-      "frameworks": ["CIS Azure Foundations Benchmark 4.3.x", "Microsoft Cloud Security Benchmark NS-2"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.3.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
       "severity": "MEDIUM",
       "title": "PostgreSQL server should disable public network access",
       "detect": {
@@ -1154,7 +1383,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "public_network_access_enabled": "false" }
+        "ensure": {
+          "public_network_access_enabled": "false"
+        }
       },
       "requiredActions": [
         "Set public_network_access_enabled = false on the azurerm_postgresql_server and use a private endpoint."
@@ -1163,7 +1394,10 @@
     {
       "ruleId": "AZURE_MYSQL_NO_PUBLIC",
       "threat": "A MySQL server with public network access is reachable from the internet for brute force and exploitation.",
-      "frameworks": ["CIS Azure Foundations Benchmark 4.4.x", "Microsoft Cloud Security Benchmark NS-2"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.4.x",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
       "severity": "MEDIUM",
       "title": "MySQL server should disable public network access",
       "detect": {
@@ -1173,7 +1407,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "public_network_access_enabled": "false" }
+        "ensure": {
+          "public_network_access_enabled": "false"
+        }
       },
       "requiredActions": [
         "Set public_network_access_enabled = false on the azurerm_mysql_server and use a private endpoint."
@@ -1182,7 +1418,9 @@
     {
       "ruleId": "AZURE_MSSQL_AAD_ONLY",
       "threat": "Allowing SQL logins alongside Entra ID means a leaked SQL password bypasses centralized identity controls.",
-      "frameworks": ["CIS Azure Foundations Benchmark 4.1.x"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.1.x"
+      ],
       "severity": "LOW",
       "title": "Azure SQL server should enforce Entra ID-only authentication",
       "detect": {
@@ -1201,7 +1439,10 @@
     {
       "ruleId": "BICEP_STORAGE_HTTPS_ONLY",
       "threat": "A Bicep storage account allowing plaintext HTTP lets blob traffic and SAS tokens be intercepted.",
-      "frameworks": ["CIS Azure Foundations Benchmark 3.1", "Microsoft Cloud Security Benchmark DP-3"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 3.1",
+        "Microsoft Cloud Security Benchmark DP-3"
+      ],
       "severity": "HIGH",
       "title": "Bicep storage account must require HTTPS",
       "detect": {
@@ -1220,7 +1461,9 @@
     {
       "ruleId": "BICEP_STORAGE_MIN_TLS",
       "threat": "A Bicep storage account allowing TLS 1.0/1.1 exposes data to downgrade attacks.",
-      "frameworks": ["CIS Azure Foundations Benchmark 3.12"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 3.12"
+      ],
       "severity": "MEDIUM",
       "title": "Bicep storage account must require TLS 1.2",
       "detect": {
@@ -1239,7 +1482,10 @@
     {
       "ruleId": "BICEP_SQL_NO_PUBLIC",
       "threat": "A Bicep SQL server with public network access is reachable from the internet.",
-      "frameworks": ["CIS Azure Foundations Benchmark 4.1", "Microsoft Cloud Security Benchmark NS-2"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.1",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
       "severity": "HIGH",
       "title": "Bicep SQL server must disable public network access",
       "detect": {
@@ -1258,7 +1504,9 @@
     {
       "ruleId": "BICEP_KEYVAULT_PURGE_PROTECTION",
       "threat": "A Bicep Key Vault without purge protection can be permanently deleted, destroying secrets and recovery options.",
-      "frameworks": ["CIS Azure Foundations Benchmark 8.5"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.5"
+      ],
       "severity": "MEDIUM",
       "title": "Bicep Key Vault must enable purge protection",
       "detect": {
@@ -1277,7 +1525,9 @@
     {
       "ruleId": "BICEP_AKS_RBAC",
       "threat": "A Bicep AKS cluster without RBAC grants flat, unscoped access — any leaked credential is cluster-admin.",
-      "frameworks": ["CIS Azure Foundations Benchmark 8.7"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.7"
+      ],
       "severity": "HIGH",
       "title": "Bicep AKS cluster must enable RBAC",
       "detect": {
@@ -1296,7 +1546,9 @@
     {
       "ruleId": "BICEP_REDIS_NO_NONSSL",
       "threat": "A Bicep Redis cache with the non-SSL port enabled lets cache traffic be intercepted in plaintext.",
-      "frameworks": ["Microsoft Cloud Security Benchmark DP-3"],
+      "frameworks": [
+        "Microsoft Cloud Security Benchmark DP-3"
+      ],
       "severity": "MEDIUM",
       "title": "Bicep Redis cache must disable the non-SSL port",
       "detect": {
@@ -1310,6 +1562,468 @@
       },
       "requiredActions": [
         "Set enableNonSslPort: false on the Redis cache."
+      ]
+    },
+    {
+      "ruleId": "BICEP_STORAGE_NO_PUBLIC_BLOB",
+      "threat": "Public blob containers let anonymous users enumerate and download objects.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "HIGH",
+      "title": "Bicep storage must disallow public blob access",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Storage/storageAccounts",
+        "forbid": "allowBlobPublicAccess\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.allowBlobPublicAccess: false on the storage account."
+      },
+      "requiredActions": [
+        "Set properties.allowBlobPublicAccess: false on the storage account."
+      ]
+    },
+    {
+      "ruleId": "BICEP_STORAGE_INFRA_ENCRYPTION",
+      "threat": "Single-layer encryption reduces defense-in-depth at rest.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "LOW",
+      "title": "Bicep storage should enable infrastructure encryption",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Storage/storageAccounts",
+        "require": "requireInfrastructureEncryption\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.encryption.requireInfrastructureEncryption: true."
+      },
+      "requiredActions": [
+        "Set properties.encryption.requireInfrastructureEncryption: true."
+      ]
+    },
+    {
+      "ruleId": "BICEP_STORAGE_SHARED_KEY",
+      "threat": "A leaked account key bypasses Entra ID/RBAC entirely.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "MEDIUM",
+      "title": "Bicep storage should disable shared key access",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Storage/storageAccounts",
+        "require": "allowSharedKeyAccess\\s*:\\s*false"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.allowSharedKeyAccess: false (confirm clients support Entra ID)."
+      },
+      "requiredActions": [
+        "Set properties.allowSharedKeyAccess: false (confirm clients support Entra ID)."
+      ]
+    },
+    {
+      "ruleId": "BICEP_STORAGE_CROSS_TENANT",
+      "threat": "Cross-tenant replication can move data to an attacker-controlled tenant.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "LOW",
+      "title": "Bicep storage should disable cross-tenant replication",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Storage/storageAccounts",
+        "forbid": "allowCrossTenantReplication\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.allowCrossTenantReplication: false."
+      },
+      "requiredActions": [
+        "Set properties.allowCrossTenantReplication: false."
+      ]
+    },
+    {
+      "ruleId": "BICEP_KV_SOFT_DELETE",
+      "threat": "Without a soft-delete window, deleted secrets cannot be recovered.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "LOW",
+      "title": "Bicep Key Vault should set a soft-delete retention",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.KeyVault/vaults",
+        "require": "softDeleteRetentionInDays"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.softDeleteRetentionInDays: 90 on the Key Vault."
+      },
+      "requiredActions": [
+        "Set properties.softDeleteRetentionInDays: 90 on the Key Vault."
+      ]
+    },
+    {
+      "ruleId": "BICEP_KV_NO_PUBLIC",
+      "threat": "A public Key Vault is one leaked token from secret exfiltration.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "MEDIUM",
+      "title": "Bicep Key Vault should disable public network access",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.KeyVault/vaults",
+        "require": "publicNetworkAccess\\s*:\\s*'Disabled'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.publicNetworkAccess: 'Disabled' and use a private endpoint."
+      },
+      "requiredActions": [
+        "Set properties.publicNetworkAccess: 'Disabled' and use a private endpoint."
+      ]
+    },
+    {
+      "ruleId": "BICEP_POSTGRES_SSL",
+      "threat": "Plaintext connections expose credentials and data on the wire.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "MEDIUM",
+      "title": "Bicep PostgreSQL server must enforce SSL",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.DBforPostgreSQL/servers",
+        "require": "sslEnforcement\\s*:\\s*'Enabled'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.sslEnforcement: 'Enabled' on the PostgreSQL server."
+      },
+      "requiredActions": [
+        "Set properties.sslEnforcement: 'Enabled' on the PostgreSQL server."
+      ]
+    },
+    {
+      "ruleId": "BICEP_MYSQL_SSL",
+      "threat": "Plaintext connections expose credentials and data on the wire.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "MEDIUM",
+      "title": "Bicep MySQL server must enforce SSL",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.DBforMySQL/servers",
+        "require": "sslEnforcement\\s*:\\s*'Enabled'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.sslEnforcement: 'Enabled' on the MySQL server."
+      },
+      "requiredActions": [
+        "Set properties.sslEnforcement: 'Enabled' on the MySQL server."
+      ]
+    },
+    {
+      "ruleId": "BICEP_MARIADB_SSL",
+      "threat": "Plaintext connections expose credentials and data on the wire.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "MEDIUM",
+      "title": "Bicep MariaDB server must enforce SSL",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.DBforMariaDB/servers",
+        "require": "sslEnforcement\\s*:\\s*'Enabled'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.sslEnforcement: 'Enabled' on the MariaDB server."
+      },
+      "requiredActions": [
+        "Set properties.sslEnforcement: 'Enabled' on the MariaDB server."
+      ]
+    },
+    {
+      "ruleId": "BICEP_WEBAPP_HTTPS_ONLY",
+      "threat": "HTTP exposes session cookies and credentials to interception.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "MEDIUM",
+      "title": "Bicep web/function app must be HTTPS-only",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Web/sites",
+        "require": "httpsOnly\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set httpsOnly: true on the Microsoft.Web/sites resource."
+      },
+      "requiredActions": [
+        "Set httpsOnly: true on the Microsoft.Web/sites resource."
+      ]
+    },
+    {
+      "ruleId": "BICEP_WEBAPP_MIN_TLS",
+      "threat": "TLS 1.0/1.1 is exposed to downgrade and known weaknesses.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "MEDIUM",
+      "title": "Bicep web/function app must require TLS 1.2",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Web/sites",
+        "require": "minTlsVersion\\s*:\\s*'1.2'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.siteConfig.minTlsVersion: '1.2'."
+      },
+      "requiredActions": [
+        "Set properties.siteConfig.minTlsVersion: '1.2'."
+      ]
+    },
+    {
+      "ruleId": "BICEP_COSMOSDB_NO_PUBLIC",
+      "threat": "A public Cosmos DB account is reachable from the internet.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "MEDIUM",
+      "title": "Bicep Cosmos DB must disable public network access",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.DocumentDB/databaseAccounts",
+        "require": "publicNetworkAccess\\s*:\\s*'Disabled'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.publicNetworkAccess: 'Disabled' and use a private endpoint."
+      },
+      "requiredActions": [
+        "Set properties.publicNetworkAccess: 'Disabled' and use a private endpoint."
+      ]
+    },
+    {
+      "ruleId": "BICEP_COSMOSDB_LOCAL_AUTH",
+      "threat": "Key-based auth bypasses Entra ID/RBAC; a leaked key is full access.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "MEDIUM",
+      "title": "Bicep Cosmos DB should disable local auth",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.DocumentDB/databaseAccounts",
+        "require": "disableLocalAuth\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.disableLocalAuth: true (confirm clients support Entra ID)."
+      },
+      "requiredActions": [
+        "Set properties.disableLocalAuth: true (confirm clients support Entra ID)."
+      ]
+    },
+    {
+      "ruleId": "BICEP_COSMOSDB_MIN_TLS",
+      "threat": "TLS 1.0/1.1 is exposed to downgrade and known weaknesses.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "LOW",
+      "title": "Bicep Cosmos DB must require TLS 1.2",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.DocumentDB/databaseAccounts",
+        "require": "minimalTlsVersion\\s*:\\s*'Tls12'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.minimalTlsVersion: 'Tls12'."
+      },
+      "requiredActions": [
+        "Set properties.minimalTlsVersion: 'Tls12'."
+      ]
+    },
+    {
+      "ruleId": "BICEP_ACR_NO_ADMIN",
+      "threat": "The ACR admin user is a shared static credential enabling image tampering.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "MEDIUM",
+      "title": "Bicep Container Registry must disable the admin user",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.ContainerRegistry/registries",
+        "forbid": "adminUserEnabled\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.adminUserEnabled: false and use Entra ID auth."
+      },
+      "requiredActions": [
+        "Set properties.adminUserEnabled: false and use Entra ID auth."
+      ]
+    },
+    {
+      "ruleId": "BICEP_ACR_NO_PUBLIC",
+      "threat": "A public registry can be pulled/pushed from the internet.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "MEDIUM",
+      "title": "Bicep Container Registry should disable public network access",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.ContainerRegistry/registries",
+        "require": "publicNetworkAccess\\s*:\\s*'Disabled'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.publicNetworkAccess: 'Disabled' and use a private endpoint."
+      },
+      "requiredActions": [
+        "Set properties.publicNetworkAccess: 'Disabled' and use a private endpoint."
+      ]
+    },
+    {
+      "ruleId": "BICEP_SQL_MIN_TLS",
+      "threat": "TLS 1.0/1.1 is exposed to downgrade and known weaknesses.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "MEDIUM",
+      "title": "Bicep SQL server must require TLS 1.2",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Sql/servers",
+        "require": "minimalTlsVersion\\s*:\\s*'1.2'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.minimalTlsVersion: '1.2' on the SQL server."
+      },
+      "requiredActions": [
+        "Set properties.minimalTlsVersion: '1.2' on the SQL server."
+      ]
+    },
+    {
+      "ruleId": "BICEP_SEARCH_NO_PUBLIC",
+      "threat": "A public Search service is reachable for query abuse and exfiltration.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "MEDIUM",
+      "title": "Bicep Search service should disable public network access",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Search/searchServices",
+        "require": "publicNetworkAccess\\s*:\\s*'disabled'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.publicNetworkAccess: 'disabled' and use a private endpoint."
+      },
+      "requiredActions": [
+        "Set properties.publicNetworkAccess: 'disabled' and use a private endpoint."
+      ]
+    },
+    {
+      "ruleId": "BICEP_SERVICEBUS_MIN_TLS",
+      "threat": "TLS 1.0/1.1 is exposed to downgrade and known weaknesses.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "LOW",
+      "title": "Bicep Service Bus namespace must require TLS 1.2",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.ServiceBus/namespaces",
+        "require": "minimumTlsVersion\\s*:\\s*'1.2'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.minimumTlsVersion: '1.2' on the namespace."
+      },
+      "requiredActions": [
+        "Set properties.minimumTlsVersion: '1.2' on the namespace."
+      ]
+    },
+    {
+      "ruleId": "BICEP_EVENTHUB_MIN_TLS",
+      "threat": "TLS 1.0/1.1 is exposed to downgrade and known weaknesses.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "LOW",
+      "title": "Bicep Event Hub namespace must require TLS 1.2",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.EventHub/namespaces",
+        "require": "minimumTlsVersion\\s*:\\s*'1.2'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.minimumTlsVersion: '1.2' on the namespace."
+      },
+      "requiredActions": [
+        "Set properties.minimumTlsVersion: '1.2' on the namespace."
+      ]
+    },
+    {
+      "ruleId": "BICEP_REDIS_MIN_TLS",
+      "threat": "TLS 1.0/1.1 is exposed to downgrade and known weaknesses.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "MEDIUM",
+      "title": "Bicep Redis cache must require TLS 1.2",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Cache/Redis",
+        "require": "minimumTlsVersion\\s*:\\s*'1.2'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.minimumTlsVersion: '1.2' on the Redis cache."
+      },
+      "requiredActions": [
+        "Set properties.minimumTlsVersion: '1.2' on the Redis cache."
+      ]
+    },
+    {
+      "ruleId": "BICEP_AKS_LOCAL_ACCOUNTS",
+      "threat": "Local accounts bypass Entra ID/RBAC; a leaked kubeconfig is standing access.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "MEDIUM",
+      "title": "Bicep AKS cluster should disable local accounts",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.ContainerService/managedClusters",
+        "require": "disableLocalAccounts\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.disableLocalAccounts: true and use Entra ID integration."
+      },
+      "requiredActions": [
+        "Set properties.disableLocalAccounts: true and use Entra ID integration."
       ]
     }
   ]
