@@ -4,7 +4,10 @@
     {
       "ruleId": "AWS_EC2_IMDSV2_REQUIRED",
       "threat": "SSRF in the application reaches 169.254.169.254 and steals the instance-profile credentials when IMDSv1 is allowed.",
-      "frameworks": ["AWS FSBP EC2.8", "CIS AWS Foundations Benchmark 5.6"],
+      "frameworks": [
+        "AWS FSBP EC2.8",
+        "CIS AWS Foundations Benchmark 5.6"
+      ],
       "severity": "CRITICAL",
       "title": "EC2 instance must enforce IMDSv2 with hop limit 1",
       "detect": {
@@ -26,7 +29,10 @@
     {
       "ruleId": "AWS_LAUNCH_TEMPLATE_IMDSV2",
       "threat": "Autoscaling instances launched from a template without IMDSv2 expose instance-profile credentials to SSRF.",
-      "frameworks": ["AWS FSBP EC2.8", "CIS AWS Foundations Benchmark 5.6"],
+      "frameworks": [
+        "AWS FSBP EC2.8",
+        "CIS AWS Foundations Benchmark 5.6"
+      ],
       "severity": "HIGH",
       "title": "Launch template must enforce IMDSv2",
       "detect": {
@@ -48,7 +54,10 @@
     {
       "ruleId": "AWS_EBS_VOLUME_ENCRYPTED",
       "threat": "An unencrypted EBS volume or its snapshot, if exfiltrated or shared, exposes data at rest with no key barrier.",
-      "frameworks": ["AWS FSBP EC2.3", "CIS AWS Foundations Benchmark 2.2.1"],
+      "frameworks": [
+        "AWS FSBP EC2.3",
+        "CIS AWS Foundations Benchmark 2.2.1"
+      ],
       "severity": "HIGH",
       "title": "EBS volume must be encrypted at rest",
       "detect": {
@@ -58,7 +67,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "encrypted": "true" }
+        "ensure": {
+          "encrypted": "true"
+        }
       },
       "requiredActions": [
         "Set encrypted = true on the aws_ebs_volume and supply a customer-managed kms_key_id."
@@ -67,7 +78,10 @@
     {
       "ruleId": "AWS_RDS_NOT_PUBLIC",
       "threat": "A publicly accessible RDS instance is directly reachable from the internet for brute force and CVE exploitation.",
-      "frameworks": ["AWS FSBP RDS.2", "CIS AWS Foundations Benchmark 2.3.3"],
+      "frameworks": [
+        "AWS FSBP RDS.2",
+        "CIS AWS Foundations Benchmark 2.3.3"
+      ],
       "severity": "CRITICAL",
       "title": "RDS instance must not be publicly accessible",
       "detect": {
@@ -77,7 +91,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "publicly_accessible": "false" }
+        "ensure": {
+          "publicly_accessible": "false"
+        }
       },
       "requiredActions": [
         "Set publicly_accessible = false on the aws_db_instance and place it in private subnets behind a security group that only allows the application tier."
@@ -86,7 +102,10 @@
     {
       "ruleId": "AWS_RDS_STORAGE_ENCRYPTED",
       "threat": "Unencrypted RDS storage exposes the database contents if the underlying volume or a snapshot is accessed.",
-      "frameworks": ["AWS FSBP RDS.3", "CIS AWS Foundations Benchmark 2.3.1"],
+      "frameworks": [
+        "AWS FSBP RDS.3",
+        "CIS AWS Foundations Benchmark 2.3.1"
+      ],
       "severity": "HIGH",
       "title": "RDS storage must be encrypted",
       "detect": {
@@ -96,7 +115,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "storage_encrypted": "true" }
+        "ensure": {
+          "storage_encrypted": "true"
+        }
       },
       "requiredActions": [
         "Set storage_encrypted = true (and kms_key_id) on the aws_db_instance. Note: encryption can only be enabled at creation; rebuild from an encrypted snapshot if the instance already exists."
@@ -105,7 +126,11 @@
     {
       "ruleId": "AWS_S3_BUCKET_NO_PUBLIC_ACL",
       "threat": "A public-read ACL lets anonymous users list and download every object in the bucket.",
-      "frameworks": ["AWS FSBP S3.2", "AWS FSBP S3.3", "CIS AWS Foundations Benchmark 2.1.5"],
+      "frameworks": [
+        "AWS FSBP S3.2",
+        "AWS FSBP S3.3",
+        "CIS AWS Foundations Benchmark 2.1.5"
+      ],
       "severity": "CRITICAL",
       "title": "S3 bucket must not use a public ACL",
       "detect": {
@@ -115,7 +140,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "acl": "\"private\"" }
+        "ensure": {
+          "acl": "\"private\""
+        }
       },
       "requiredActions": [
         "Set acl = \"private\" and attach an aws_s3_bucket_public_access_block with all four block flags = true."
@@ -124,7 +151,10 @@
     {
       "ruleId": "AWS_S3_BLOCK_PUBLIC_ACCESS",
       "threat": "Without a public access block, a future bucket policy or ACL can silently expose the bucket to the internet.",
-      "frameworks": ["AWS FSBP S3.8", "CIS AWS Foundations Benchmark 2.1.5"],
+      "frameworks": [
+        "AWS FSBP S3.8",
+        "CIS AWS Foundations Benchmark 2.1.5"
+      ],
       "severity": "HIGH",
       "title": "S3 bucket must have a public access block",
       "detect": {
@@ -143,7 +173,10 @@
     {
       "ruleId": "AWS_KMS_KEY_ROTATION",
       "threat": "A customer-managed KMS key without rotation means a single key compromise exposes all historical ciphertext.",
-      "frameworks": ["AWS FSBP KMS.4", "CIS AWS Foundations Benchmark 3.8"],
+      "frameworks": [
+        "AWS FSBP KMS.4",
+        "CIS AWS Foundations Benchmark 3.8"
+      ],
       "severity": "MEDIUM",
       "title": "KMS key must have automatic rotation enabled",
       "detect": {
@@ -153,7 +186,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "enable_key_rotation": "true" }
+        "ensure": {
+          "enable_key_rotation": "true"
+        }
       },
       "requiredActions": [
         "Set enable_key_rotation = true on the aws_kms_key."
@@ -162,7 +197,10 @@
     {
       "ruleId": "AWS_CLOUDTRAIL_MULTIREGION",
       "threat": "A single-region trail misses global service events (IAM, STS, CloudFront); an attacker operating in another region is unlogged.",
-      "frameworks": ["AWS FSBP CloudTrail.1", "CIS AWS Foundations Benchmark 3.1"],
+      "frameworks": [
+        "AWS FSBP CloudTrail.1",
+        "CIS AWS Foundations Benchmark 3.1"
+      ],
       "severity": "HIGH",
       "title": "CloudTrail must be multi-region",
       "detect": {
@@ -172,7 +210,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "is_multi_region_trail": "true" }
+        "ensure": {
+          "is_multi_region_trail": "true"
+        }
       },
       "requiredActions": [
         "Set is_multi_region_trail = true on the aws_cloudtrail so global and cross-region API activity is captured."
@@ -181,7 +221,10 @@
     {
       "ruleId": "AWS_CLOUDTRAIL_LOG_VALIDATION",
       "threat": "Without log file validation an attacker can tamper with or delete trail objects to cover tracks undetected.",
-      "frameworks": ["AWS FSBP CloudTrail.4", "CIS AWS Foundations Benchmark 3.2"],
+      "frameworks": [
+        "AWS FSBP CloudTrail.4",
+        "CIS AWS Foundations Benchmark 3.2"
+      ],
       "severity": "MEDIUM",
       "title": "CloudTrail must enable log file validation",
       "detect": {
@@ -191,7 +234,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "enable_log_file_validation": "true" }
+        "ensure": {
+          "enable_log_file_validation": "true"
+        }
       },
       "requiredActions": [
         "Set enable_log_file_validation = true on the aws_cloudtrail."
@@ -200,7 +245,9 @@
     {
       "ruleId": "AWS_LAMBDA_URL_AUTH_REQUIRED",
       "threat": "A Lambda function URL with authorization_type NONE is an unauthenticated internet endpoint that can reach the function's IAM role and downstream data stores.",
-      "frameworks": ["AWS FSBP Lambda.1"],
+      "frameworks": [
+        "AWS FSBP Lambda.1"
+      ],
       "severity": "CRITICAL",
       "title": "Lambda function URL must require IAM auth",
       "detect": {
@@ -210,7 +257,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "authorization_type": "\"AWS_IAM\"" }
+        "ensure": {
+          "authorization_type": "\"AWS_IAM\""
+        }
       },
       "requiredActions": [
         "Set authorization_type = \"AWS_IAM\" on the aws_lambda_function_url, or front it with API Gateway / a Lambda authorizer that enforces authentication."
@@ -219,7 +268,9 @@
     {
       "ruleId": "AWS_DYNAMODB_PITR",
       "threat": "Without point-in-time recovery, a destructive write or ransomware action against the table is unrecoverable.",
-      "frameworks": ["AWS FSBP DynamoDB.2"],
+      "frameworks": [
+        "AWS FSBP DynamoDB.2"
+      ],
       "severity": "MEDIUM",
       "title": "DynamoDB table must enable point-in-time recovery",
       "detect": {
@@ -229,7 +280,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "point_in_time_recovery.enabled": "true" }
+        "ensure": {
+          "point_in_time_recovery.enabled": "true"
+        }
       },
       "requiredActions": [
         "Add point_in_time_recovery { enabled = true } to the aws_dynamodb_table."
@@ -238,7 +291,11 @@
     {
       "ruleId": "AWS_SG_NO_OPEN_ADMIN",
       "threat": "A security group rule allowing 0.0.0.0/0 exposes admin/database ports directly to internet-wide scanning and brute force.",
-      "frameworks": ["AWS FSBP EC2.13", "AWS FSBP EC2.14", "CIS AWS Foundations Benchmark 5.2"],
+      "frameworks": [
+        "AWS FSBP EC2.13",
+        "AWS FSBP EC2.14",
+        "CIS AWS Foundations Benchmark 5.2"
+      ],
       "severity": "HIGH",
       "title": "Security group rule must not open ports to 0.0.0.0/0",
       "detect": {
@@ -257,7 +314,9 @@
     {
       "ruleId": "AWS_EC2_NO_PUBLIC_IP",
       "threat": "Auto-assigning a public IP places the instance directly on the internet, widening the attack surface beyond the load balancer.",
-      "frameworks": ["AWS FSBP EC2.9"],
+      "frameworks": [
+        "AWS FSBP EC2.9"
+      ],
       "severity": "MEDIUM",
       "title": "EC2 instance must not auto-assign a public IP",
       "detect": {
@@ -267,7 +326,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "associate_public_ip_address": "false" }
+        "ensure": {
+          "associate_public_ip_address": "false"
+        }
       },
       "requiredActions": [
         "Set associate_public_ip_address = false and reach the instance through a load balancer, NAT, or SSM Session Manager."
@@ -276,7 +337,9 @@
     {
       "ruleId": "AWS_S3_BUCKET_VERSIONING",
       "threat": "Without versioning, an accidental or malicious overwrite/delete of objects is unrecoverable (no ransomware rollback).",
-      "frameworks": ["AWS FSBP S3.14"],
+      "frameworks": [
+        "AWS FSBP S3.14"
+      ],
       "severity": "LOW",
       "title": "S3 bucket should enable versioning",
       "detect": {
@@ -295,7 +358,9 @@
     {
       "ruleId": "AWS_ECR_SCAN_ON_PUSH",
       "threat": "Images pushed without vulnerability scanning can ship known-exploitable CVEs straight into production.",
-      "frameworks": ["AWS FSBP ECR.1"],
+      "frameworks": [
+        "AWS FSBP ECR.1"
+      ],
       "severity": "MEDIUM",
       "title": "ECR repository must scan images on push",
       "detect": {
@@ -305,7 +370,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "image_scanning_configuration.scan_on_push": "true" }
+        "ensure": {
+          "image_scanning_configuration.scan_on_push": "true"
+        }
       },
       "requiredActions": [
         "Add image_scanning_configuration { scan_on_push = true } to the aws_ecr_repository."
@@ -314,7 +381,9 @@
     {
       "ruleId": "AWS_ECR_IMMUTABLE_TAGS",
       "threat": "Mutable tags let an attacker who gains push access overwrite a trusted tag (e.g. :latest) with a backdoored image.",
-      "frameworks": ["AWS FSBP ECR.2"],
+      "frameworks": [
+        "AWS FSBP ECR.2"
+      ],
       "severity": "MEDIUM",
       "title": "ECR repository must use immutable tags",
       "detect": {
@@ -324,7 +393,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "image_tag_mutability": "\"IMMUTABLE\"" }
+        "ensure": {
+          "image_tag_mutability": "\"IMMUTABLE\""
+        }
       },
       "requiredActions": [
         "Set image_tag_mutability = \"IMMUTABLE\" on the aws_ecr_repository."
@@ -333,7 +404,9 @@
     {
       "ruleId": "AWS_EFS_ENCRYPTED",
       "threat": "An unencrypted EFS file system exposes shared data at rest with no key barrier.",
-      "frameworks": ["AWS FSBP EFS.1"],
+      "frameworks": [
+        "AWS FSBP EFS.1"
+      ],
       "severity": "HIGH",
       "title": "EFS file system must be encrypted",
       "detect": {
@@ -343,7 +416,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "encrypted": "true" }
+        "ensure": {
+          "encrypted": "true"
+        }
       },
       "requiredActions": [
         "Set encrypted = true (and kms_key_id) on the aws_efs_file_system."
@@ -352,7 +427,9 @@
     {
       "ruleId": "AWS_SNS_ENCRYPTED",
       "threat": "An unencrypted SNS topic stores and forwards potentially sensitive messages without encryption at rest.",
-      "frameworks": ["AWS FSBP SNS.1"],
+      "frameworks": [
+        "AWS FSBP SNS.1"
+      ],
       "severity": "MEDIUM",
       "title": "SNS topic must be encrypted at rest",
       "detect": {
@@ -362,7 +439,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "kms_master_key_id": "\"alias/aws/sns\"" }
+        "ensure": {
+          "kms_master_key_id": "\"alias/aws/sns\""
+        }
       },
       "requiredActions": [
         "Set kms_master_key_id (a CMK alias is preferred over alias/aws/sns) on the aws_sns_topic."
@@ -371,7 +450,9 @@
     {
       "ruleId": "AWS_SQS_ENCRYPTED",
       "threat": "An unencrypted SQS queue holds in-flight messages — often containing PII or tokens — without encryption at rest.",
-      "frameworks": ["AWS FSBP SQS.1"],
+      "frameworks": [
+        "AWS FSBP SQS.1"
+      ],
       "severity": "MEDIUM",
       "title": "SQS queue must enable server-side encryption",
       "detect": {
@@ -381,7 +462,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "sqs_managed_sse_enabled": "true" }
+        "ensure": {
+          "sqs_managed_sse_enabled": "true"
+        }
       },
       "requiredActions": [
         "Set sqs_managed_sse_enabled = true (or kms_master_key_id for a CMK) on the aws_sqs_queue."
@@ -390,7 +473,9 @@
     {
       "ruleId": "AWS_CW_LOG_RETENTION",
       "threat": "A log group with infinite retention silently accumulates sensitive data forever; one with no retention set defaults to never expire, raising breach blast radius.",
-      "frameworks": ["AWS FSBP CloudWatch.16"],
+      "frameworks": [
+        "AWS FSBP CloudWatch.16"
+      ],
       "severity": "LOW",
       "title": "CloudWatch log group must set a retention period",
       "detect": {
@@ -400,7 +485,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "retention_in_days": "365" }
+        "ensure": {
+          "retention_in_days": "365"
+        }
       },
       "requiredActions": [
         "Set retention_in_days on the aws_cloudwatch_log_group (365 is a common compliance baseline) and add kms_key_id for encryption."
@@ -409,7 +496,9 @@
     {
       "ruleId": "AWS_REDSHIFT_NOT_PUBLIC",
       "threat": "A publicly accessible Redshift cluster is directly reachable from the internet for brute force and exploitation.",
-      "frameworks": ["AWS FSBP Redshift.1"],
+      "frameworks": [
+        "AWS FSBP Redshift.1"
+      ],
       "severity": "HIGH",
       "title": "Redshift cluster must not be publicly accessible",
       "detect": {
@@ -419,7 +508,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "publicly_accessible": "false" }
+        "ensure": {
+          "publicly_accessible": "false"
+        }
       },
       "requiredActions": [
         "Set publicly_accessible = false on the aws_redshift_cluster and place it in private subnets."
@@ -428,7 +519,9 @@
     {
       "ruleId": "AWS_REDSHIFT_ENCRYPTED",
       "threat": "An unencrypted Redshift cluster exposes the data warehouse contents if storage or a snapshot is accessed.",
-      "frameworks": ["AWS FSBP Redshift.10"],
+      "frameworks": [
+        "AWS FSBP Redshift.10"
+      ],
       "severity": "HIGH",
       "title": "Redshift cluster must be encrypted",
       "detect": {
@@ -438,7 +531,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "encrypted": "true" }
+        "ensure": {
+          "encrypted": "true"
+        }
       },
       "requiredActions": [
         "Set encrypted = true (and kms_key_id) on the aws_redshift_cluster."
@@ -447,7 +542,9 @@
     {
       "ruleId": "AWS_ELB_DROP_INVALID_HEADERS",
       "threat": "Without dropping invalid HTTP headers, an ALB can forward request-smuggling payloads to backends.",
-      "frameworks": ["AWS FSBP ELB.4"],
+      "frameworks": [
+        "AWS FSBP ELB.4"
+      ],
       "severity": "MEDIUM",
       "title": "ALB must drop invalid HTTP headers",
       "detect": {
@@ -457,7 +554,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "drop_invalid_header_fields": "true" }
+        "ensure": {
+          "drop_invalid_header_fields": "true"
+        }
       },
       "requiredActions": [
         "Set drop_invalid_header_fields = true on the application aws_lb."
@@ -466,7 +565,9 @@
     {
       "ruleId": "AWS_DOCDB_ENCRYPTED",
       "threat": "An unencrypted DocumentDB cluster exposes document data at rest if storage or a snapshot is accessed.",
-      "frameworks": ["AWS FSBP DocumentDB.1"],
+      "frameworks": [
+        "AWS FSBP DocumentDB.1"
+      ],
       "severity": "HIGH",
       "title": "DocumentDB cluster must be encrypted",
       "detect": {
@@ -476,7 +577,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "storage_encrypted": "true" }
+        "ensure": {
+          "storage_encrypted": "true"
+        }
       },
       "requiredActions": [
         "Set storage_encrypted = true (and kms_key_id) on the aws_docdb_cluster."
@@ -485,7 +588,9 @@
     {
       "ruleId": "AWS_ELASTICACHE_ENCRYPTED",
       "threat": "An ElastiCache replication group without at-rest encryption exposes cached data — often session tokens or PII — if storage is accessed.",
-      "frameworks": ["AWS FSBP ElastiCache.4"],
+      "frameworks": [
+        "AWS FSBP ElastiCache.4"
+      ],
       "severity": "MEDIUM",
       "title": "ElastiCache replication group must encrypt at rest",
       "detect": {
@@ -495,7 +600,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "at_rest_encryption_enabled": "true" }
+        "ensure": {
+          "at_rest_encryption_enabled": "true"
+        }
       },
       "requiredActions": [
         "Set at_rest_encryption_enabled = true (and transit_encryption_enabled = true) on the aws_elasticache_replication_group."
@@ -504,7 +611,9 @@
     {
       "ruleId": "AWS_SAGEMAKER_NO_DIRECT_INTERNET",
       "threat": "A SageMaker notebook with direct internet access is an exfiltration and command-and-control channel from within the VPC.",
-      "frameworks": ["AWS FSBP SageMaker.1"],
+      "frameworks": [
+        "AWS FSBP SageMaker.1"
+      ],
       "severity": "MEDIUM",
       "title": "SageMaker notebook must disable direct internet access",
       "detect": {
@@ -514,7 +623,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "direct_internet_access": "\"Disabled\"" }
+        "ensure": {
+          "direct_internet_access": "\"Disabled\""
+        }
       },
       "requiredActions": [
         "Set direct_internet_access = \"Disabled\" on the aws_sagemaker_notebook_instance and route egress through a VPC NAT with controls."
@@ -523,7 +634,10 @@
     {
       "ruleId": "AWS_EBS_DEFAULT_ENCRYPTION",
       "threat": "Without account-default EBS encryption, any volume created without an explicit flag lands unencrypted.",
-      "frameworks": ["AWS FSBP EC2.7", "CIS AWS Foundations Benchmark 2.2.1"],
+      "frameworks": [
+        "AWS FSBP EC2.7",
+        "CIS AWS Foundations Benchmark 2.2.1"
+      ],
       "severity": "HIGH",
       "title": "Account default EBS encryption must be enabled",
       "detect": {
@@ -533,7 +647,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "enabled": "true" }
+        "ensure": {
+          "enabled": "true"
+        }
       },
       "requiredActions": [
         "Set enabled = true on aws_ebs_encryption_by_default so all new EBS volumes are encrypted by default."
@@ -542,7 +658,9 @@
     {
       "ruleId": "AWS_RDS_DELETION_PROTECTION",
       "threat": "Without deletion protection, a compromised credential or accidental apply can destroy the production database.",
-      "frameworks": ["AWS FSBP RDS.8"],
+      "frameworks": [
+        "AWS FSBP RDS.8"
+      ],
       "severity": "MEDIUM",
       "title": "RDS instance must enable deletion protection",
       "detect": {
@@ -552,7 +670,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "deletion_protection": "true" }
+        "ensure": {
+          "deletion_protection": "true"
+        }
       },
       "requiredActions": [
         "Set deletion_protection = true on the aws_db_instance."
@@ -561,7 +681,9 @@
     {
       "ruleId": "AWS_RDS_AUTO_MINOR_UPGRADE",
       "threat": "Disabling automatic minor version upgrades leaves the database running known-vulnerable engine patch levels.",
-      "frameworks": ["AWS FSBP RDS.13"],
+      "frameworks": [
+        "AWS FSBP RDS.13"
+      ],
       "severity": "LOW",
       "title": "RDS instance must allow automatic minor version upgrades",
       "detect": {
@@ -571,7 +693,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "auto_minor_version_upgrade": "true" }
+        "ensure": {
+          "auto_minor_version_upgrade": "true"
+        }
       },
       "requiredActions": [
         "Set auto_minor_version_upgrade = true on the aws_db_instance."
@@ -580,7 +704,9 @@
     {
       "ruleId": "AWS_RDS_BACKUP_RETENTION",
       "threat": "A zero/short backup retention window means no point-in-time recovery after a destructive or ransomware event.",
-      "frameworks": ["AWS FSBP RDS.11"],
+      "frameworks": [
+        "AWS FSBP RDS.11"
+      ],
       "severity": "LOW",
       "title": "RDS instance must set a backup retention period",
       "detect": {
@@ -590,7 +716,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "backup_retention_period": "7" }
+        "ensure": {
+          "backup_retention_period": "7"
+        }
       },
       "requiredActions": [
         "Set backup_retention_period to at least 7 (days) on the aws_db_instance."
@@ -599,7 +727,9 @@
     {
       "ruleId": "AWS_NEPTUNE_ENCRYPTED",
       "threat": "An unencrypted Neptune cluster exposes graph data at rest if storage or a snapshot is accessed.",
-      "frameworks": ["AWS FSBP Neptune.1"],
+      "frameworks": [
+        "AWS FSBP Neptune.1"
+      ],
       "severity": "HIGH",
       "title": "Neptune cluster must be encrypted",
       "detect": {
@@ -609,7 +739,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "storage_encrypted": "true" }
+        "ensure": {
+          "storage_encrypted": "true"
+        }
       },
       "requiredActions": [
         "Set storage_encrypted = true (and kms_key_arn) on the aws_neptune_cluster."
@@ -618,7 +750,10 @@
     {
       "ruleId": "AWS_GUARDDUTY_ENABLED",
       "threat": "A disabled GuardDuty detector means no managed threat detection on the account — credential theft and recon go unseen.",
-      "frameworks": ["AWS FSBP GuardDuty.1", "CIS AWS Foundations Benchmark 3.8"],
+      "frameworks": [
+        "AWS FSBP GuardDuty.1",
+        "CIS AWS Foundations Benchmark 3.8"
+      ],
       "severity": "MEDIUM",
       "title": "GuardDuty detector must be enabled",
       "detect": {
@@ -628,7 +763,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "enable": "true" }
+        "ensure": {
+          "enable": "true"
+        }
       },
       "requiredActions": [
         "Set enable = true on the aws_guardduty_detector."
@@ -637,7 +774,9 @@
     {
       "ruleId": "AWS_OPENSEARCH_ENCRYPT_AT_REST",
       "threat": "An OpenSearch domain without at-rest encryption exposes indexed data if the underlying storage is accessed.",
-      "frameworks": ["AWS FSBP OpenSearch.1"],
+      "frameworks": [
+        "AWS FSBP OpenSearch.1"
+      ],
       "severity": "HIGH",
       "title": "OpenSearch domain must encrypt at rest",
       "detect": {
@@ -647,7 +786,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "encrypt_at_rest.enabled": "true" }
+        "ensure": {
+          "encrypt_at_rest.enabled": "true"
+        }
       },
       "requiredActions": [
         "Add encrypt_at_rest { enabled = true } to the aws_opensearch_domain."
@@ -656,7 +797,9 @@
     {
       "ruleId": "AWS_OPENSEARCH_NODE_TO_NODE",
       "threat": "Without node-to-node encryption, intra-cluster OpenSearch traffic is plaintext and sniffable inside the VPC.",
-      "frameworks": ["AWS FSBP OpenSearch.3"],
+      "frameworks": [
+        "AWS FSBP OpenSearch.3"
+      ],
       "severity": "MEDIUM",
       "title": "OpenSearch domain must use node-to-node encryption",
       "detect": {
@@ -666,7 +809,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "node_to_node_encryption.enabled": "true" }
+        "ensure": {
+          "node_to_node_encryption.enabled": "true"
+        }
       },
       "requiredActions": [
         "Add node_to_node_encryption { enabled = true } to the aws_opensearch_domain."
@@ -675,7 +820,9 @@
     {
       "ruleId": "AWS_OPENSEARCH_ENFORCE_HTTPS",
       "threat": "An OpenSearch domain that does not enforce HTTPS accepts plaintext queries carrying credentials and data.",
-      "frameworks": ["AWS FSBP OpenSearch.8"],
+      "frameworks": [
+        "AWS FSBP OpenSearch.8"
+      ],
       "severity": "MEDIUM",
       "title": "OpenSearch domain must enforce HTTPS",
       "detect": {
@@ -685,7 +832,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "domain_endpoint_options.enforce_https": "true" }
+        "ensure": {
+          "domain_endpoint_options.enforce_https": "true"
+        }
       },
       "requiredActions": [
         "Add domain_endpoint_options { enforce_https = true } to the aws_opensearch_domain."
@@ -694,7 +843,9 @@
     {
       "ruleId": "AWS_DMS_NOT_PUBLIC",
       "threat": "A DMS replication instance defaults to publicly accessible, exposing the migration pipeline to the internet.",
-      "frameworks": ["AWS FSBP DMS.1"],
+      "frameworks": [
+        "AWS FSBP DMS.1"
+      ],
       "severity": "HIGH",
       "title": "DMS replication instance must not be publicly accessible",
       "detect": {
@@ -704,7 +855,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "publicly_accessible": "false" }
+        "ensure": {
+          "publicly_accessible": "false"
+        }
       },
       "requiredActions": [
         "Set publicly_accessible = false on the aws_dms_replication_instance (it defaults to true)."
@@ -713,7 +866,9 @@
     {
       "ruleId": "AWS_APIGW_XRAY",
       "threat": "Without X-Ray tracing, attack reconnaissance and abuse against API Gateway stages is harder to detect and investigate.",
-      "frameworks": ["AWS FSBP APIGateway.3"],
+      "frameworks": [
+        "AWS FSBP APIGateway.3"
+      ],
       "severity": "LOW",
       "title": "API Gateway stage should enable X-Ray tracing",
       "detect": {
@@ -723,7 +878,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "xray_tracing_enabled": "true" }
+        "ensure": {
+          "xray_tracing_enabled": "true"
+        }
       },
       "requiredActions": [
         "Set xray_tracing_enabled = true on the aws_api_gateway_stage."
@@ -732,7 +889,9 @@
     {
       "ruleId": "AWS_ALB_DELETION_PROTECTION",
       "threat": "Without deletion protection, a load balancer fronting production can be destroyed by a compromised credential, causing an outage.",
-      "frameworks": ["AWS FSBP ELB.6"],
+      "frameworks": [
+        "AWS FSBP ELB.6"
+      ],
       "severity": "LOW",
       "title": "Load balancer should enable deletion protection",
       "detect": {
@@ -742,7 +901,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "enable_deletion_protection": "true" }
+        "ensure": {
+          "enable_deletion_protection": "true"
+        }
       },
       "requiredActions": [
         "Set enable_deletion_protection = true on the aws_lb."
@@ -751,7 +912,9 @@
     {
       "ruleId": "AWS_S3_DEFAULT_ENCRYPTION",
       "threat": "A bucket without an explicit server-side encryption configuration relies on account defaults that may not use a CMK.",
-      "frameworks": ["AWS FSBP S3.4"],
+      "frameworks": [
+        "AWS FSBP S3.4"
+      ],
       "severity": "LOW",
       "title": "S3 bucket should declare server-side encryption",
       "detect": {
@@ -770,7 +933,9 @@
     {
       "ruleId": "AWS_S3_BUCKET_LOGGING",
       "threat": "Without access logging, bulk object reads (data exfiltration) leave no forensic trail.",
-      "frameworks": ["AWS FSBP S3.9"],
+      "frameworks": [
+        "AWS FSBP S3.9"
+      ],
       "severity": "LOW",
       "title": "S3 bucket should enable access logging",
       "detect": {
@@ -789,7 +954,9 @@
     {
       "ruleId": "AWS_EKS_PRIVATE_ENDPOINT",
       "threat": "An EKS cluster API server exposed publicly without a private endpoint is reachable for credential stuffing and CVE exploitation.",
-      "frameworks": ["AWS FSBP EKS.1"],
+      "frameworks": [
+        "AWS FSBP EKS.1"
+      ],
       "severity": "MEDIUM",
       "title": "EKS cluster should enable a private API endpoint",
       "detect": {
@@ -808,7 +975,9 @@
     {
       "ruleId": "AWS_ECS_NO_PRIVILEGED",
       "threat": "A privileged ECS task container has host-level capabilities — a container escape becomes a host compromise.",
-      "frameworks": ["AWS FSBP ECS.4"],
+      "frameworks": [
+        "AWS FSBP ECS.4"
+      ],
       "severity": "HIGH",
       "title": "ECS task definition must not run privileged containers",
       "detect": {
@@ -827,7 +996,9 @@
     {
       "ruleId": "AWS_SECRETSMANAGER_ROTATION",
       "threat": "A secret without automated rotation stays valid indefinitely if leaked, maximising the window of a credential compromise.",
-      "frameworks": ["AWS FSBP SecretsManager.1"],
+      "frameworks": [
+        "AWS FSBP SecretsManager.1"
+      ],
       "severity": "MEDIUM",
       "title": "Secrets Manager secret should have rotation configured",
       "detect": {
@@ -846,7 +1017,9 @@
     {
       "ruleId": "AWS_RDS_CLUSTER_ENCRYPTED",
       "threat": "An unencrypted Aurora cluster exposes the database at rest if storage or a snapshot is accessed.",
-      "frameworks": ["AWS FSBP RDS.27"],
+      "frameworks": [
+        "AWS FSBP RDS.27"
+      ],
       "severity": "HIGH",
       "title": "Aurora/RDS cluster must be encrypted",
       "detect": {
@@ -856,7 +1029,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "storage_encrypted": "true" }
+        "ensure": {
+          "storage_encrypted": "true"
+        }
       },
       "requiredActions": [
         "Set storage_encrypted = true (and kms_key_id) on the aws_rds_cluster."
@@ -865,7 +1040,9 @@
     {
       "ruleId": "AWS_RDS_CLUSTER_DELETION_PROTECTION",
       "threat": "Without deletion protection, a compromised credential can destroy the entire Aurora cluster.",
-      "frameworks": ["AWS FSBP RDS.7"],
+      "frameworks": [
+        "AWS FSBP RDS.7"
+      ],
       "severity": "MEDIUM",
       "title": "Aurora/RDS cluster must enable deletion protection",
       "detect": {
@@ -875,7 +1052,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "deletion_protection": "true" }
+        "ensure": {
+          "deletion_protection": "true"
+        }
       },
       "requiredActions": [
         "Set deletion_protection = true on the aws_rds_cluster."
@@ -884,7 +1063,9 @@
     {
       "ruleId": "AWS_RDS_CLUSTER_BACKUP_RETENTION",
       "threat": "A short/zero cluster backup window means no point-in-time recovery after a destructive event.",
-      "frameworks": ["AWS FSBP RDS.11"],
+      "frameworks": [
+        "AWS FSBP RDS.11"
+      ],
       "severity": "LOW",
       "title": "Aurora/RDS cluster must set a backup retention period",
       "detect": {
@@ -894,7 +1075,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "backup_retention_period": "7" }
+        "ensure": {
+          "backup_retention_period": "7"
+        }
       },
       "requiredActions": [
         "Set backup_retention_period to at least 7 on the aws_rds_cluster."
@@ -903,7 +1086,9 @@
     {
       "ruleId": "AWS_RDS_CLUSTER_INSTANCE_NOT_PUBLIC",
       "threat": "A publicly accessible Aurora cluster instance is directly reachable from the internet.",
-      "frameworks": ["AWS FSBP RDS.2"],
+      "frameworks": [
+        "AWS FSBP RDS.2"
+      ],
       "severity": "CRITICAL",
       "title": "Aurora cluster instance must not be publicly accessible",
       "detect": {
@@ -913,7 +1098,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "publicly_accessible": "false" }
+        "ensure": {
+          "publicly_accessible": "false"
+        }
       },
       "requiredActions": [
         "Set publicly_accessible = false on the aws_rds_cluster_instance and place it in private subnets."
@@ -922,7 +1109,9 @@
     {
       "ruleId": "AWS_ELASTICACHE_TRANSIT_ENCRYPTION",
       "threat": "Without in-transit encryption, ElastiCache traffic — often session tokens — is plaintext on the wire.",
-      "frameworks": ["AWS FSBP ElastiCache.5"],
+      "frameworks": [
+        "AWS FSBP ElastiCache.5"
+      ],
       "severity": "MEDIUM",
       "title": "ElastiCache replication group must encrypt in transit",
       "detect": {
@@ -932,7 +1121,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "transit_encryption_enabled": "true" }
+        "ensure": {
+          "transit_encryption_enabled": "true"
+        }
       },
       "requiredActions": [
         "Set transit_encryption_enabled = true on the aws_elasticache_replication_group."
@@ -941,7 +1132,9 @@
     {
       "ruleId": "AWS_ECR_REPOSITORY_ENCRYPTION",
       "threat": "An ECR repository without an explicit KMS encryption configuration relies on default keys that may not be customer-managed.",
-      "frameworks": ["AWS FSBP ECR.x"],
+      "frameworks": [
+        "AWS FSBP ECR.x"
+      ],
       "severity": "LOW",
       "title": "ECR repository should declare KMS encryption",
       "detect": {
@@ -951,7 +1144,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "encryption_configuration.encryption_type": "\"KMS\"" }
+        "ensure": {
+          "encryption_configuration.encryption_type": "\"KMS\""
+        }
       },
       "requiredActions": [
         "Add encryption_configuration { encryption_type = \"KMS\" } (and kms_key) to the aws_ecr_repository."
@@ -960,7 +1155,9 @@
     {
       "ruleId": "AWS_KINESIS_ENCRYPTION",
       "threat": "An unencrypted Kinesis stream stores records in plaintext at rest.",
-      "frameworks": ["AWS FSBP Kinesis.1"],
+      "frameworks": [
+        "AWS FSBP Kinesis.1"
+      ],
       "severity": "MEDIUM",
       "title": "Kinesis stream must enable server-side encryption",
       "detect": {
@@ -970,7 +1167,10 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "encryption_type": "\"KMS\"", "kms_key_id": "\"alias/aws/kinesis\"" }
+        "ensure": {
+          "encryption_type": "\"KMS\"",
+          "kms_key_id": "\"alias/aws/kinesis\""
+        }
       },
       "requiredActions": [
         "Set encryption_type = \"KMS\" (and kms_key_id) on the aws_kinesis_stream."
@@ -979,7 +1179,9 @@
     {
       "ruleId": "AWS_LAMBDA_XRAY_TRACING",
       "threat": "Without X-Ray active tracing, abuse and exploitation of a Lambda is harder to detect and trace.",
-      "frameworks": ["AWS FSBP Lambda.x"],
+      "frameworks": [
+        "AWS FSBP Lambda.x"
+      ],
       "severity": "LOW",
       "title": "Lambda function should enable active tracing",
       "detect": {
@@ -989,7 +1191,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "tracing_config.mode": "\"Active\"" }
+        "ensure": {
+          "tracing_config.mode": "\"Active\""
+        }
       },
       "requiredActions": [
         "Add tracing_config { mode = \"Active\" } to the aws_lambda_function."
@@ -998,7 +1202,10 @@
     {
       "ruleId": "AWS_VPC_FLOW_LOGS",
       "threat": "Without VPC Flow Logs there is no network-level record of exfiltration or lateral movement.",
-      "frameworks": ["AWS FSBP EC2.6", "CIS AWS Foundations Benchmark 3.9"],
+      "frameworks": [
+        "AWS FSBP EC2.6",
+        "CIS AWS Foundations Benchmark 3.9"
+      ],
       "severity": "MEDIUM",
       "title": "VPC should enable flow logs",
       "detect": {
@@ -1017,7 +1224,9 @@
     {
       "ruleId": "AWS_CLOUDFRONT_WAF",
       "threat": "A CloudFront distribution without a WAF web ACL has no managed protection against L7 attacks (injection, bots, DDoS).",
-      "frameworks": ["AWS FSBP CloudFront.6"],
+      "frameworks": [
+        "AWS FSBP CloudFront.6"
+      ],
       "severity": "LOW",
       "title": "CloudFront distribution should attach a WAF web ACL",
       "detect": {
@@ -1036,7 +1245,9 @@
     {
       "ruleId": "AWS_CODEBUILD_ENCRYPTED",
       "threat": "A CodeBuild project without a CMK encrypts artifacts/logs with default keys that may be broadly accessible.",
-      "frameworks": ["AWS FSBP CodeBuild.x"],
+      "frameworks": [
+        "AWS FSBP CodeBuild.x"
+      ],
       "severity": "LOW",
       "title": "CodeBuild project should use a customer-managed key",
       "detect": {
@@ -1055,7 +1266,9 @@
     {
       "ruleId": "AWS_IAM_PASSWORD_MIN_LENGTH",
       "threat": "A short minimum password length makes console credentials trivially brute-forceable.",
-      "frameworks": ["CIS AWS Foundations Benchmark 1.8"],
+      "frameworks": [
+        "CIS AWS Foundations Benchmark 1.8"
+      ],
       "severity": "MEDIUM",
       "title": "IAM password policy must require length >= 14",
       "detect": {
@@ -1065,7 +1278,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "minimum_password_length": "14" }
+        "ensure": {
+          "minimum_password_length": "14"
+        }
       },
       "requiredActions": [
         "Set minimum_password_length = 14 (or higher) on the aws_iam_account_password_policy."
@@ -1074,7 +1289,9 @@
     {
       "ruleId": "AWS_IAM_PASSWORD_REUSE",
       "threat": "Without password-reuse prevention, users can cycle back to a known-compromised password.",
-      "frameworks": ["CIS AWS Foundations Benchmark 1.9"],
+      "frameworks": [
+        "CIS AWS Foundations Benchmark 1.9"
+      ],
       "severity": "LOW",
       "title": "IAM password policy must prevent password reuse",
       "detect": {
@@ -1084,7 +1301,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "password_reuse_prevention": "24" }
+        "ensure": {
+          "password_reuse_prevention": "24"
+        }
       },
       "requiredActions": [
         "Set password_reuse_prevention = 24 on the aws_iam_account_password_policy."
@@ -1093,7 +1312,9 @@
     {
       "ruleId": "AWS_DAX_ENCRYPTION",
       "threat": "An unencrypted DAX cluster caches DynamoDB data — often PII — in plaintext at rest.",
-      "frameworks": ["AWS FSBP DynamoDB.x"],
+      "frameworks": [
+        "AWS FSBP DynamoDB.x"
+      ],
       "severity": "MEDIUM",
       "title": "DAX cluster must encrypt at rest",
       "detect": {
@@ -1103,7 +1324,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "server_side_encryption.enabled": "true" }
+        "ensure": {
+          "server_side_encryption.enabled": "true"
+        }
       },
       "requiredActions": [
         "Add server_side_encryption { enabled = true } to the aws_dax_cluster."
@@ -1112,7 +1335,9 @@
     {
       "ruleId": "AWS_ECR_REPO_POLICY_NO_PUBLIC",
       "threat": "An ECR repository policy allowing Principal \"*\" lets any AWS account pull (or push) images.",
-      "frameworks": ["AWS FSBP ECR.x"],
+      "frameworks": [
+        "AWS FSBP ECR.x"
+      ],
       "severity": "HIGH",
       "title": "ECR repository policy must not allow any principal",
       "detect": {
@@ -1131,7 +1356,9 @@
     {
       "ruleId": "AWS_SNS_TOPIC_POLICY_NO_PUBLIC",
       "threat": "An SNS topic policy with Principal \"*\" and no source condition lets any account publish or subscribe.",
-      "frameworks": ["AWS FSBP SNS.x"],
+      "frameworks": [
+        "AWS FSBP SNS.x"
+      ],
       "severity": "HIGH",
       "title": "SNS topic policy must not allow any principal",
       "detect": {
@@ -1150,7 +1377,9 @@
     {
       "ruleId": "AWS_SQS_QUEUE_POLICY_NO_PUBLIC",
       "threat": "An SQS queue policy with Principal \"*\" and no source condition lets any account read or send messages.",
-      "frameworks": ["AWS FSBP SQS.x"],
+      "frameworks": [
+        "AWS FSBP SQS.x"
+      ],
       "severity": "HIGH",
       "title": "SQS queue policy must not allow any principal",
       "detect": {
@@ -1169,7 +1398,9 @@
     {
       "ruleId": "AWS_EBS_SNAPSHOT_NOT_PUBLIC",
       "threat": "A publicly shared EBS snapshot lets any AWS account restore a full copy of the volume's data.",
-      "frameworks": ["AWS FSBP EC2.x"],
+      "frameworks": [
+        "AWS FSBP EC2.x"
+      ],
       "severity": "CRITICAL",
       "title": "EBS snapshot must not be publicly shared",
       "detect": {
@@ -1188,7 +1419,9 @@
     {
       "ruleId": "AWS_EMR_BLOCK_PUBLIC_ACCESS",
       "threat": "Without EMR account block-public-access, a cluster security group can expose Hadoop/Spark UIs to the internet.",
-      "frameworks": ["AWS FSBP EMR.2"],
+      "frameworks": [
+        "AWS FSBP EMR.2"
+      ],
       "severity": "MEDIUM",
       "title": "EMR block public access must be enabled",
       "detect": {
@@ -1198,7 +1431,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "block_public_security_group_rules": "true" }
+        "ensure": {
+          "block_public_security_group_rules": "true"
+        }
       },
       "requiredActions": [
         "Set block_public_security_group_rules = true on the aws_emr_block_public_access_configuration."
@@ -1207,7 +1442,9 @@
     {
       "ruleId": "AWS_MQ_NOT_PUBLIC",
       "threat": "A publicly accessible Amazon MQ broker is reachable from the internet for brute force and protocol abuse.",
-      "frameworks": ["AWS FSBP MQ.x"],
+      "frameworks": [
+        "AWS FSBP MQ.x"
+      ],
       "severity": "HIGH",
       "title": "Amazon MQ broker must not be publicly accessible",
       "detect": {
@@ -1217,7 +1454,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "publicly_accessible": "false" }
+        "ensure": {
+          "publicly_accessible": "false"
+        }
       },
       "requiredActions": [
         "Set publicly_accessible = false on the aws_mq_broker and place it in private subnets."
@@ -1226,7 +1465,9 @@
     {
       "ruleId": "AWS_MEMORYDB_TLS",
       "threat": "A MemoryDB cluster without TLS sends cache traffic — often tokens — in plaintext on the wire.",
-      "frameworks": ["AWS FSBP MemoryDB.x"],
+      "frameworks": [
+        "AWS FSBP MemoryDB.x"
+      ],
       "severity": "MEDIUM",
       "title": "MemoryDB cluster must enable TLS",
       "detect": {
@@ -1236,7 +1477,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "tls_enabled": "true" }
+        "ensure": {
+          "tls_enabled": "true"
+        }
       },
       "requiredActions": [
         "Set tls_enabled = true on the aws_memorydb_cluster."
@@ -1245,7 +1488,9 @@
     {
       "ruleId": "AWS_ATHENA_ENFORCE_CONFIG",
       "threat": "Without enforced workgroup configuration, clients can override the encryption/output settings and write unencrypted query results.",
-      "frameworks": ["AWS FSBP Athena.x"],
+      "frameworks": [
+        "AWS FSBP Athena.x"
+      ],
       "severity": "LOW",
       "title": "Athena workgroup must enforce its configuration",
       "detect": {
@@ -1255,7 +1500,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "configuration.enforce_workgroup_configuration": "true" }
+        "ensure": {
+          "configuration.enforce_workgroup_configuration": "true"
+        }
       },
       "requiredActions": [
         "Set configuration { enforce_workgroup_configuration = true } on the aws_athena_workgroup (and configure result encryption)."
@@ -1264,7 +1511,9 @@
     {
       "ruleId": "AWS_REDSHIFT_ENHANCED_VPC",
       "threat": "Without enhanced VPC routing, Redshift COPY/UNLOAD traffic leaves the VPC and bypasses VPC-level egress controls.",
-      "frameworks": ["AWS FSBP Redshift.7"],
+      "frameworks": [
+        "AWS FSBP Redshift.7"
+      ],
       "severity": "LOW",
       "title": "Redshift cluster should use enhanced VPC routing",
       "detect": {
@@ -1274,7 +1523,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "enhanced_vpc_routing": "true" }
+        "ensure": {
+          "enhanced_vpc_routing": "true"
+        }
       },
       "requiredActions": [
         "Set enhanced_vpc_routing = true on the aws_redshift_cluster."
@@ -1283,7 +1534,9 @@
     {
       "ruleId": "AWS_NEPTUNE_BACKUP_RETENTION",
       "threat": "A short Neptune backup window means no point-in-time recovery after a destructive event.",
-      "frameworks": ["AWS FSBP Neptune.x"],
+      "frameworks": [
+        "AWS FSBP Neptune.x"
+      ],
       "severity": "LOW",
       "title": "Neptune cluster must set a backup retention period",
       "detect": {
@@ -1293,7 +1546,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "backup_retention_period": "7" }
+        "ensure": {
+          "backup_retention_period": "7"
+        }
       },
       "requiredActions": [
         "Set backup_retention_period to at least 7 on the aws_neptune_cluster."
@@ -1302,7 +1557,9 @@
     {
       "ruleId": "AWS_DOCDB_BACKUP_RETENTION",
       "threat": "A short DocumentDB backup window means no point-in-time recovery after a destructive event.",
-      "frameworks": ["AWS FSBP DocumentDB.x"],
+      "frameworks": [
+        "AWS FSBP DocumentDB.x"
+      ],
       "severity": "LOW",
       "title": "DocumentDB cluster must set a backup retention period",
       "detect": {
@@ -1312,7 +1569,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "backup_retention_period": "7" }
+        "ensure": {
+          "backup_retention_period": "7"
+        }
       },
       "requiredActions": [
         "Set backup_retention_period to at least 7 on the aws_docdb_cluster."
@@ -1321,7 +1580,9 @@
     {
       "ruleId": "AWS_ELASTICSEARCH_ENCRYPT_AT_REST",
       "threat": "A legacy Elasticsearch domain without at-rest encryption exposes indexed data if storage is accessed.",
-      "frameworks": ["AWS FSBP ES.1"],
+      "frameworks": [
+        "AWS FSBP ES.1"
+      ],
       "severity": "HIGH",
       "title": "Elasticsearch domain must encrypt at rest",
       "detect": {
@@ -1331,7 +1592,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "encrypt_at_rest.enabled": "true" }
+        "ensure": {
+          "encrypt_at_rest.enabled": "true"
+        }
       },
       "requiredActions": [
         "Add encrypt_at_rest { enabled = true } to the aws_elasticsearch_domain (migrate to aws_opensearch_domain where possible)."
@@ -1340,7 +1603,9 @@
     {
       "ruleId": "AWS_MQ_ENCRYPTION",
       "threat": "An Amazon MQ broker without a customer-managed key encrypts messages with default keys that may be broadly accessible.",
-      "frameworks": ["AWS FSBP MQ.x"],
+      "frameworks": [
+        "AWS FSBP MQ.x"
+      ],
       "severity": "LOW",
       "title": "Amazon MQ broker should use a customer-managed key",
       "detect": {
@@ -1359,7 +1624,9 @@
     {
       "ruleId": "AWS_CLOUDFRONT_LOGGING",
       "threat": "A CloudFront distribution without access logging leaves no record of abuse, scraping, or attack traffic.",
-      "frameworks": ["AWS FSBP CloudFront.5"],
+      "frameworks": [
+        "AWS FSBP CloudFront.5"
+      ],
       "severity": "LOW",
       "title": "CloudFront distribution should enable access logging",
       "detect": {
@@ -1378,7 +1645,9 @@
     {
       "ruleId": "AWS_SAGEMAKER_NOTEBOOK_ROOT_ACCESS",
       "threat": "Root access on a SageMaker notebook lets a user (or attacker who lands in it) install kernels/agents and tamper with the instance.",
-      "frameworks": ["AWS FSBP SageMaker.3"],
+      "frameworks": [
+        "AWS FSBP SageMaker.3"
+      ],
       "severity": "MEDIUM",
       "title": "SageMaker notebook must disable root access",
       "detect": {
@@ -1388,7 +1657,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "root_access": "\"Disabled\"" }
+        "ensure": {
+          "root_access": "\"Disabled\""
+        }
       },
       "requiredActions": [
         "Set root_access = \"Disabled\" on the aws_sagemaker_notebook_instance."
@@ -1397,7 +1668,10 @@
     {
       "ruleId": "AWS_WORKSPACES_VOLUME_ENCRYPTION",
       "threat": "An unencrypted WorkSpaces volume exposes user data at rest if the underlying storage is accessed.",
-      "frameworks": ["AWS FSBP WorkSpaces.1", "AWS FSBP WorkSpaces.2"],
+      "frameworks": [
+        "AWS FSBP WorkSpaces.1",
+        "AWS FSBP WorkSpaces.2"
+      ],
       "severity": "MEDIUM",
       "title": "WorkSpaces volumes must be encrypted",
       "detect": {
@@ -1419,7 +1693,9 @@
     {
       "ruleId": "AWS_ECS_SERVICE_NO_PUBLIC_IP",
       "threat": "An ECS service assigning public IPs to tasks places workloads directly on the internet, widening the attack surface.",
-      "frameworks": ["AWS FSBP ECS.2"],
+      "frameworks": [
+        "AWS FSBP ECS.2"
+      ],
       "severity": "MEDIUM",
       "title": "ECS service must not assign public IPs to tasks",
       "detect": {
@@ -1429,7 +1705,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "network_configuration.assign_public_ip": "\"DISABLED\"" }
+        "ensure": {
+          "network_configuration.assign_public_ip": "\"DISABLED\""
+        }
       },
       "requiredActions": [
         "Set network_configuration { assign_public_ip = \"DISABLED\" } on the aws_ecs_service and use private subnets with NAT."
@@ -1438,7 +1716,9 @@
     {
       "ruleId": "AWS_CLOUDWATCH_LOG_KMS",
       "threat": "A log group without a KMS key stores potentially sensitive log data unencrypted with broad default access.",
-      "frameworks": ["AWS FSBP CloudWatch.x"],
+      "frameworks": [
+        "AWS FSBP CloudWatch.x"
+      ],
       "severity": "LOW",
       "title": "CloudWatch log group should be encrypted with a CMK",
       "detect": {
@@ -1457,7 +1737,9 @@
     {
       "ruleId": "AWS_SECRETSMANAGER_KMS",
       "threat": "A secret encrypted with the default key is readable by anyone with broad KMS access rather than a scoped CMK policy.",
-      "frameworks": ["AWS FSBP SecretsManager.x"],
+      "frameworks": [
+        "AWS FSBP SecretsManager.x"
+      ],
       "severity": "LOW",
       "title": "Secrets Manager secret should use a customer-managed key",
       "detect": {
@@ -1476,7 +1758,9 @@
     {
       "ruleId": "AWS_EKS_CONTROL_PLANE_LOGGING",
       "threat": "Without control-plane logging, API server audit events (auth, RBAC, admission) are not recorded for detection or forensics.",
-      "frameworks": ["AWS FSBP EKS.8"],
+      "frameworks": [
+        "AWS FSBP EKS.8"
+      ],
       "severity": "MEDIUM",
       "title": "EKS cluster should enable control plane logging",
       "detect": {
@@ -1495,7 +1779,9 @@
     {
       "ruleId": "AWS_LB_LISTENER_HTTPS",
       "threat": "An HTTP load balancer listener that is not a redirect serves application traffic in plaintext.",
-      "frameworks": ["AWS FSBP ELB.1"],
+      "frameworks": [
+        "AWS FSBP ELB.1"
+      ],
       "severity": "MEDIUM",
       "title": "Load balancer listener should use HTTPS",
       "detect": {
@@ -1514,7 +1800,9 @@
     {
       "ruleId": "AWS_API_GW_METHOD_AUTH",
       "threat": "An API Gateway method with authorization NONE is an unauthenticated endpoint — only acceptable for intentionally public routes.",
-      "frameworks": ["AWS FSBP APIGateway.x"],
+      "frameworks": [
+        "AWS FSBP APIGateway.x"
+      ],
       "severity": "MEDIUM",
       "title": "API Gateway method should require authorization",
       "detect": {
@@ -1533,7 +1821,9 @@
     {
       "ruleId": "AWS_QLDB_DELETION_PROTECTION",
       "threat": "Disabling QLDB deletion protection lets a compromised credential destroy the immutable ledger and its audit history.",
-      "frameworks": ["AWS FSBP QLDB.x"],
+      "frameworks": [
+        "AWS FSBP QLDB.x"
+      ],
       "severity": "MEDIUM",
       "title": "QLDB ledger must keep deletion protection",
       "detect": {
@@ -1543,7 +1833,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "deletion_protection": "true" }
+        "ensure": {
+          "deletion_protection": "true"
+        }
       },
       "requiredActions": [
         "Set deletion_protection = true on the aws_qldb_ledger."
@@ -1552,7 +1844,9 @@
     {
       "ruleId": "AWS_EFS_BACKUP_POLICY",
       "threat": "An EFS file system without automatic backups cannot be restored after a destructive or ransomware event.",
-      "frameworks": ["AWS FSBP EFS.2"],
+      "frameworks": [
+        "AWS FSBP EFS.2"
+      ],
       "severity": "LOW",
       "title": "EFS file system should enable automatic backups",
       "detect": {
@@ -1562,7 +1856,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "backup_policy.status": "\"ENABLED\"" }
+        "ensure": {
+          "backup_policy.status": "\"ENABLED\""
+        }
       },
       "requiredActions": [
         "Set backup_policy { status = \"ENABLED\" } on the aws_efs_backup_policy."
@@ -1571,7 +1867,9 @@
     {
       "ruleId": "AWS_NEPTUNE_INSTANCE_NOT_PUBLIC",
       "threat": "A publicly accessible Neptune cluster instance is directly reachable from the internet.",
-      "frameworks": ["AWS FSBP Neptune.x"],
+      "frameworks": [
+        "AWS FSBP Neptune.x"
+      ],
       "severity": "HIGH",
       "title": "Neptune cluster instance must not be publicly accessible",
       "detect": {
@@ -1581,7 +1879,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "publicly_accessible": "false" }
+        "ensure": {
+          "publicly_accessible": "false"
+        }
       },
       "requiredActions": [
         "Set publicly_accessible = false on the aws_neptune_cluster_instance."
@@ -1590,7 +1890,9 @@
     {
       "ruleId": "AWS_DOCDB_DELETION_PROTECTION",
       "threat": "Without deletion protection, a compromised credential can destroy the entire DocumentDB cluster.",
-      "frameworks": ["AWS FSBP DocumentDB.x"],
+      "frameworks": [
+        "AWS FSBP DocumentDB.x"
+      ],
       "severity": "MEDIUM",
       "title": "DocumentDB cluster must enable deletion protection",
       "detect": {
@@ -1600,7 +1902,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "deletion_protection": "true" }
+        "ensure": {
+          "deletion_protection": "true"
+        }
       },
       "requiredActions": [
         "Set deletion_protection = true on the aws_docdb_cluster."
@@ -1609,7 +1913,10 @@
     {
       "ruleId": "AWS_CLOUDTRAIL_KMS",
       "threat": "A CloudTrail without a CMK encrypts logs with default keys, weakening protection of the forensic record.",
-      "frameworks": ["AWS FSBP CloudTrail.2", "CIS AWS Foundations Benchmark 3.7"],
+      "frameworks": [
+        "AWS FSBP CloudTrail.2",
+        "CIS AWS Foundations Benchmark 3.7"
+      ],
       "severity": "MEDIUM",
       "title": "CloudTrail should be encrypted with a CMK",
       "detect": {
@@ -1628,7 +1935,9 @@
     {
       "ruleId": "AWS_CLOUDTRAIL_CW_LOGS",
       "threat": "Without CloudWatch Logs integration, CloudTrail events are not available for real-time alerting on suspicious API activity.",
-      "frameworks": ["CIS AWS Foundations Benchmark 3.4"],
+      "frameworks": [
+        "CIS AWS Foundations Benchmark 3.4"
+      ],
       "severity": "LOW",
       "title": "CloudTrail should deliver to CloudWatch Logs",
       "detect": {
@@ -1647,7 +1956,9 @@
     {
       "ruleId": "AWS_MSK_ENCRYPTION_IN_TRANSIT",
       "threat": "An MSK cluster allowing plaintext broker traffic exposes Kafka messages to interception inside the VPC.",
-      "frameworks": ["AWS FSBP MSK.1"],
+      "frameworks": [
+        "AWS FSBP MSK.1"
+      ],
       "severity": "MEDIUM",
       "title": "MSK cluster must encrypt data in transit",
       "detect": {
@@ -1666,7 +1977,9 @@
     {
       "ruleId": "AWS_APPSYNC_LOGGING",
       "threat": "An AppSync GraphQL API without logging leaves abuse, introspection, and injection attempts unrecorded.",
-      "frameworks": ["AWS FSBP AppSync.x"],
+      "frameworks": [
+        "AWS FSBP AppSync.x"
+      ],
       "severity": "LOW",
       "title": "AppSync GraphQL API should enable logging",
       "detect": {
@@ -1685,7 +1998,10 @@
     {
       "ruleId": "AWS_S3_ACCOUNT_BLOCK_PUBLIC_ACCESS",
       "threat": "If account-level Block Public Access is partly disabled, any bucket ACL or policy can re-expose data to the internet.",
-      "frameworks": ["AWS FSBP S3.1", "CIS AWS Foundations Benchmark 2.1.5"],
+      "frameworks": [
+        "AWS FSBP S3.1",
+        "CIS AWS Foundations Benchmark 2.1.5"
+      ],
       "severity": "HIGH",
       "title": "Account-level S3 Block Public Access must be fully enabled",
       "detect": {
@@ -1709,7 +2025,9 @@
     {
       "ruleId": "AWS_CLOUDFRONT_VIEWER_HTTPS",
       "threat": "A CloudFront behavior allowing plain HTTP serves content and cookies over an interceptable channel.",
-      "frameworks": ["AWS FSBP CloudFront.9"],
+      "frameworks": [
+        "AWS FSBP CloudFront.9"
+      ],
       "severity": "MEDIUM",
       "title": "CloudFront must redirect viewers to HTTPS",
       "detect": {
@@ -1719,7 +2037,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "default_cache_behavior.viewer_protocol_policy": "\"redirect-to-https\"" }
+        "ensure": {
+          "default_cache_behavior.viewer_protocol_policy": "\"redirect-to-https\""
+        }
       },
       "requiredActions": [
         "Set viewer_protocol_policy = \"redirect-to-https\" (or \"https-only\") on every cache behavior of the aws_cloudfront_distribution."
@@ -1728,7 +2048,9 @@
     {
       "ruleId": "AWS_ELASTICACHE_AUTO_MINOR_UPGRADE",
       "threat": "Disabling automatic minor upgrades leaves the cache engine on known-vulnerable patch levels.",
-      "frameworks": ["AWS FSBP ElastiCache.2"],
+      "frameworks": [
+        "AWS FSBP ElastiCache.2"
+      ],
       "severity": "LOW",
       "title": "ElastiCache must allow automatic minor version upgrades",
       "detect": {
@@ -1738,7 +2060,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "auto_minor_version_upgrade": "true" }
+        "ensure": {
+          "auto_minor_version_upgrade": "true"
+        }
       },
       "requiredActions": [
         "Set auto_minor_version_upgrade = true on the aws_elasticache_replication_group."
@@ -1747,7 +2071,9 @@
     {
       "ruleId": "AWS_RDS_COPY_TAGS_TO_SNAPSHOT",
       "threat": "Without copy-tags-to-snapshot, access-control and ownership tags are lost on snapshots, weakening least-privilege on restores.",
-      "frameworks": ["AWS FSBP RDS.16"],
+      "frameworks": [
+        "AWS FSBP RDS.16"
+      ],
       "severity": "LOW",
       "title": "RDS instance should copy tags to snapshots",
       "detect": {
@@ -1757,7 +2083,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "copy_tags_to_snapshot": "true" }
+        "ensure": {
+          "copy_tags_to_snapshot": "true"
+        }
       },
       "requiredActions": [
         "Set copy_tags_to_snapshot = true on the aws_db_instance."
@@ -1766,7 +2094,9 @@
     {
       "ruleId": "AWS_RDS_ENHANCED_MONITORING",
       "threat": "Without enhanced monitoring, OS-level metrics needed to detect resource-exhaustion attacks on the DB host are missing.",
-      "frameworks": ["AWS FSBP RDS.6"],
+      "frameworks": [
+        "AWS FSBP RDS.6"
+      ],
       "severity": "LOW",
       "title": "RDS instance should enable enhanced monitoring",
       "detect": {
@@ -1785,7 +2115,9 @@
     {
       "ruleId": "AWS_ECS_NO_HOST_PID",
       "threat": "A task sharing the host PID namespace can see and signal host processes — a container escape aid.",
-      "frameworks": ["AWS FSBP ECS.3"],
+      "frameworks": [
+        "AWS FSBP ECS.3"
+      ],
       "severity": "MEDIUM",
       "title": "ECS task must not share the host PID namespace",
       "detect": {
@@ -1804,7 +2136,9 @@
     {
       "ruleId": "AWS_REDSHIFT_AUDIT_LOGGING",
       "threat": "Without audit logging, malicious queries and data exfiltration from Redshift leave no trail.",
-      "frameworks": ["AWS FSBP Redshift.4"],
+      "frameworks": [
+        "AWS FSBP Redshift.4"
+      ],
       "severity": "LOW",
       "title": "Redshift cluster should enable audit logging",
       "detect": {
@@ -1823,7 +2157,9 @@
     {
       "ruleId": "AWS_REDSHIFT_ALLOW_VERSION_UPGRADE",
       "threat": "Disabling Redshift version upgrades keeps the cluster on known-vulnerable engine versions.",
-      "frameworks": ["AWS FSBP Redshift.6"],
+      "frameworks": [
+        "AWS FSBP Redshift.6"
+      ],
       "severity": "LOW",
       "title": "Redshift cluster must allow version upgrades",
       "detect": {
@@ -1833,7 +2169,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "allow_version_upgrade": "true" }
+        "ensure": {
+          "allow_version_upgrade": "true"
+        }
       },
       "requiredActions": [
         "Set allow_version_upgrade = true on the aws_redshift_cluster."
@@ -1842,7 +2180,9 @@
     {
       "ruleId": "AWS_NETWORKFIREWALL_DELETE_PROTECTION",
       "threat": "Without delete protection, a compromised credential can tear down the Network Firewall and open all egress/ingress.",
-      "frameworks": ["AWS FSBP NetworkFirewall.x"],
+      "frameworks": [
+        "AWS FSBP NetworkFirewall.x"
+      ],
       "severity": "LOW",
       "title": "Network Firewall must enable delete protection",
       "detect": {
@@ -1852,7 +2192,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "delete_protection": "true" }
+        "ensure": {
+          "delete_protection": "true"
+        }
       },
       "requiredActions": [
         "Set delete_protection = true on the aws_networkfirewall_firewall."
@@ -1861,7 +2203,9 @@
     {
       "ruleId": "AWS_ELB_CROSS_ZONE",
       "threat": "Disabling cross-zone load balancing concentrates traffic and can be abused to overload a single AZ's targets.",
-      "frameworks": ["AWS FSBP ELB.9"],
+      "frameworks": [
+        "AWS FSBP ELB.9"
+      ],
       "severity": "LOW",
       "title": "Load balancer should keep cross-zone balancing enabled",
       "detect": {
@@ -1871,7 +2215,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "enable_cross_zone_load_balancing": "true" }
+        "ensure": {
+          "enable_cross_zone_load_balancing": "true"
+        }
       },
       "requiredActions": [
         "Set enable_cross_zone_load_balancing = true on the aws_lb (NLB)."
@@ -1880,7 +2226,9 @@
     {
       "ruleId": "AWS_ELASTICSEARCH_NODE_TO_NODE",
       "threat": "A legacy Elasticsearch domain without node-to-node encryption sends intra-cluster traffic in plaintext.",
-      "frameworks": ["AWS FSBP ES.3"],
+      "frameworks": [
+        "AWS FSBP ES.3"
+      ],
       "severity": "MEDIUM",
       "title": "Elasticsearch domain must use node-to-node encryption",
       "detect": {
@@ -1890,7 +2238,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "node_to_node_encryption.enabled": "true" }
+        "ensure": {
+          "node_to_node_encryption.enabled": "true"
+        }
       },
       "requiredActions": [
         "Add node_to_node_encryption { enabled = true } to the aws_elasticsearch_domain."
@@ -1899,7 +2249,9 @@
     {
       "ruleId": "AWS_ELASTICSEARCH_ENFORCE_HTTPS",
       "threat": "A legacy Elasticsearch domain that does not enforce HTTPS accepts plaintext queries carrying credentials.",
-      "frameworks": ["AWS FSBP ES.8"],
+      "frameworks": [
+        "AWS FSBP ES.8"
+      ],
       "severity": "MEDIUM",
       "title": "Elasticsearch domain must enforce HTTPS",
       "detect": {
@@ -1909,7 +2261,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "domain_endpoint_options.enforce_https": "true" }
+        "ensure": {
+          "domain_endpoint_options.enforce_https": "true"
+        }
       },
       "requiredActions": [
         "Add domain_endpoint_options { enforce_https = true } to the aws_elasticsearch_domain."
@@ -1918,7 +2272,9 @@
     {
       "ruleId": "AWS_EKS_SECRETS_ENCRYPTION",
       "threat": "Without envelope encryption, Kubernetes Secrets are stored only base64-encoded in EKS etcd.",
-      "frameworks": ["AWS FSBP EKS.3"],
+      "frameworks": [
+        "AWS FSBP EKS.3"
+      ],
       "severity": "MEDIUM",
       "title": "EKS cluster should encrypt Kubernetes secrets with KMS",
       "detect": {
@@ -1937,7 +2293,10 @@
     {
       "ruleId": "AWS_RDS_LOG_EXPORTS",
       "threat": "Without CloudWatch log exports, DB engine/audit/error logs aren't available for detection of injection or abuse.",
-      "frameworks": ["AWS FSBP RDS.9", "AWS FSBP RDS.10"],
+      "frameworks": [
+        "AWS FSBP RDS.9",
+        "AWS FSBP RDS.10"
+      ],
       "severity": "LOW",
       "title": "RDS instance should export logs to CloudWatch",
       "detect": {
@@ -1956,7 +2315,9 @@
     {
       "ruleId": "AWS_ECS_NO_HOST_NETWORK",
       "threat": "Host network mode gives the task the host's network stack, bypassing per-task SG isolation.",
-      "frameworks": ["AWS FSBP ECS.1"],
+      "frameworks": [
+        "AWS FSBP ECS.1"
+      ],
       "severity": "MEDIUM",
       "title": "ECS task should not use host network mode",
       "detect": {
@@ -1975,7 +2336,10 @@
     {
       "ruleId": "AWS_AUTOSCALING_LAUNCHCONFIG_IMDSV2",
       "threat": "Instances launched from a launch configuration without IMDSv2 expose instance-profile credentials to SSRF.",
-      "frameworks": ["AWS FSBP AutoScaling.3", "CIS AWS Foundations Benchmark 5.6"],
+      "frameworks": [
+        "AWS FSBP AutoScaling.3",
+        "CIS AWS Foundations Benchmark 5.6"
+      ],
       "severity": "HIGH",
       "title": "Launch configuration must enforce IMDSv2",
       "detect": {
@@ -1997,7 +2361,9 @@
     {
       "ruleId": "AWS_AUTOSCALING_LAUNCHCONFIG_NO_PUBLIC_IP",
       "threat": "Auto-assigning public IPs to autoscaled instances places workloads directly on the internet.",
-      "frameworks": ["AWS FSBP AutoScaling.5"],
+      "frameworks": [
+        "AWS FSBP AutoScaling.5"
+      ],
       "severity": "MEDIUM",
       "title": "Launch configuration must not auto-assign public IPs",
       "detect": {
@@ -2007,7 +2373,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "associate_public_ip_address": "false" }
+        "ensure": {
+          "associate_public_ip_address": "false"
+        }
       },
       "requiredActions": [
         "Set associate_public_ip_address = false on the aws_launch_configuration."
@@ -2016,7 +2384,9 @@
     {
       "ruleId": "AWS_ELASTICACHE_SNAPSHOT_RETENTION",
       "threat": "A Redis replication group without snapshot retention cannot be restored after a destructive event.",
-      "frameworks": ["AWS FSBP ElastiCache.1"],
+      "frameworks": [
+        "AWS FSBP ElastiCache.1"
+      ],
       "severity": "LOW",
       "title": "ElastiCache (Redis) should retain automatic snapshots",
       "detect": {
@@ -2026,7 +2396,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "snapshot_retention_limit": "7" }
+        "ensure": {
+          "snapshot_retention_limit": "7"
+        }
       },
       "requiredActions": [
         "Set snapshot_retention_limit to at least 1 (e.g. 7) on the aws_elasticache_replication_group."
@@ -2035,7 +2407,9 @@
     {
       "ruleId": "AWS_ELB_DESYNC_MITIGATION",
       "threat": "Permissive desync mitigation lets HTTP request-smuggling payloads pass through the load balancer to backends.",
-      "frameworks": ["AWS FSBP ELB.14"],
+      "frameworks": [
+        "AWS FSBP ELB.14"
+      ],
       "severity": "MEDIUM",
       "title": "Load balancer must not use monitor-only desync mitigation",
       "detect": {
@@ -2045,7 +2419,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "desync_mitigation_mode": "\"defensive\"" }
+        "ensure": {
+          "desync_mitigation_mode": "\"defensive\""
+        }
       },
       "requiredActions": [
         "Set desync_mitigation_mode = \"defensive\" (or \"strictest\") on the aws_lb."
@@ -2054,7 +2430,9 @@
     {
       "ruleId": "AWS_RDS_CLUSTER_IAM_AUTH",
       "threat": "Password-only Aurora auth lacks centralized, short-lived IAM credentials; a leaked DB password is standing access.",
-      "frameworks": ["AWS FSBP RDS.10"],
+      "frameworks": [
+        "AWS FSBP RDS.10"
+      ],
       "severity": "LOW",
       "title": "Aurora cluster should enable IAM database authentication",
       "detect": {
@@ -2073,7 +2451,9 @@
     {
       "ruleId": "AWS_NEPTUNE_IAM_AUTH",
       "threat": "Without IAM database authentication, Neptune access relies on weaker, longer-lived mechanisms.",
-      "frameworks": ["AWS FSBP Neptune.x"],
+      "frameworks": [
+        "AWS FSBP Neptune.x"
+      ],
       "severity": "LOW",
       "title": "Neptune cluster should enable IAM database authentication",
       "detect": {
@@ -2092,7 +2472,9 @@
     {
       "ruleId": "AWS_LAMBDA_CODE_SIGNING",
       "threat": "Without code signing, tampered or supply-chain-poisoned deployment packages run unchecked.",
-      "frameworks": ["AWS FSBP Lambda.x"],
+      "frameworks": [
+        "AWS FSBP Lambda.x"
+      ],
       "severity": "LOW",
       "title": "Lambda function should enforce code signing",
       "detect": {
@@ -2111,7 +2493,9 @@
     {
       "ruleId": "AWS_API_GW_EXECUTION_LOGGING",
       "threat": "Without stage access logging, API abuse, scraping, and injection attempts go unrecorded.",
-      "frameworks": ["AWS FSBP APIGateway.1"],
+      "frameworks": [
+        "AWS FSBP APIGateway.1"
+      ],
       "severity": "LOW",
       "title": "API Gateway stage should enable access logging",
       "detect": {
@@ -2130,7 +2514,10 @@
     {
       "ruleId": "CFN_S3_NO_PUBLIC_ACL",
       "threat": "A CloudFormation S3 bucket with a public-read ACL exposes all objects to anonymous download.",
-      "frameworks": ["AWS FSBP S3.2", "AWS FSBP S3.3"],
+      "frameworks": [
+        "AWS FSBP S3.2",
+        "AWS FSBP S3.3"
+      ],
       "severity": "CRITICAL",
       "title": "CloudFormation S3 bucket must not use a public ACL",
       "detect": {
@@ -2149,7 +2536,9 @@
     {
       "ruleId": "CFN_RDS_NOT_PUBLIC",
       "threat": "A CloudFormation RDS instance marked publicly accessible is reachable from the internet.",
-      "frameworks": ["AWS FSBP RDS.2"],
+      "frameworks": [
+        "AWS FSBP RDS.2"
+      ],
       "severity": "CRITICAL",
       "title": "CloudFormation RDS instance must not be publicly accessible",
       "detect": {
@@ -2168,7 +2557,9 @@
     {
       "ruleId": "CFN_RDS_STORAGE_ENCRYPTED",
       "threat": "A CloudFormation RDS instance without storage encryption exposes the database at rest.",
-      "frameworks": ["AWS FSBP RDS.3"],
+      "frameworks": [
+        "AWS FSBP RDS.3"
+      ],
       "severity": "HIGH",
       "title": "CloudFormation RDS instance must encrypt storage",
       "detect": {
@@ -2187,7 +2578,9 @@
     {
       "ruleId": "CFN_EBS_VOLUME_ENCRYPTED",
       "threat": "A CloudFormation EBS volume without encryption exposes data at rest if exfiltrated.",
-      "frameworks": ["AWS FSBP EC2.3"],
+      "frameworks": [
+        "AWS FSBP EC2.3"
+      ],
       "severity": "HIGH",
       "title": "CloudFormation EBS volume must be encrypted",
       "detect": {
@@ -2206,7 +2599,9 @@
     {
       "ruleId": "CFN_SG_OPEN_INGRESS",
       "threat": "A CloudFormation security group allowing 0.0.0.0/0 exposes ports directly to the internet.",
-      "frameworks": ["AWS FSBP EC2.13"],
+      "frameworks": [
+        "AWS FSBP EC2.13"
+      ],
       "severity": "HIGH",
       "title": "CloudFormation security group must not open ingress to 0.0.0.0/0",
       "detect": {
@@ -2225,7 +2620,9 @@
     {
       "ruleId": "CFN_REDSHIFT_NOT_PUBLIC",
       "threat": "A CloudFormation Redshift cluster marked publicly accessible is reachable from the internet.",
-      "frameworks": ["AWS FSBP Redshift.1"],
+      "frameworks": [
+        "AWS FSBP Redshift.1"
+      ],
       "severity": "HIGH",
       "title": "CloudFormation Redshift cluster must not be publicly accessible",
       "detect": {
@@ -2244,7 +2641,9 @@
     {
       "ruleId": "CFN_LAMBDA_URL_AUTH",
       "threat": "A CloudFormation Lambda URL with AuthType NONE is an unauthenticated internet endpoint.",
-      "frameworks": ["AWS FSBP Lambda.1"],
+      "frameworks": [
+        "AWS FSBP Lambda.1"
+      ],
       "severity": "CRITICAL",
       "title": "CloudFormation Lambda URL must require IAM auth",
       "detect": {
@@ -2258,6 +2657,846 @@
       },
       "requiredActions": [
         "Set AuthType: AWS_IAM on the AWS::Lambda::Url."
+      ]
+    },
+    {
+      "ruleId": "CFN_S3_BLOCK_PUBLIC_ACCESS",
+      "threat": "Without PublicAccessBlockConfiguration a bucket policy or ACL can re-expose objects to the internet.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "HIGH",
+      "title": "CloudFormation S3 bucket must set a public access block",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::S3::Bucket",
+        "require": "PublicAccessBlockConfiguration"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add PublicAccessBlockConfiguration with all four flags = true to the AWS::S3::Bucket."
+      },
+      "requiredActions": [
+        "Add PublicAccessBlockConfiguration with all four flags = true to the AWS::S3::Bucket."
+      ]
+    },
+    {
+      "ruleId": "CFN_S3_VERSIONING",
+      "threat": "Without versioning, an overwrite or delete is unrecoverable (no ransomware rollback).",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "LOW",
+      "title": "CloudFormation S3 bucket should enable versioning",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::S3::Bucket",
+        "require": "VersioningConfiguration"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add VersioningConfiguration: { Status: Enabled } to the AWS::S3::Bucket."
+      },
+      "requiredActions": [
+        "Add VersioningConfiguration: { Status: Enabled } to the AWS::S3::Bucket."
+      ]
+    },
+    {
+      "ruleId": "CFN_S3_ENCRYPTION",
+      "threat": "A bucket without BucketEncryption relies on account defaults that may not use a CMK.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "LOW",
+      "title": "CloudFormation S3 bucket should declare encryption",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::S3::Bucket",
+        "require": "BucketEncryption"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a BucketEncryption block (aws:kms) to the AWS::S3::Bucket."
+      },
+      "requiredActions": [
+        "Add a BucketEncryption block (aws:kms) to the AWS::S3::Bucket."
+      ]
+    },
+    {
+      "ruleId": "CFN_KMS_KEY_ROTATION",
+      "threat": "A CMK without rotation means one key compromise exposes all historical ciphertext.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "MEDIUM",
+      "title": "CloudFormation KMS key must enable rotation",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::KMS::Key",
+        "require": "\"?EnableKeyRotation\"?\\s*:\\s*\"?true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set EnableKeyRotation: true on the AWS::KMS::Key."
+      },
+      "requiredActions": [
+        "Set EnableKeyRotation: true on the AWS::KMS::Key."
+      ]
+    },
+    {
+      "ruleId": "CFN_DYNAMODB_PITR",
+      "threat": "Without point-in-time recovery a destructive write is unrecoverable.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "MEDIUM",
+      "title": "CloudFormation DynamoDB table should enable PITR",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::DynamoDB::Table",
+        "require": "PointInTimeRecoverySpecification|PointInTimeRecoveryEnabled"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: true } to the table."
+      },
+      "requiredActions": [
+        "Add PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: true } to the table."
+      ]
+    },
+    {
+      "ruleId": "CFN_EC2_NO_PUBLIC_IP",
+      "threat": "A public IP places the instance directly on the internet, widening the attack surface.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "MEDIUM",
+      "title": "CloudFormation EC2 instance must not auto-assign a public IP",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::EC2::Instance",
+        "forbid": "\"?AssociatePublicIpAddress\"?\\s*:\\s*\"?true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set AssociatePublicIpAddress: false in the instance NetworkInterfaces."
+      },
+      "requiredActions": [
+        "Set AssociatePublicIpAddress: false in the instance NetworkInterfaces."
+      ]
+    },
+    {
+      "ruleId": "CFN_LAUNCHTEMPLATE_IMDSV2",
+      "threat": "Without IMDSv2, SSRF can steal instance-profile credentials from the metadata endpoint.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "HIGH",
+      "title": "CloudFormation launch template must enforce IMDSv2",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::EC2::LaunchTemplate",
+        "require": "\"?HttpTokens\"?\\s*:\\s*\"?required"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set MetadataOptions: { HttpTokens: required, HttpPutResponseHopLimit: 1 } in LaunchTemplateData."
+      },
+      "requiredActions": [
+        "Set MetadataOptions: { HttpTokens: required, HttpPutResponseHopLimit: 1 } in LaunchTemplateData."
+      ]
+    },
+    {
+      "ruleId": "CFN_ECR_SCAN_ON_PUSH",
+      "threat": "Images pushed without scanning can ship known-exploitable CVEs to production.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "MEDIUM",
+      "title": "CloudFormation ECR repository must scan on push",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::ECR::Repository",
+        "require": "\"?ScanOnPush\"?\\s*:\\s*\"?true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set ImageScanningConfiguration: { ScanOnPush: true } on the AWS::ECR::Repository."
+      },
+      "requiredActions": [
+        "Set ImageScanningConfiguration: { ScanOnPush: true } on the AWS::ECR::Repository."
+      ]
+    },
+    {
+      "ruleId": "CFN_ECR_IMMUTABLE_TAGS",
+      "threat": "Mutable tags let an attacker overwrite a trusted tag with a backdoored image.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "MEDIUM",
+      "title": "CloudFormation ECR repository must use immutable tags",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::ECR::Repository",
+        "require": "\"?ImageTagMutability\"?\\s*:\\s*\"?IMMUTABLE"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set ImageTagMutability: IMMUTABLE on the AWS::ECR::Repository."
+      },
+      "requiredActions": [
+        "Set ImageTagMutability: IMMUTABLE on the AWS::ECR::Repository."
+      ]
+    },
+    {
+      "ruleId": "CFN_EFS_ENCRYPTED",
+      "threat": "An unencrypted EFS exposes shared data at rest.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "HIGH",
+      "title": "CloudFormation EFS file system must be encrypted",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::EFS::FileSystem",
+        "require": "\"?Encrypted\"?\\s*:\\s*\"?true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set Encrypted: true on the AWS::EFS::FileSystem."
+      },
+      "requiredActions": [
+        "Set Encrypted: true on the AWS::EFS::FileSystem."
+      ]
+    },
+    {
+      "ruleId": "CFN_SNS_ENCRYPTED",
+      "threat": "An unencrypted SNS topic stores messages without encryption at rest.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "MEDIUM",
+      "title": "CloudFormation SNS topic must be encrypted at rest",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::SNS::Topic",
+        "require": "KmsMasterKeyId"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set KmsMasterKeyId on the AWS::SNS::Topic."
+      },
+      "requiredActions": [
+        "Set KmsMasterKeyId on the AWS::SNS::Topic."
+      ]
+    },
+    {
+      "ruleId": "CFN_SQS_ENCRYPTED",
+      "threat": "An unencrypted SQS queue holds in-flight messages without encryption at rest.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "MEDIUM",
+      "title": "CloudFormation SQS queue must enable encryption",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::SQS::Queue",
+        "require": "KmsMasterKeyId|\"?SqsManagedSseEnabled\"?\\s*:\\s*\"?true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set SqsManagedSseEnabled: true (or KmsMasterKeyId) on the AWS::SQS::Queue."
+      },
+      "requiredActions": [
+        "Set SqsManagedSseEnabled: true (or KmsMasterKeyId) on the AWS::SQS::Queue."
+      ]
+    },
+    {
+      "ruleId": "CFN_REDSHIFT_ENCRYPTED",
+      "threat": "An unencrypted Redshift cluster exposes the warehouse at rest.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "HIGH",
+      "title": "CloudFormation Redshift cluster must be encrypted",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::Redshift::Cluster",
+        "require": "\"?Encrypted\"?\\s*:\\s*\"?true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set Encrypted: true on the AWS::Redshift::Cluster."
+      },
+      "requiredActions": [
+        "Set Encrypted: true on the AWS::Redshift::Cluster."
+      ]
+    },
+    {
+      "ruleId": "CFN_REDSHIFT_ENHANCED_VPC",
+      "threat": "Without enhanced VPC routing, COPY/UNLOAD traffic bypasses VPC egress controls.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "LOW",
+      "title": "CloudFormation Redshift should use enhanced VPC routing",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::Redshift::Cluster",
+        "require": "\"?EnhancedVpcRouting\"?\\s*:\\s*\"?true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set EnhancedVpcRouting: true on the AWS::Redshift::Cluster."
+      },
+      "requiredActions": [
+        "Set EnhancedVpcRouting: true on the AWS::Redshift::Cluster."
+      ]
+    },
+    {
+      "ruleId": "CFN_REDSHIFT_VERSION_UPGRADE",
+      "threat": "Disabling upgrades keeps the cluster on vulnerable engine versions.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "LOW",
+      "title": "CloudFormation Redshift must allow version upgrades",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::Redshift::Cluster",
+        "forbid": "\"?AllowVersionUpgrade\"?\\s*:\\s*\"?false"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set AllowVersionUpgrade: true on the AWS::Redshift::Cluster."
+      },
+      "requiredActions": [
+        "Set AllowVersionUpgrade: true on the AWS::Redshift::Cluster."
+      ]
+    },
+    {
+      "ruleId": "CFN_DOCDB_ENCRYPTED",
+      "threat": "An unencrypted DocumentDB cluster exposes documents at rest.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "HIGH",
+      "title": "CloudFormation DocumentDB cluster must be encrypted",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::DocDB::DBCluster",
+        "require": "\"?StorageEncrypted\"?\\s*:\\s*\"?true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set StorageEncrypted: true on the AWS::DocDB::DBCluster."
+      },
+      "requiredActions": [
+        "Set StorageEncrypted: true on the AWS::DocDB::DBCluster."
+      ]
+    },
+    {
+      "ruleId": "CFN_DOCDB_DELETION_PROTECTION",
+      "threat": "Without deletion protection a compromised credential can destroy the cluster.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "MEDIUM",
+      "title": "CloudFormation DocumentDB cluster must enable deletion protection",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::DocDB::DBCluster",
+        "require": "\"?DeletionProtection\"?\\s*:\\s*\"?true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set DeletionProtection: true on the AWS::DocDB::DBCluster."
+      },
+      "requiredActions": [
+        "Set DeletionProtection: true on the AWS::DocDB::DBCluster."
+      ]
+    },
+    {
+      "ruleId": "CFN_ELASTICACHE_AT_REST",
+      "threat": "Cached data — often session tokens — is exposed if storage is accessed.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "MEDIUM",
+      "title": "CloudFormation ElastiCache must encrypt at rest",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::ElastiCache::ReplicationGroup",
+        "require": "\"?AtRestEncryptionEnabled\"?\\s*:\\s*\"?true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set AtRestEncryptionEnabled: true on the AWS::ElastiCache::ReplicationGroup."
+      },
+      "requiredActions": [
+        "Set AtRestEncryptionEnabled: true on the AWS::ElastiCache::ReplicationGroup."
+      ]
+    },
+    {
+      "ruleId": "CFN_ELASTICACHE_TRANSIT",
+      "threat": "Cache traffic is plaintext and sniffable without transit encryption.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "MEDIUM",
+      "title": "CloudFormation ElastiCache must encrypt in transit",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::ElastiCache::ReplicationGroup",
+        "require": "\"?TransitEncryptionEnabled\"?\\s*:\\s*\"?true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set TransitEncryptionEnabled: true on the AWS::ElastiCache::ReplicationGroup."
+      },
+      "requiredActions": [
+        "Set TransitEncryptionEnabled: true on the AWS::ElastiCache::ReplicationGroup."
+      ]
+    },
+    {
+      "ruleId": "CFN_NEPTUNE_ENCRYPTED",
+      "threat": "An unencrypted Neptune cluster exposes graph data at rest.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "HIGH",
+      "title": "CloudFormation Neptune cluster must be encrypted",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::Neptune::DBCluster",
+        "require": "\"?StorageEncrypted\"?\\s*:\\s*\"?true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set StorageEncrypted: true on the AWS::Neptune::DBCluster."
+      },
+      "requiredActions": [
+        "Set StorageEncrypted: true on the AWS::Neptune::DBCluster."
+      ]
+    },
+    {
+      "ruleId": "CFN_OPENSEARCH_ENCRYPT",
+      "threat": "An OpenSearch domain without at-rest encryption exposes indexed data.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "HIGH",
+      "title": "CloudFormation OpenSearch domain must encrypt at rest",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::OpenSearchService::Domain",
+        "require": "EncryptionAtRestOptions"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add EncryptionAtRestOptions: { Enabled: true } to the domain."
+      },
+      "requiredActions": [
+        "Add EncryptionAtRestOptions: { Enabled: true } to the domain."
+      ]
+    },
+    {
+      "ruleId": "CFN_OPENSEARCH_N2N",
+      "threat": "Intra-cluster traffic is plaintext without node-to-node encryption.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "MEDIUM",
+      "title": "CloudFormation OpenSearch domain must use node-to-node encryption",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::OpenSearchService::Domain",
+        "require": "NodeToNodeEncryptionOptions"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add NodeToNodeEncryptionOptions: { Enabled: true } to the domain."
+      },
+      "requiredActions": [
+        "Add NodeToNodeEncryptionOptions: { Enabled: true } to the domain."
+      ]
+    },
+    {
+      "ruleId": "CFN_OPENSEARCH_HTTPS",
+      "threat": "Plaintext queries carry credentials without enforced HTTPS.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "MEDIUM",
+      "title": "CloudFormation OpenSearch domain must enforce HTTPS",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::OpenSearchService::Domain",
+        "require": "\"?EnforceHTTPS\"?\\s*:\\s*\"?true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set DomainEndpointOptions: { EnforceHTTPS: true } on the domain."
+      },
+      "requiredActions": [
+        "Set DomainEndpointOptions: { EnforceHTTPS: true } on the domain."
+      ]
+    },
+    {
+      "ruleId": "CFN_DMS_NOT_PUBLIC",
+      "threat": "DMS replication instances default to publicly accessible.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "HIGH",
+      "title": "CloudFormation DMS instance must not be publicly accessible",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::DMS::ReplicationInstance",
+        "require": "\"?PubliclyAccessible\"?\\s*:\\s*\"?false"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set PubliclyAccessible: false on the AWS::DMS::ReplicationInstance."
+      },
+      "requiredActions": [
+        "Set PubliclyAccessible: false on the AWS::DMS::ReplicationInstance."
+      ]
+    },
+    {
+      "ruleId": "CFN_KINESIS_ENCRYPTION",
+      "threat": "An unencrypted Kinesis stream stores records in plaintext.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "MEDIUM",
+      "title": "CloudFormation Kinesis stream must encrypt at rest",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::Kinesis::Stream",
+        "require": "StreamEncryption"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add StreamEncryption: { EncryptionType: KMS, KeyId: ... } to the AWS::Kinesis::Stream."
+      },
+      "requiredActions": [
+        "Add StreamEncryption: { EncryptionType: KMS, KeyId: ... } to the AWS::Kinesis::Stream."
+      ]
+    },
+    {
+      "ruleId": "CFN_RDS_DELETION_PROTECTION",
+      "threat": "Without deletion protection a compromised credential can destroy the database.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "MEDIUM",
+      "title": "CloudFormation RDS instance must enable deletion protection",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::RDS::DBInstance",
+        "require": "\"?DeletionProtection\"?\\s*:\\s*\"?true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set DeletionProtection: true on the AWS::RDS::DBInstance."
+      },
+      "requiredActions": [
+        "Set DeletionProtection: true on the AWS::RDS::DBInstance."
+      ]
+    },
+    {
+      "ruleId": "CFN_RDS_AUTO_MINOR_UPGRADE",
+      "threat": "Disabling minor upgrades leaves the DB on vulnerable patch levels.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "LOW",
+      "title": "CloudFormation RDS must allow automatic minor upgrades",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::RDS::DBInstance",
+        "forbid": "\"?AutoMinorVersionUpgrade\"?\\s*:\\s*\"?false"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set AutoMinorVersionUpgrade: true on the AWS::RDS::DBInstance."
+      },
+      "requiredActions": [
+        "Set AutoMinorVersionUpgrade: true on the AWS::RDS::DBInstance."
+      ]
+    },
+    {
+      "ruleId": "CFN_RDS_BACKUP_RETENTION",
+      "threat": "A zero backup window means no point-in-time recovery.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "LOW",
+      "title": "CloudFormation RDS must set a backup retention period",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::RDS::DBInstance",
+        "require": "BackupRetentionPeriod"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set BackupRetentionPeriod to at least 7 on the AWS::RDS::DBInstance."
+      },
+      "requiredActions": [
+        "Set BackupRetentionPeriod to at least 7 on the AWS::RDS::DBInstance."
+      ]
+    },
+    {
+      "ruleId": "CFN_RDS_CLUSTER_ENCRYPTED",
+      "threat": "An unencrypted Aurora cluster exposes the database at rest.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "HIGH",
+      "title": "CloudFormation Aurora cluster must be encrypted",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::RDS::DBCluster",
+        "require": "\"?StorageEncrypted\"?\\s*:\\s*\"?true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set StorageEncrypted: true on the AWS::RDS::DBCluster."
+      },
+      "requiredActions": [
+        "Set StorageEncrypted: true on the AWS::RDS::DBCluster."
+      ]
+    },
+    {
+      "ruleId": "CFN_RDS_CLUSTER_DELETION",
+      "threat": "Without deletion protection a compromised credential can destroy the cluster.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "MEDIUM",
+      "title": "CloudFormation Aurora cluster must enable deletion protection",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::RDS::DBCluster",
+        "require": "\"?DeletionProtection\"?\\s*:\\s*\"?true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set DeletionProtection: true on the AWS::RDS::DBCluster."
+      },
+      "requiredActions": [
+        "Set DeletionProtection: true on the AWS::RDS::DBCluster."
+      ]
+    },
+    {
+      "ruleId": "CFN_RDS_CLUSTER_BACKUP",
+      "threat": "A zero cluster backup window means no point-in-time recovery.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "LOW",
+      "title": "CloudFormation Aurora cluster must set backup retention",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::RDS::DBCluster",
+        "require": "BackupRetentionPeriod"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set BackupRetentionPeriod to at least 7 on the AWS::RDS::DBCluster."
+      },
+      "requiredActions": [
+        "Set BackupRetentionPeriod to at least 7 on the AWS::RDS::DBCluster."
+      ]
+    },
+    {
+      "ruleId": "CFN_CLOUDTRAIL_MULTIREGION",
+      "threat": "A single-region trail misses global service events.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "HIGH",
+      "title": "CloudFormation CloudTrail must be multi-region",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::CloudTrail::Trail",
+        "require": "\"?IsMultiRegionTrail\"?\\s*:\\s*\"?true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set IsMultiRegionTrail: true on the AWS::CloudTrail::Trail."
+      },
+      "requiredActions": [
+        "Set IsMultiRegionTrail: true on the AWS::CloudTrail::Trail."
+      ]
+    },
+    {
+      "ruleId": "CFN_CLOUDTRAIL_LOG_VALIDATION",
+      "threat": "Without validation an attacker can tamper with trail logs undetected.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "MEDIUM",
+      "title": "CloudFormation CloudTrail must enable log file validation",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::CloudTrail::Trail",
+        "require": "\"?EnableLogFileValidation\"?\\s*:\\s*\"?true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set EnableLogFileValidation: true on the AWS::CloudTrail::Trail."
+      },
+      "requiredActions": [
+        "Set EnableLogFileValidation: true on the AWS::CloudTrail::Trail."
+      ]
+    },
+    {
+      "ruleId": "CFN_CLOUDFRONT_VIEWER_HTTPS",
+      "threat": "An allow-all behavior serves content and cookies over plaintext.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "MEDIUM",
+      "title": "CloudFormation CloudFront must redirect viewers to HTTPS",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::CloudFront::Distribution",
+        "forbid": "\"?ViewerProtocolPolicy\"?\\s*:\\s*\"?allow-all"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set ViewerProtocolPolicy: redirect-to-https on every cache behavior."
+      },
+      "requiredActions": [
+        "Set ViewerProtocolPolicy: redirect-to-https on every cache behavior."
+      ]
+    },
+    {
+      "ruleId": "CFN_SAGEMAKER_NO_DIRECT_INTERNET",
+      "threat": "Direct internet access is an exfiltration and C2 channel from the VPC.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "MEDIUM",
+      "title": "CloudFormation SageMaker notebook must disable direct internet",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::SageMaker::NotebookInstance",
+        "require": "\"?DirectInternetAccess\"?\\s*:\\s*\"?Disabled"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set DirectInternetAccess: Disabled on the notebook instance."
+      },
+      "requiredActions": [
+        "Set DirectInternetAccess: Disabled on the notebook instance."
+      ]
+    },
+    {
+      "ruleId": "CFN_SAGEMAKER_ROOT_ACCESS",
+      "threat": "Root access lets a user tamper with the notebook instance.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "MEDIUM",
+      "title": "CloudFormation SageMaker notebook must disable root access",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::SageMaker::NotebookInstance",
+        "forbid": "\"?RootAccess\"?\\s*:\\s*\"?Enabled"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set RootAccess: Disabled on the notebook instance."
+      },
+      "requiredActions": [
+        "Set RootAccess: Disabled on the notebook instance."
+      ]
+    },
+    {
+      "ruleId": "CFN_LAMBDA_XRAY",
+      "threat": "Without X-Ray tracing, abuse of a Lambda is harder to detect.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "LOW",
+      "title": "CloudFormation Lambda should enable active tracing",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::Lambda::Function",
+        "require": "TracingConfig"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add TracingConfig: { Mode: Active } to the AWS::Lambda::Function."
+      },
+      "requiredActions": [
+        "Add TracingConfig: { Mode: Active } to the AWS::Lambda::Function."
+      ]
+    },
+    {
+      "ruleId": "CFN_ES_ENCRYPT",
+      "threat": "A legacy Elasticsearch domain without at-rest encryption exposes indexed data.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "HIGH",
+      "title": "CloudFormation Elasticsearch domain must encrypt at rest",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::Elasticsearch::Domain",
+        "require": "EncryptionAtRestOptions"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add EncryptionAtRestOptions: { Enabled: true } to the domain."
+      },
+      "requiredActions": [
+        "Add EncryptionAtRestOptions: { Enabled: true } to the domain."
+      ]
+    },
+    {
+      "ruleId": "CFN_ES_HTTPS",
+      "threat": "Plaintext queries carry credentials without enforced HTTPS.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "MEDIUM",
+      "title": "CloudFormation Elasticsearch domain must enforce HTTPS",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::Elasticsearch::Domain",
+        "require": "\"?EnforceHTTPS\"?\\s*:\\s*\"?true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set DomainEndpointOptions: { EnforceHTTPS: true } on the domain."
+      },
+      "requiredActions": [
+        "Set DomainEndpointOptions: { EnforceHTTPS: true } on the domain."
+      ]
+    },
+    {
+      "ruleId": "CFN_QLDB_DELETION_PROTECTION",
+      "threat": "Disabling deletion protection lets an attacker destroy the immutable ledger.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "MEDIUM",
+      "title": "CloudFormation QLDB ledger must keep deletion protection",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::QLDB::Ledger",
+        "forbid": "\"?DeletionProtection\"?\\s*:\\s*\"?false"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set DeletionProtection: true on the AWS::QLDB::Ledger."
+      },
+      "requiredActions": [
+        "Set DeletionProtection: true on the AWS::QLDB::Ledger."
       ]
     }
   ]
