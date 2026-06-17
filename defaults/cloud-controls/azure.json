@@ -1083,6 +1083,120 @@
       "requiredActions": [
         "Attach a WAF policy (Prevention mode) to the azurerm_application_gateway."
       ]
+    },
+    {
+      "ruleId": "AZURE_MSSQL_MIN_TLS",
+      "threat": "An Azure SQL server allowing TLS 1.0/1.1 exposes database connections to downgrade and known TLS weaknesses.",
+      "frameworks": ["CIS Azure Foundations Benchmark 4.1.x"],
+      "severity": "MEDIUM",
+      "title": "Azure SQL server must require TLS 1.2 minimum",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_mssql_server",
+        "require": "minimum_tls_version\\s*=\\s*\"1.2\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "minimum_tls_version": "\"1.2\"" }
+      },
+      "requiredActions": [
+        "Set minimum_tls_version = \"1.2\" on the azurerm_mssql_server."
+      ]
+    },
+    {
+      "ruleId": "AZURE_REDIS_NO_PUBLIC",
+      "threat": "A Redis cache with public network access is reachable from the internet for brute force and abuse.",
+      "frameworks": ["Microsoft Cloud Security Benchmark NS-2"],
+      "severity": "MEDIUM",
+      "title": "Redis cache should disable public network access",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_redis_cache",
+        "require": "public_network_access_enabled\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "public_network_access_enabled": "false" }
+      },
+      "requiredActions": [
+        "Set public_network_access_enabled = false on the azurerm_redis_cache and use a private endpoint."
+      ]
+    },
+    {
+      "ruleId": "AZURE_STORAGE_CROSS_TENANT_REPLICATION",
+      "threat": "Cross-tenant object replication can move data out to an attacker-controlled tenant.",
+      "frameworks": ["CIS Azure Foundations Benchmark 3.x"],
+      "severity": "LOW",
+      "title": "Storage account should disable cross-tenant replication",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_storage_account",
+        "forbid": "cross_tenant_replication_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "cross_tenant_replication_enabled": "false" }
+      },
+      "requiredActions": [
+        "Set cross_tenant_replication_enabled = false on the azurerm_storage_account."
+      ]
+    },
+    {
+      "ruleId": "AZURE_POSTGRES_NO_PUBLIC",
+      "threat": "A PostgreSQL server with public network access is reachable from the internet for brute force and exploitation.",
+      "frameworks": ["CIS Azure Foundations Benchmark 4.3.x", "Microsoft Cloud Security Benchmark NS-2"],
+      "severity": "MEDIUM",
+      "title": "PostgreSQL server should disable public network access",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_postgresql_server",
+        "require": "public_network_access_enabled\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "public_network_access_enabled": "false" }
+      },
+      "requiredActions": [
+        "Set public_network_access_enabled = false on the azurerm_postgresql_server and use a private endpoint."
+      ]
+    },
+    {
+      "ruleId": "AZURE_MYSQL_NO_PUBLIC",
+      "threat": "A MySQL server with public network access is reachable from the internet for brute force and exploitation.",
+      "frameworks": ["CIS Azure Foundations Benchmark 4.4.x", "Microsoft Cloud Security Benchmark NS-2"],
+      "severity": "MEDIUM",
+      "title": "MySQL server should disable public network access",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_mysql_server",
+        "require": "public_network_access_enabled\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "public_network_access_enabled": "false" }
+      },
+      "requiredActions": [
+        "Set public_network_access_enabled = false on the azurerm_mysql_server and use a private endpoint."
+      ]
+    },
+    {
+      "ruleId": "AZURE_MSSQL_AAD_ONLY",
+      "threat": "Allowing SQL logins alongside Entra ID means a leaked SQL password bypasses centralized identity controls.",
+      "frameworks": ["CIS Azure Foundations Benchmark 4.1.x"],
+      "severity": "LOW",
+      "title": "Azure SQL server should enforce Entra ID-only authentication",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_mssql_server",
+        "require": "azuread_authentication_only\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set azuread_administrator { azuread_authentication_only = true, ... } on the azurerm_mssql_server. Confirm all clients use Entra ID auth before enabling."
+      },
+      "requiredActions": [
+        "Enforce Entra ID-only auth (azuread_authentication_only = true) on the azurerm_mssql_server."
+      ]
     }
   ]
 }

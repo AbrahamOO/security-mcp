@@ -1971,6 +1971,161 @@
       "requiredActions": [
         "Switch the aws_ecs_task_definition off host network mode (prefer awsvpc)."
       ]
+    },
+    {
+      "ruleId": "AWS_AUTOSCALING_LAUNCHCONFIG_IMDSV2",
+      "threat": "Instances launched from a launch configuration without IMDSv2 expose instance-profile credentials to SSRF.",
+      "frameworks": ["AWS FSBP AutoScaling.3", "CIS AWS Foundations Benchmark 5.6"],
+      "severity": "HIGH",
+      "title": "Launch configuration must enforce IMDSv2",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_launch_configuration",
+        "require": "http_tokens\\s*=\\s*\"required\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "metadata_options.http_tokens": "\"required\"",
+          "metadata_options.http_put_response_hop_limit": "1"
+        }
+      },
+      "requiredActions": [
+        "Add metadata_options { http_tokens = \"required\", http_put_response_hop_limit = 1 } to the aws_launch_configuration (or migrate to aws_launch_template)."
+      ]
+    },
+    {
+      "ruleId": "AWS_AUTOSCALING_LAUNCHCONFIG_NO_PUBLIC_IP",
+      "threat": "Auto-assigning public IPs to autoscaled instances places workloads directly on the internet.",
+      "frameworks": ["AWS FSBP AutoScaling.5"],
+      "severity": "MEDIUM",
+      "title": "Launch configuration must not auto-assign public IPs",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_launch_configuration",
+        "forbid": "associate_public_ip_address\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "associate_public_ip_address": "false" }
+      },
+      "requiredActions": [
+        "Set associate_public_ip_address = false on the aws_launch_configuration."
+      ]
+    },
+    {
+      "ruleId": "AWS_ELASTICACHE_SNAPSHOT_RETENTION",
+      "threat": "A Redis replication group without snapshot retention cannot be restored after a destructive event.",
+      "frameworks": ["AWS FSBP ElastiCache.1"],
+      "severity": "LOW",
+      "title": "ElastiCache (Redis) should retain automatic snapshots",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_elasticache_replication_group",
+        "require": "snapshot_retention_limit\\s*=\\s*[1-9]"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "snapshot_retention_limit": "7" }
+      },
+      "requiredActions": [
+        "Set snapshot_retention_limit to at least 1 (e.g. 7) on the aws_elasticache_replication_group."
+      ]
+    },
+    {
+      "ruleId": "AWS_ELB_DESYNC_MITIGATION",
+      "threat": "Permissive desync mitigation lets HTTP request-smuggling payloads pass through the load balancer to backends.",
+      "frameworks": ["AWS FSBP ELB.14"],
+      "severity": "MEDIUM",
+      "title": "Load balancer must not use monitor-only desync mitigation",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_lb",
+        "forbid": "desync_mitigation_mode\\s*=\\s*\"monitor\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": { "desync_mitigation_mode": "\"defensive\"" }
+      },
+      "requiredActions": [
+        "Set desync_mitigation_mode = \"defensive\" (or \"strictest\") on the aws_lb."
+      ]
+    },
+    {
+      "ruleId": "AWS_RDS_CLUSTER_IAM_AUTH",
+      "threat": "Password-only Aurora auth lacks centralized, short-lived IAM credentials; a leaked DB password is standing access.",
+      "frameworks": ["AWS FSBP RDS.10"],
+      "severity": "LOW",
+      "title": "Aurora cluster should enable IAM database authentication",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_rds_cluster",
+        "require": "iam_database_authentication_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set iam_database_authentication_enabled = true on the aws_rds_cluster — confirm clients use IAM auth tokens before enabling (it changes how apps connect)."
+      },
+      "requiredActions": [
+        "Enable IAM database authentication on the aws_rds_cluster where supported."
+      ]
+    },
+    {
+      "ruleId": "AWS_NEPTUNE_IAM_AUTH",
+      "threat": "Without IAM database authentication, Neptune access relies on weaker, longer-lived mechanisms.",
+      "frameworks": ["AWS FSBP Neptune.x"],
+      "severity": "LOW",
+      "title": "Neptune cluster should enable IAM database authentication",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_neptune_cluster",
+        "require": "iam_database_authentication_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set iam_database_authentication_enabled = true on the aws_neptune_cluster — confirm clients use IAM auth first."
+      },
+      "requiredActions": [
+        "Enable IAM database authentication on the aws_neptune_cluster."
+      ]
+    },
+    {
+      "ruleId": "AWS_LAMBDA_CODE_SIGNING",
+      "threat": "Without code signing, tampered or supply-chain-poisoned deployment packages run unchecked.",
+      "frameworks": ["AWS FSBP Lambda.x"],
+      "severity": "LOW",
+      "title": "Lambda function should enforce code signing",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_lambda_function",
+        "require": "code_signing_config_arn"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Create an aws_lambda_code_signing_config (trusted signing profile) and set code_signing_config_arn on the aws_lambda_function."
+      },
+      "requiredActions": [
+        "Attach a code_signing_config_arn to the aws_lambda_function."
+      ]
+    },
+    {
+      "ruleId": "AWS_API_GW_EXECUTION_LOGGING",
+      "threat": "Without stage access logging, API abuse, scraping, and injection attempts go unrecorded.",
+      "frameworks": ["AWS FSBP APIGateway.1"],
+      "severity": "LOW",
+      "title": "API Gateway stage should enable access logging",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_api_gateway_stage",
+        "require": "access_log_settings"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add access_log_settings { destination_arn = <log-group>, format = ... } to the aws_api_gateway_stage."
+      },
+      "requiredActions": [
+        "Enable access_log_settings on the aws_api_gateway_stage."
+      ]
     }
   ]
 }
