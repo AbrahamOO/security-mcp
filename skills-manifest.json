@@ -1,6 +1,6 @@
 {
-  "version": "1.4.0",
-  "updatedAt": "2026-05-29",
+  "version": "1.6.0",
+  "updatedAt": "2026-06-16",
   "baseUrl": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills",
   "skills": {
     "ciso-orchestrator": {
@@ -32,7 +32,7 @@
         "industry vertical APT matching",
         "ghost agent escalation"
       ],
-      "sha256": "c2517b61387d7a8a94352646e290ac788d64fc2fcc972fde98cc2bcc37f01063"
+      "sha256": "2b813e2776b52cd528bee38d572bce54bf7d729cef61ed7d096812024e11ac61"
     },
     "threat-modeler": {
       "version": "1.0.0",
@@ -59,7 +59,7 @@
         "temporal threat evolution",
         "formal verification triggers"
       ],
-      "sha256": "9272bb8e15f5ea803d65d315f68f89ff5e8caf3842c072328049b5009d9d5170"
+      "sha256": "dbdbb89a0e69472e047f686b3deddab4a7d887e8da60daaaa4996fb8561d95b7"
     },
     "stride-pasta-analyst": {
       "version": "1.0.0",
@@ -84,7 +84,7 @@
         "multi-party STRIDE",
         "LINDDUN Pro privacy scoring"
       ],
-      "sha256": "cebf176a40d29d6858b292e1d515e87cfa10d4f118da82b1f184e6dc1d6df348"
+      "sha256": "c0715a143ade6e68be3bd17f79a3a4a12c2c399064251c921bfd72d5135e8b46"
     },
     "attack-navigator": {
       "version": "1.0.0",
@@ -106,7 +106,7 @@
         "detection gap mapping",
         "post-quantum ATT&CK updates"
       ],
-      "sha256": "1a0b22ff671396885ed841cf6ab34c36050d11ff93b09593ff15f36a86c69218"
+      "sha256": "d3c5d1eb9c009033f5ec7aec6e6f964712b436515fc79c9a7be6d9157a8c76dc"
     },
     "business-logic-attacker": {
       "version": "1.0.0",
@@ -135,7 +135,7 @@
         "saga pattern compensation failures",
         "event-driven idempotency gaps"
       ],
-      "sha256": "f24632eeb145393872eff13c6ee0565b2f18ec573279c15fb27f771a98d7fcd4"
+      "sha256": "8d0e4076cc4375b290046628768232e108348916dec41a6393452105b276e13b"
     },
     "privacy-flow-analyst": {
       "version": "1.0.0",
@@ -164,7 +164,7 @@
         "third-party pixel tracking",
         "AI model PII leakage"
       ],
-      "sha256": "8aa8b1501e8e7948dd4fb6aa98ca874706a523d1024b7e8726c305a6932b5863"
+      "sha256": "026a0f1df03d1d92323c104b2306224fcc586e3430ded4186e025c8f1e06780a"
     },
     "appsec-code-auditor": {
       "version": "1.0.0",
@@ -193,7 +193,7 @@
         "compiler/transpiler attack surface",
         "native binding memory safety"
       ],
-      "sha256": "dede1cddaab439aabe186b947265443d872ea680096f732319e119194c0213f4"
+      "sha256": "1f56ebe4a3fba29f3ad51aace4316bef8504800e0744a3f31cabe66e55c9daba"
     },
     "injection-specialist": {
       "version": "1.0.0",
@@ -225,7 +225,7 @@
         "HTTP request smuggling",
         "prototype pollution to privilege escalation"
       ],
-      "sha256": "dc1a485315324e1d78b89360edbe9fa7c66c45fb223ed56df8766426a2fc9303"
+      "sha256": "1f47799096c04abaf0736971895cc4df2931bf218dca981e3fe0b8595a90236b"
     },
     "auth-session-hacker": {
       "version": "1.0.0",
@@ -255,7 +255,7 @@
         "OAuth code reuse",
         "SAML namespace confusion"
       ],
-      "sha256": "646ebb985daccc0f5d58e46ce43fe2a806f42a68cfb62559634ca168297c35d6"
+      "sha256": "b9de0f34109da2c3f9bef07f48fc9d37b48297604020da51ee7aaf6dbb7630ee"
     },
     "logic-race-fuzzer": {
       "version": "1.0.0",
@@ -278,7 +278,7 @@
         "GraphQL subscription races",
         "cache invalidation TOCTOU"
       ],
-      "sha256": "c5587d34a5bd0c3cd45655f7f6eacf87562ac073244098588cceb2adc44b890f"
+      "sha256": "c61dcf321e48bad9c2ab79d7fca6bc7def73c52c51e39d7b0213f742b5196239"
     },
     "serialization-memory-attacker": {
       "version": "1.0.0",
@@ -304,7 +304,7 @@
         "WASM memory safety",
         "native binding buffer overflow"
       ],
-      "sha256": "3884103a72245b9693c71f2fc872aece0b657424c9900f0d813f475ba23a1402"
+      "sha256": "da95ae4c88ada1e9b391374540086123caf462c1038079c6f1b0bb782e8b2b89"
     },
     "cloud-infra-specialist": {
       "version": "1.0.0",
@@ -336,7 +336,7 @@
         "cross-account trust chains",
         "Terraform state exposure"
       ],
-      "sha256": "d33f23bd4856d3c152042cbae24751fc440f364c28305918446369618284f104"
+      "sha256": "9867db8ae7b72b0fef1bd4c180dca0ea002346fe09aaa60b94d8e31cad3e874b"
     },
     "aws-penetration-tester": {
       "version": "1.0.0",
@@ -364,7 +364,7 @@
         "CloudTrail blind spots",
         "cost-based DoS via Lambda amplification"
       ],
-      "sha256": "e9a7550552812f4b2252d6097dfd756deb6facfed8157ffcc628093610623918"
+      "sha256": "4e15e33dc153ea308ff99dee2f29bf3c3684b7b6df88fc5da704e493afa8230b"
     },
     "gcp-penetration-tester": {
       "version": "1.0.0",
@@ -389,7 +389,7 @@
         "BigQuery data exfiltration via authorized view",
         "GCP cost-based DoS"
       ],
-      "sha256": "323aa8edff1956ae1ce307f9dee7046f59942cd5bf37100b9ed24f3ea8ff599d"
+      "sha256": "c038d0a12ba3b801707d2875bd84a856832cab86e29a177b1f69178c256a8be0"
     },
     "azure-penetration-tester": {
       "version": "1.0.0",
@@ -415,7 +415,7 @@
         "Power Automate overprivileged connectors",
         "Teams webhook C2 channel"
       ],
-      "sha256": "d100abd5400052348936f4f66b1e8ca878f7f8aad6265784a7fe8c4a011b4374"
+      "sha256": "d848537d904f40805830a7ae3b96e651ce1f8a3d3ed6702b1a5039dd39bf41fe"
     },
     "k8s-container-escaper": {
       "version": "1.0.0",
@@ -443,7 +443,7 @@
         "CSI driver privilege",
         "eBPF attack surface from observability tools"
       ],
-      "sha256": "705fb7e2528cdf8b9dadca78d02b98bffc23374479e828ef5759118e3c622cc8"
+      "sha256": "67ec1d56b37920adc207dda46c2e37ec4cc07c676f23d85a22e23396b0c66b95"
     },
     "supply-chain-devsecops": {
       "version": "1.0.0",
@@ -473,7 +473,7 @@
         "postinstall script audit",
         "GitHub org-level control gaps"
       ],
-      "sha256": "2dcbe52c3eb9a7e31186f8d9aa8f931ed17ddee4d573b93df05de673e7e0ebc5"
+      "sha256": "cd7be89033bdfcedeaa3340b73a074fa554da07cc53a9e68adb2a4d02db3af3d"
     },
     "dependency-confusion-attacker": {
       "version": "1.0.0",
@@ -499,7 +499,7 @@
         "scoped package namespace squatting",
         "private registry fallback to public"
       ],
-      "sha256": "559e6444c346bba1a4e7de04f302dda71d683d441b74c38138406f99efc260d5"
+      "sha256": "626b1ca4bac311dd5498a280342b01c72b30c1d97bdb8933be05b17e862711fd"
     },
     "cicd-pipeline-hijacker": {
       "version": "1.0.0",
@@ -525,7 +525,7 @@
         "cache poisoning with shared cache keys",
         "deployment gate bypass"
       ],
-      "sha256": "c3a948c5bd40abcdb556110af5863009e94b4786e1d5508e34d5044594a028a8"
+      "sha256": "fe8daa5bc5d29560f16e315302d7da513853101c644d889a3b739e3fafdb2cb1"
     },
     "artifact-integrity-analyst": {
       "version": "1.0.0",
@@ -553,7 +553,7 @@
         "build cache poisoning vs SLSA L3",
         "dependency lifecycle takeover post-pinning"
       ],
-      "sha256": "22f85e57cec1d762d5b49bd389ca42d659a2ea927cbb9ab6ca3c7f3dd73449de"
+      "sha256": "8a9e22cc2f3567c901cf577d30520917ecd6114b98143e5ec03b8acc152e970b"
     },
     "ai-llm-redteam": {
       "version": "1.0.0",
@@ -587,7 +587,7 @@
         "cross-language injection",
         "tool output second-order injection"
       ],
-      "sha256": "2fd2d8755d18727c17b03a58ef0509637c8d9faa4058011515c9b15a74fab61d"
+      "sha256": "06dde131e1f3d77ffd8e598c4f73cda471a697d645bef2f8a7052acab15e79a5"
     },
     "prompt-injection-specialist": {
       "version": "1.0.0",
@@ -614,7 +614,7 @@
         "Base64 encoding bypass",
         "multi-turn context poisoning"
       ],
-      "sha256": "eba3dbf7cffdb03576b917bd156ef2f878bbd4889cfe092608773b89f9e15202"
+      "sha256": "57842e2ee1bc9c2adf62dcf8733366117b1da739e731765ffc17b092082dfb80"
     },
     "model-extraction-attacker": {
       "version": "1.0.0",
@@ -641,7 +641,7 @@
         "model fingerprinting for IP theft",
         "vision model extraction"
       ],
-      "sha256": "1807a8fbdafbf32c52920f2ff2adc74144e047cdbe456b45ed82c063aa81f97d"
+      "sha256": "d09d0558179fedd719183ef1539ce3e650693b55969ee5cc9a983c92751c3038"
     },
     "rag-poisoning-specialist": {
       "version": "1.0.0",
@@ -669,7 +669,7 @@
         "chunking-dependent injection",
         "deferred poisoning triggered by specific queries"
       ],
-      "sha256": "13b1c10cc0f734e7765fa92531974bae89f7e5db6560b359daabdfd06574fe78"
+      "sha256": "1e0961392f1be6e076867cc47fa6956c32a39a7490356982b82d5843cd605346"
     },
     "agentic-loop-exploiter": {
       "version": "1.0.0",
@@ -696,7 +696,7 @@
         "human-in-the-loop UI spoofing",
         "billing DoS via slow infinite loop"
       ],
-      "sha256": "01ae5a99fdfebb10bba16de29c0fc4aa5442b0e317b2f546bea7ef7d7b1882d3"
+      "sha256": "8171cd96309eafd2708e5589deafd3991e2c48ebf752ba996ac56da7484b7d47"
     },
     "mobile-security-specialist": {
       "version": "1.0.0",
@@ -727,7 +727,7 @@
         "backgrounded app screenshot",
         "WebView cookie store inheritance"
       ],
-      "sha256": "c5a503fb8af84562993b4c8b311fa056faa8708cdac90808b1af0fd388aefe5a"
+      "sha256": "186362a512c2c89181a0f24b60ab5cf0f62f5f68203ddf502b4323777134449a"
     },
     "ios-security-auditor": {
       "version": "1.0.0",
@@ -753,7 +753,7 @@
         "SecureEnclave attestation gaps",
         "Universal Link OAuth token theft"
       ],
-      "sha256": "1878777e1fe3c0b19979d0c0d8de5b59b7fde302ae3ce4031e5a2b988764c7e0"
+      "sha256": "0826c438f7bddf4640d4d34ec5f16d9adc5ca64a454db6639596bb40dc5737b2"
     },
     "android-penetration-tester": {
       "version": "1.0.0",
@@ -779,7 +779,7 @@
         "content provider path traversal",
         "in-app purchase client-side validation"
       ],
-      "sha256": "691b4501a432d642b7b524c7e82a652e056504a833022adbc4a962ac1b3447c2"
+      "sha256": "2a41d8f41e2c760a75580227a98d8af9ec4a2d0e81f8b75015afb53d3e128312"
     },
     "mobile-api-network-attacker": {
       "version": "1.0.0",
@@ -804,7 +804,7 @@
         "GraphQL batching DoS from mobile",
         "JWT audience confusion in mobile API context"
       ],
-      "sha256": "fa26a739820c3786ffacfbd2872f30c8a669825009adc258c7d830adf4a65c7a"
+      "sha256": "f82655ed5bf679f1fc2719b224d1a2c9a5832a6d94862f58541c5dbe6f46acec"
     },
     "crypto-pki-specialist": {
       "version": "1.0.0",
@@ -832,7 +832,7 @@
         "JWKS cache race condition",
         "PRNG state after fork()"
       ],
-      "sha256": "710b2df75afc2adca68a4341a912e474495f340dff23155e6df3790ed7c0c277"
+      "sha256": "6ba960dec5edcc058b4c8ffc989379226812c2b3655833963b8312864cc29eeb"
     },
     "tls-certificate-auditor": {
       "version": "1.0.0",
@@ -855,7 +855,7 @@
         "CT log monitoring absence",
         "wildcard certificate scope abuse"
       ],
-      "sha256": "b4bd51d23b08a4d7246d877f224c30f39dcfbf961b775322dcfb48b55cddf79d"
+      "sha256": "834b3726e6d865deccec32c05ae678a3d68a2b3b8cb1ccd6b48f1895e336bbdf"
     },
     "algorithm-implementation-reviewer": {
       "version": "1.0.0",
@@ -885,7 +885,7 @@
         "algorithm agility downgrade attack",
         "FIPS boundary crypto leakage"
       ],
-      "sha256": "0abffc6086e90939c2d136a2396466aa34bc70944205fd3536c713f50836a341"
+      "sha256": "5653bee0dc6442b804cd1111c165a9169da8661f385511eb1d5c179875524d55"
     },
     "key-management-lifecycle-analyst": {
       "version": "1.0.0",
@@ -913,7 +913,7 @@
         "split knowledge control bypass",
         "HSM attestation spoofing"
       ],
-      "sha256": "b5899995c394d7646ab56f96c3ad2da77d767db9794d3b217a6d01524e6a6572"
+      "sha256": "89d7c2aa4639d7b4f1357225d3f59db2fcb320368e75db271f51387b3c76f426"
     },
     "pentest-team": {
       "version": "1.0.0",
@@ -940,7 +940,7 @@
         "persistent access across deployments",
         "covert exfiltration channels"
       ],
-      "sha256": "ffd484157af7284bc7e0a58c73fa0dce7ba58e501a32e328d0764b6f4f535579"
+      "sha256": "6bef18cf1d613919ae4693ba9c6aff7c8f1e4fce940ea3bb1cb7694d4e95dea0"
     },
     "pentest-web-api": {
       "version": "1.0.0",
@@ -963,7 +963,7 @@
         "API gateway bypass via direct backend",
         "webhook SSRF"
       ],
-      "sha256": "68d2c28310a510c413b264b1ddb2698e70d31a009ec9be618cff551737fdffa1"
+      "sha256": "7ec37d668e3109302128e7b7cdcb21826cb7543f5b55e8948588906145188bbf"
     },
     "pentest-infra": {
       "version": "1.0.0",
@@ -989,7 +989,7 @@
         "internal DNS rebinding",
         "container network policy bypass"
       ],
-      "sha256": "9bbc6321f89ebdcfde47cea5065991ee300341342b4be49821f5876a46d46ed2"
+      "sha256": "45bc6665ba3cc0709b72146f4fc2b11d2c7f97a542e618ed850104db1ba87617"
     },
     "pentest-social": {
       "version": "1.0.0",
@@ -1012,7 +1012,7 @@
         "BEC from repo data",
         "hybrid social+technical chains"
       ],
-      "sha256": "e28385640c453f2278126f9bcce85ea95aca7f6c21635270ddb57fcaaf8c87db"
+      "sha256": "3b41cbe0034929bc79e3ff7a8da58c2b22129544f34790099cdc93dfe2732fde"
     },
     "compliance-grc": {
       "version": "1.0.0",
@@ -1038,7 +1038,7 @@
         "evidence artifact staleness",
         "cascading compliance implications"
       ],
-      "sha256": "1242bca63d9590e190f1167c012673077b6267f5b3f309a473e4bcc0233f348d"
+      "sha256": "ce6c92413ecca65baef11fa54614b3dcd17e69c1cf5f7e80879efbb037d008a7"
     },
     "evidence-collector": {
       "version": "1.0.0",
@@ -1066,7 +1066,7 @@
         "SIEM correlation rule blind spots",
         "evidence chain-of-custody gaps"
       ],
-      "sha256": "e71e4a2423dfa55918469b5fb8aa8a8a41309b35ba04ab7e9216f6606acaa917"
+      "sha256": "d3805b3c0b58e4b1cc3309c176f8c4f0adaf20e7688f5bf894c1801c486cf141"
     },
     "compliance-gap-analyst": {
       "version": "1.0.0",
@@ -1088,7 +1088,7 @@
         "compensating control documentation gap",
         "retroactive scope change"
       ],
-      "sha256": "936b477a07b508b7f1b06e391593a0428c01b9f981b5aa737168e93d20998661"
+      "sha256": "11640dc2fa50c3394c1545b2d1cda369039add41c17daaa49b317c8f1fa6cd16"
     },
     "senior-security-engineer": {
       "version": "1.0.0",
@@ -1111,7 +1111,7 @@
         "post-quantum readiness",
         "AI-assisted adversary simulation"
       ],
-      "sha256": "cfee2ad89588ef7240b97c73c1a28b73ae8b0d6ab27e1be64caa19f656c54bbb"
+      "sha256": "454e7491d88d5792e6f41629b20a5625082f7c569cf4e916bd8e13aeaaf18d55"
     },
     "linddun-privacy-analyst": {
       "version": "1.0.0",
@@ -1139,7 +1139,7 @@
         "non-obvious PII in aggregate analytics",
         "data minimization violations in third-party SDK calls"
       ],
-      "sha256": "d0ccb13899661c9b47a98797237c8909f56166f92dda9945d02bd34b6b898b40"
+      "sha256": "642a1f8bcfc7980d3b10918276eba8c6a2b5f923da309d7672dea18cf0b859a8"
     },
     "dread-scorer": {
       "version": "1.0.0",
@@ -1161,7 +1161,7 @@
         "reproducibility underestimation for scripted attacks",
         "affected-user scope miscalculation for B2B tenants"
       ],
-      "sha256": "180cfcf081be8f6ff381475888c066ffc43a98775a391abd0f6b2d51976ccdef"
+      "sha256": "b445037e39b723d62af0050c1c449e65db4f2ab1df6c13b8502938a307aa5ffe"
     },
     "trike-risk-modeler": {
       "version": "1.0.0",
@@ -1183,7 +1183,7 @@
         "indirect asset access via delegation chains",
         "risk score drift when asset criticality changes"
       ],
-      "sha256": "1d18b6681bd38e00253482db2e7e7e9fc9289422d19928c77f7c9bec89f532ac"
+      "sha256": "805f9c3917501818adec48e413b17ab1de6804d733bc857c3641f3ef0cc62a61"
     },
     "capec-code-mapper": {
       "version": "1.0.0",
@@ -1205,7 +1205,7 @@
         "framework-specific CAPEC variants",
         "CAPEC patterns emerging from third-party library behavior"
       ],
-      "sha256": "d7a7d2fe06cc4bd481a9eb33e989718f57583853a76ef16347590b15ef427d68"
+      "sha256": "682e3e3d3d6293bbb92ebbf4ddc4c9cbf053ac6a6b757e0a77fb096beed1f60d"
     },
     "samm-assessor": {
       "version": "1.0.0",
@@ -1227,7 +1227,7 @@
         "maturity gaps specific to ML/AI pipelines",
         "cross-practice dependency failures blocking level advancement"
       ],
-      "sha256": "9cec9007037326193ed5d909a720be2f1397c084684eda02ac40a45fec514db3"
+      "sha256": "d105f207d621ac25d2cf6a6e75ce57b81c96bb55d487e66dcdd2a1aad618c481"
     },
     "csa-ccm-mapper": {
       "version": "1.0.0",
@@ -1256,7 +1256,7 @@
         "SaaS-layer controls beyond IaaS CCM scope",
         "CCM control inheritance confusion in multi-tenant cloud"
       ],
-      "sha256": "cd30d72ea3cf98b79da2a6e3a669bf2e3be50638bcda4f5dadf3325c10dd6a0b"
+      "sha256": "4559ea6a7eda575fd4ae6a4592ba7a8c1c19a2768ebe46c110199482464b3177"
     },
     "csf2-governance-mapper": {
       "version": "1.0.0",
@@ -1278,7 +1278,7 @@
         "cross-function dependencies missed by point-in-time assessments",
         "supply chain risk management gaps in CSF Identify tier"
       ],
-      "sha256": "bcf96cd2fd0bfa155c543c5f305358474f037aa92a8a59e00025aba1b6600332"
+      "sha256": "8173d6a7d90e9e06bf2a36d1fb945793d91f1dd1f04b6382b3feddb0489af68e"
     },
     "compliance-lifecycle-tracker": {
       "version": "1.0.0",
@@ -1301,7 +1301,7 @@
         "evidence freshness invalidation from infrastructure changes",
         "cascading compliance drift from third-party vendor updates"
       ],
-      "sha256": "81f190d9d5a8b7bd95ef24c1aaebb9ccd7831bf85c73fef7c2a9c222daa98b1d"
+      "sha256": "d05215b1d79574db2dfac9833b0723ae74e1719f1d48fb6e38b0607f842c4eea"
     },
     "quantum-migration-planner": {
       "version": "1.0.0",
@@ -1330,7 +1330,7 @@
         "hybrid PQC/classical negotiation downgrade",
         "FIPS 140-3 module certification lag for PQC algorithms"
       ],
-      "sha256": "65e2ed17eb0c6a6fd63564bcc844a7b3b28f8d9465bfd5fad0e7dc3b8f1e74e1"
+      "sha256": "7dd33727b631110e4ba14467082a69dd1a0732c8360ad78af287b213ca17b85e"
     },
     "iam-privesc-graph-builder": {
       "version": "1.0.0",
@@ -1358,7 +1358,7 @@
         "time-limited permission grants creating persistent escalation windows",
         "Terraform module inheritance granting unintended permissions"
       ],
-      "sha256": "c4041d924274a15d04a9ebe5261cf787707b8c014210456f40beeb88064361ea"
+      "sha256": "bef63f526699c3df91385aa6e1570fea9cb7ab79b52cd305bcf14cebbdf5132d"
     },
     "git-history-secret-scanner": {
       "version": "1.0.0",
@@ -1385,7 +1385,7 @@
         "secrets introduced in squash-merge commits",
         "partial secret exposure across multiple historical commits"
       ],
-      "sha256": "a3f28b5d0646a485697ffbbfd92b217cbd1fb256c774357f9225c93d3c067a55"
+      "sha256": "d64b6d3437c08d5b34670efa6fd091bd400d370071322a50d1b3e43cdc084a17"
     },
     "device-integrity-aggregator": {
       "version": "1.0.0",
@@ -1411,7 +1411,7 @@
         "integrity check bypass via Frida hooking",
         "server-side trust of client integrity attestation without nonce binding"
       ],
-      "sha256": "adf5067d712e4bc7434dfce5e381aa160ebc0a4e0eea96e1c1ef66b82aa017fe"
+      "sha256": "9d49230d0b362fa904430ed2fcaffad94676dbee50735760027499217b686b52"
     },
     "kill-switch-engineer": {
       "version": "1.0.0",
@@ -1433,7 +1433,7 @@
         "circuit breaker state race during cascading failure",
         "kill switch gap in async worker queues not reading flag"
       ],
-      "sha256": "e8c30d3217b23e37068d6c827434cb319e7174c6b7ed79f534df35e123809904"
+      "sha256": "f7487e3878dbd85c642bee3ebbdf626c4fe6c54352357c9888d9149fc7e3121f"
     },
     "incident-responder": {
       "version": "1.0.0",
@@ -1455,7 +1455,7 @@
         "containment actions triggering compliance notification deadlines",
         "forensic evidence destruction during rushed containment"
       ],
-      "sha256": "4ab40a1cc72e45038d034f6a65bae7fa30d8d9f81675b7c0539234c85efe2bcc"
+      "sha256": "526714887a492c13649559cffe39eafa4586e9d222dc8bc6b24e4a971ab22db4"
     },
     "rotation-validation-agent": {
       "version": "1.0.0",
@@ -1482,7 +1482,7 @@
         "rotation failure leaving system in degraded-auth state",
         "JWT signing key rotation without JWK cache invalidation"
       ],
-      "sha256": "b8d94660c5d82d5cdb4c3f95945004806af1da694a75d651cf09caafbd16b14f"
+      "sha256": "fd647bf9549b3503719f61d9ee5d7c1a4ad2733164c73cb3c96fd18aac44f6db"
     },
     "registry-mirror-enforcer": {
       "version": "1.0.0",
@@ -1508,7 +1508,7 @@
         "registry mirror trust chain validation absence",
         "image tag mutability enabling silent replacement attacks"
       ],
-      "sha256": "98ce5f944ce823fb771c1de2e0fcea15ecc7e2d1508b7084f02484ca6a97f1d5"
+      "sha256": "4b75efd170d4815c309d777cc218c3df6819e84ae39227917c9a9b9e113332c4"
     },
     "slsa-level3-enforcer": {
       "version": "1.0.0",
@@ -1534,7 +1534,7 @@
         "provenance attestation gaps for matrix build jobs",
         "two-party review bypass via force-push to protected branch"
       ],
-      "sha256": "98d1f70f28dd2c699d5e02755aa4cb76149edd299efe0bda2a869b67601e1e92"
+      "sha256": "605067eb9217d7cbe9191bad61f9e1c5a16cead7fbe6250ef16d016304efba5d"
     },
     "slsa-provenance-enforcer": {
       "version": "1.0.0",
@@ -1560,7 +1560,7 @@
         "provenance metadata spoofing via workflow injection",
         "reproducibility breakage from timestamp-sensitive build steps"
       ],
-      "sha256": "154ad8ebcebaea60b8e8b76713bcfb3e3d5932edeccf3c531d08299905d5ef5b"
+      "sha256": "c4961a9306abf1fc92d034a1ff88a37aa1d9a485b8f87838719c5f719d28e559"
     },
     "threat-infrastructure-analyst": {
       "version": "1.0.0",
@@ -1582,7 +1582,7 @@
         "legitimate cloud services used as C2 relay",
         "threat actor infrastructure reuse across campaigns enabling false attribution"
       ],
-      "sha256": "08cc36251d9c9392679478804462b38448ff3f42ff69b26d5d4ba42ecd6ea82e"
+      "sha256": "62588258d010c348b2d0d401f52f3ebc15a6468ef0b8576798dcab98bada3551"
     },
     "zero-trust-architect": {
       "version": "1.0.0",
@@ -1610,7 +1610,7 @@
         "service mesh mTLS exemption scope creep",
         "device trust signal freshness gaps during long-lived sessions"
       ],
-      "sha256": "e166df93256c064487b9e55fedb911fd55e3cc931ad8c777bba7c7864a41aa85"
+      "sha256": "74885adb5b7d78d63900a7b71dbec45de5960189f4742604a18d6636f21b64d6"
     },
     "egress-policy-enforcer": {
       "version": "1.0.0",
@@ -1637,7 +1637,7 @@
         "DNS-over-HTTPS tunneling bypassing DNS egress controls",
         "SSRF to cloud metadata triggering credential exfiltration chain"
       ],
-      "sha256": "f0aba91d868c818aebb96a9ea3315d9cb324c19006932bf3c187c76297c24edf"
+      "sha256": "a41df4d678d76914d7f59433be3fbffe1399db1da850c41129f9ed727040c929"
     },
     "binary-auth-validator": {
       "version": "1.0.0",
@@ -1663,7 +1663,7 @@
         "BinAuthZ allowlist drift from image digest mutation",
         "OPA policy conflict resolution allowing unexpected admission"
       ],
-      "sha256": "d24b9bd82255ea3772d3ff5796da3cde868cf95991556729ddb6cb5799abc835"
+      "sha256": "12ec6ceb8a9fa80d28c4d5cdefea635797b5b22daaae7c477948406cfcc6cd52"
     },
     "ai-model-supply-chain-agent": {
       "version": "1.0.0",
@@ -1691,7 +1691,7 @@
         "model weight watermark detection for IP theft",
         "fine-tuning data poisoning surviving safety alignment"
       ],
-      "sha256": "efe35217a65fb6a155632ab6670db61c5eb1670dfd6fb3e20c262783ad947171"
+      "sha256": "110381cc61db53ba97483973a6faf56042977b004b4016a90447e885673ca547"
     },
     "cert-pin-rotation-specialist": {
       "version": "1.0.0",
@@ -1718,7 +1718,7 @@
         "multi-certificate CA rollover creating pin mismatch window",
         "OTA config delivery failing silently when network is restricted"
       ],
-      "sha256": "ec1a62fc9b5b38cf83ed21dfd81d236b4cc5b0dab90486186627e0f0fd36b27b"
+      "sha256": "c8839bcace4f390cb029a077b7f176e0ce5386a318b10f5437ddc97d0598a687"
     },
     "bot-detection-specialist": {
       "version": "1.0.0",
@@ -1746,7 +1746,7 @@
         "bot fingerprint evasion via residential proxy rotation",
         "behavioral biometric spoofing using ML-generated mouse movement"
       ],
-      "sha256": "dfa721e6cf2ed749cf5ceb45c127da7444a47759999eee0f912db6071d806ee3"
+      "sha256": "d67ae7c9d7e2ba47a5f32f5f903dd08df1d9763fac256076b29167e2bd2247c3"
     },
     "advanced-dos-tester": {
       "version": "1.0.0",
@@ -1773,7 +1773,7 @@
         "Lambda/cloud function cost DoS via request amplification",
         "QUIC amplification via Initial packet flooding"
       ],
-      "sha256": "e17bed524622f28acb075986535a1bf28b09a48802477d594b4b46e893e22c53"
+      "sha256": "b61315f4ad397922ca391b626e4a244a2daef2b323d8c12db00772a2b9d58d7f"
     },
     "dos-resilience-tester": {
       "version": "1.0.0",
@@ -1800,7 +1800,7 @@
         "ReDoS in user-supplied regex patterns",
         "WebSocket connection exhaustion bypassing HTTP rate limits"
       ],
-      "sha256": "9b7ad2624e5f22f530bad3f03a372209157e94a75c7721744676a33e9832541f"
+      "sha256": "bec4f680cc0a74f34e7704e83fbc0057602a8d3bd8ccee3c38492739c66f9db9"
     },
     "anti-replay-tester": {
       "version": "1.0.0",
@@ -1827,7 +1827,7 @@
         "nonce store not replicated across nodes allowing cross-node replay",
         "signed URL replay after path-normalization differences"
       ],
-      "sha256": "f4aede47572c09f2169110cb477f6dc3cf50b80aaaf58e0e33ad26da159627e2"
+      "sha256": "a472681e7bcd44900dc0825e9d4737327024aec8fa4f87de2a16179360499fb7"
     },
     "file-upload-attacker": {
       "version": "1.0.0",
@@ -1855,7 +1855,7 @@
         "ZIP slip in server-side extraction of user-uploaded archives",
         "SVG XSS surviving sanitization via foreignObject element"
       ],
-      "sha256": "37d7ecaed9dd68db01ad0dfd192ba102381e423baedd96d6f8553235d5e51808"
+      "sha256": "b834ba474ccdfe5baea75536204ded40ba9b739e4877e9e79f73534c09408e51"
     },
     "credential-stuffing-specialist": {
       "version": "1.0.0",
@@ -1883,7 +1883,7 @@
         "account enumeration via timing differences in login response",
         "credential stuffing via OAuth password grant surviving MFA bypass"
       ],
-      "sha256": "2d21d464849386a61ea4e10ab9363dedcd72e4af29db631e6ef93f314163839b"
+      "sha256": "d754da505ee5efa518a6706067a32bbb56b88bf860f1a54e31e426291be389ab"
     },
     "deep-link-fuzzer": {
       "version": "1.0.0",
@@ -1910,7 +1910,7 @@
         "Universal Link AASA file validation bypass on old iOS",
         "intent redirection via nested deep link in push notification"
       ],
-      "sha256": "23e974ff86e9e47ea5e8bb8618670171451bdae14d4a5391a9d0e4347f9c5ddd"
+      "sha256": "3c1bdac6c7e4fc2ef80f099bf6fd489b3376023ca919f4c61e4b2483a72342ff"
     },
     "json-ambiguity-tester": {
       "version": "1.0.0",
@@ -1938,7 +1938,7 @@
         "number precision loss enabling price rounding exploit",
         "prototype pollution via JSON merge patch operations"
       ],
-      "sha256": "c68638bfe1d6960598e523d34305deb77afcb15a327d8178c90c18f9dcc48813"
+      "sha256": "839110f3e27455d02aff1ab147c3f98ac508ed96908d6f9e006614186d495add"
     },
     "multipart-abuse-tester": {
       "version": "1.0.0",
@@ -1964,7 +1964,7 @@
         "field count limit bypass via multipart re-packing",
         "nested multipart content-type confusion enabling WAF bypass"
       ],
-      "sha256": "e958df1395755ecccd437dfba8bcc407fc1bec7880adcb5a01d71ac94b54050e"
+      "sha256": "b668194df8744b586cc1a5db3dd6909d8ecb7b0a1e09f3152ce82fd4a0ba4d83"
     },
     "oauth-pkce-specialist": {
       "version": "1.0.0",
@@ -1993,7 +1993,7 @@
         "state parameter CSRF bypass via fragment identifier",
         "refresh token scope elevation across OAuth server versions"
       ],
-      "sha256": "5d02afde66a899641ef519837454b4626ee3895c2726580ebd3e2a5be3c43eb2"
+      "sha256": "55d9a5153afb8e4945056ea607cb39d02111fb63e02f6637b7c79de7765c4a0a"
     },
     "parser-exhaustion-tester": {
       "version": "1.0.0",
@@ -2021,7 +2021,7 @@
         "XML bomb surviving SAX streaming parser limits",
         "YAML alias bomb in CI configuration files"
       ],
-      "sha256": "70b62feb7819bc31430dbc40882fc6ee315d314287388957363df93000b837d2"
+      "sha256": "f84860a37dfc36766a98255bf2c469abdaed6839963a691a2e9da6cadcf2b88f"
     },
     "secrets-mask-bypass-tester": {
       "version": "1.0.0",
@@ -2048,7 +2048,7 @@
         "secrets split across structured log fields evading pattern match",
         "error stack traces exposing environment variables bypassing mask"
       ],
-      "sha256": "00a643e6ca97999a3757d1b3d855790f472a5bebf502746cadf9e2f0580198d4"
+      "sha256": "b996dbf039ad14b495fe6d7d0aebec4003d21ea512a93696fb671c0f95b99d13"
     },
     "session-timeout-tester": {
       "version": "1.0.0",
@@ -2075,7 +2075,7 @@
         "session sliding window reset via background API calls",
         "concurrent session limit bypass via parallel login race"
       ],
-      "sha256": "41f06e08736a7863a51cf5a41e12a7f3ea641c68aef4da903248774714fbba98"
+      "sha256": "4ba687f2d6b8811306f184a6ac946c32c69b024bc15d4a754ed4c82a05cb6299"
     },
     "ssrf-detection-validator": {
       "version": "1.0.0",
@@ -2105,7 +2105,7 @@
         "DNS rebinding SSRF surviving URL validation at bind time",
         "blind SSRF exfiltration via DNS lookup timing"
       ],
-      "sha256": "5f721eab172d82d8d82e1910be56c3fd09319eeea4622b65dcc2982a08a605a0"
+      "sha256": "5ec5a1cf556ff7efdd7f116987315dc0dbbfa2c522c0450eb4fb763132517c52"
     },
     "step-up-auth-enforcer": {
       "version": "1.0.0",
@@ -2133,7 +2133,7 @@
         "step-up challenge replay within validity window",
         "MFA fatigue attack on step-up prompts for bulk operations"
       ],
-      "sha256": "6e93c14304a3dbc7155ed2261e3b667d0f998ad1c3a7b0f24d648e454479f2ae"
+      "sha256": "b6d36d9f93f64cfb1ed20f76bd8b443fbdd54a6a67045013cf85b8ddccb6bfa1"
     },
     "token-reuse-detector": {
       "version": "1.0.0",
@@ -2160,7 +2160,7 @@
         "token family invalidation missing from federated identity provider",
         "API key reuse detection gap when key shared across microservices"
       ],
-      "sha256": "4078a2cc3ff33be2a4d9499ade9c2ec178b2aea1cb4667fe785576cf1c991525"
+      "sha256": "7c5576e053d1cd486e05afe78cc261540bc01220fd6f9948935219e0ce0d75cf"
     },
     "unicode-homograph-tester": {
       "version": "1.0.0",
@@ -2182,7 +2182,7 @@
         "BiDi text injection in audit logs creating misleading trail",
         "normalization form mismatch between validation and storage enabling bypass"
       ],
-      "sha256": "3c6b981f4de672c4bd8f0f5b16a2fbd930fd5f194a7724b69dde58d2e722804c"
+      "sha256": "5ad1b4e39a7c84d237acd77a7d49d3230117a464293d57645cc357ebcb66b925"
     },
     "waf-rule-lifecycle-agent": {
       "version": "1.0.0",
@@ -2209,7 +2209,7 @@
         "rule bypass using HTTP parameter pollution",
         "WAF evasion via content-type switching to non-monitored format"
       ],
-      "sha256": "29fb4409e9713c64007eb5ca7981a7f8702e3258e9532082507f58ffad6e9cf6"
+      "sha256": "5540a53d3c37361d1859b774ce492514728b40aac63bc60711026e8333808ec8"
     },
     "webhook-security-tester": {
       "version": "1.0.0",
@@ -2236,7 +2236,7 @@
         "signature timing attack via non-constant-time comparison",
         "webhook delivery retry storm enabling DoS amplification"
       ],
-      "sha256": "8317e88b06b154bde8ee8197c778e5eab00faa388d754cd71c828ac08b9ccac6"
+      "sha256": "e11fb16eb9488f4191f9836234cec5d8a2e5f3008aca2ff6102c8caf9debaee8"
     },
     "mobile-binary-hardener": {
       "version": "1.0.0",
@@ -2263,7 +2263,37 @@
         "ASLR entropy reduction on 32-bit Android enabling brute-force",
         "anti-tamper check bypassed via binary patching without checksum validation"
       ],
-      "sha256": "f62051bab8ab526e202e8964c4b1b009a2cc8a83c168c1d5642e2ca32d959e3b"
+      "sha256": "2ca6823a9455f740eac3e7e1ea483d98a0ab97b82a3497f3c8e73f7c4ab93031"
+    },
+    "agentic-instruction-auditor": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/agentic-instruction-auditor/SKILL.md",
+      "description": "Bad-actor Skills / agentic-instruction threat auditor. Adversarially reviews SKILL.md, .claude, CLAUDE.md, AGENTS.md, .cursorrules, .mcp.json, copilot-instructions for prompt-override, exfiltration, tool-poisoning, persistence, hidden-character, credential-harvest, and memory-poisoning payloads — including multi-file and encoded injection chains.",
+      "userInvocable": true,
+      "phase": 2,
+      "subAgents": [],
+      "routingTriggers": [
+        "SKILL.md",
+        ".claude",
+        "CLAUDE.md",
+        "AGENTS.md",
+        ".cursorrules",
+        ".mcp.json",
+        "copilot-instructions"
+      ],
+      "detectionSignals": [
+        "instruction override in agent files",
+        "data exfiltration directive",
+        "MCP tool description poisoning",
+        "hidden / zero-width instruction smuggling",
+        "skill persistence backdoor"
+      ],
+      "edgeCaseDomains": [
+        "cross-file injection chain split across CLAUDE.md and .mcp.json",
+        "base64-in-base64 and Trojan-Source bidi payloads in instruction files",
+        "conditional / time-delayed triggers gated on branch, date, or CI"
+      ],
+      "sha256": "6e77cb54dfcce2aafee2fa2dad592bde280ae9087f251846235140f235d1c01e"
     },
     "mobile-webview-auditor": {
       "version": "1.0.0",
@@ -2290,7 +2320,134 @@
         "file:// access enabling local file theft via XSS in loaded content",
         "WebView cookie store inheritance leaking auth cookies to third-party content"
       ],
-      "sha256": "029acff583aef884f627cdc56a756fb91fb8edb830c5fd698b9f9fd2abb858ad"
+      "sha256": "0ef56c58fda4eb6f2894e4ddb9ce764cc3d544efc44730e403ec2e7768f5dbbb"
+    },
+    "iac-security-auditor": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/iac-security-auditor/SKILL.md",
+      "description": "Infrastructure-as-Code security auditor. Terraform, CloudFormation, AWS CDK, Azure Bicep/ARM, Pulumi, Ansible. Backs the checkIac detection module.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": [],
+      "routingTriggers": [
+        ".tf",
+        ".tfvars",
+        "terraform",
+        "cloudformation",
+        "template.yaml",
+        ".bicep",
+        "Pulumi.yaml",
+        "playbook.yml"
+      ],
+      "detectionSignals": [
+        "insecure terraform state backend",
+        "unpinned module/provider source",
+        "provisioner command execution",
+        "hardcoded IaC secrets",
+        "public CloudFormation resources",
+        "over-privileged IaC IAM"
+      ],
+      "edgeCaseDomains": [
+        "tfstate credential exfiltration from git history",
+        "mutable module ref supply-chain hijack",
+        "CloudFormation/CDK escape hatches granting wildcard IAM",
+        "Bicep/ARM public-network defaults"
+      ],
+      "sha256": "115b6344551808e5f6f41293622cef18e2023aa8cb12bf619bb0c3b336dad254"
+    },
+    "gitops-delivery-auditor": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/gitops-delivery-auditor/SKILL.md",
+      "description": "GitOps / continuous-delivery security auditor. Argo CD, Argo Rollouts, ApplicationSets, Flux CD, Helm, Kustomize. Backs the checkGitOps detection module.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": [],
+      "routingTriggers": [
+        "argocd",
+        "Application",
+        "AppProject",
+        "ApplicationSet",
+        "flux",
+        "Kustomization",
+        "HelmRelease",
+        "kustomization.yaml"
+      ],
+      "detectionSignals": [
+        "auto-sync of mutable/unverified source",
+        "unrestricted AppProject",
+        "plaintext Secret in Git",
+        "config-management-plugin RCE",
+        "weak Argo RBAC",
+        "unverified Flux source"
+      ],
+      "edgeCaseDomains": [
+        "ApplicationSet generator injection creating arbitrary apps",
+        "Kustomize load-restrictor path traversal",
+        "Helm post-renderer exec",
+        "Flux postBuild substituteFrom injection"
+      ],
+      "sha256": "bd5bf72f5f3d04e5cb8a034b60cf45b20982d762bb7f038e64b6a3fe6c72ef5e"
+    },
+    "data-platform-auditor": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/data-platform-auditor/SKILL.md",
+      "description": "Data-platform security auditor for Databricks and Snowflake. Grants, network policies, credentials, isolation, masking. Backs the checkDataPlatform detection module.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": [],
+      "routingTriggers": [
+        "databricks",
+        "dbutils",
+        "snowflake",
+        "ACCOUNTADMIN",
+        "NETWORK POLICY",
+        "Unity Catalog",
+        "profiles.yml"
+      ],
+      "detectionSignals": [
+        "hardcoded PAT or connection secret",
+        "weak cluster/warehouse isolation",
+        "over-privileged grants",
+        "open or missing network policy",
+        "untrusted init script or external stage",
+        "missing masking/governance"
+      ],
+      "edgeCaseDomains": [
+        "Databricks no-isolation shared cluster RCE",
+        "Snowflake ACCOUNTADMIN grant in migration script",
+        "external stage with inline cloud credentials",
+        "EXECUTE AS OWNER privilege escalation"
+      ],
+      "sha256": "d419a3bfd63cfba2894908c11d4ea51c6ad382437b06bd2a87d0cf49cfbc8c4a"
+    },
+    "container-hardening-auditor": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/container-hardening-auditor/SKILL.md",
+      "description": "Container image and runtime hardening auditor. Dockerfiles and docker-compose deep checks complementing runtime.ts. Backs the checkDockerDeep detection module.",
+      "userInvocable": false,
+      "phase": 1,
+      "subAgents": [],
+      "routingTriggers": [
+        "Dockerfile",
+        "docker-compose",
+        "compose.yaml",
+        ".dockerfile"
+      ],
+      "detectionSignals": [
+        "unpinned/mutable base image",
+        "build-time pipe-to-shell RCE",
+        "secrets baked into ARG/ENV/layers",
+        "TLS verification bypass",
+        "host namespace/capability escalation",
+        "exposed Docker daemon TCP"
+      ],
+      "edgeCaseDomains": [
+        "multi-stage secret copy into final image",
+        "ARG token extraction via docker history",
+        "compose cap_add + host namespace escape",
+        "bind-mounted docker socket / host-sensitive paths"
+      ],
+      "sha256": "d8920820e972666763caf8a6f04b77acfe84453017c990e7d38c329eadbfa3f3"
     }
   }
 }

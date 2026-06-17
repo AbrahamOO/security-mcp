@@ -1,0 +1,3 @@
+config:
+  myapp:dbPassword: PlaintextDbPass123
+  myapp:apiSecret: hunter2plaintextsecret

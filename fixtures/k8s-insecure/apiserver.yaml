@@ -1,0 +1,22 @@
+# INSECURE FIXTURE — kube-apiserver static pod with insecure flags
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kube-apiserver
+  namespace: kube-system
+spec:
+  containers:
+    - name: kube-apiserver
+      image: registry.k8s.io/kube-apiserver:v1.27.0
+      command:
+        - kube-apiserver
+        - --authorization-mode=AlwaysAllow
+        - --insecure-port=8080
+        - --insecure-bind-address=0.0.0.0
+        - --anonymous-auth=true
+    - name: etcd
+      image: registry.k8s.io/etcd:3.5.9
+      command:
+        - etcd
+        - --client-cert-auth=false
+        - --listen-client-urls=http://0.0.0.0:2379

@@ -1,0 +1,59 @@
+# Fixture: Round-2 Dockerfile depth checks.
+
+# 24. base image from self-hosted registry with explicit host:port
+FROM registry.internal:5000/base/img:1.0 AS builder
+
+# 13. TLS/cert verification disabled
+ENV NODE_TLS_REJECT_UNAUTHORIZED=0
+ENV PYTHONHTTPSVERIFY=0
+ARG GIT_SSL_NO_VERIFY=1
+
+# 14. insecure package managers
+RUN pip install --trusted-host pypi.example.com requests
+RUN pip install --index-url http://pypi.internal/simple flask
+RUN npm install --unsafe-perm
+RUN npm install --registry http://registry.internal/
+RUN apk add curl bash
+
+# 15. deprecated/unverified key trust
+RUN apt-key adv --keyserver keyserver.ubuntu.com --recv-keys ABCDEF
+RUN gpg --keyserver hkp://keys.example.com --recv-keys 1234
+
+# 16. insecure download flags
+RUN wget --no-check-certificate https://example.com/file
+RUN curl -k https://example.com/installer -o /usr/local/bin/tool
+RUN curl --insecure https://example.com/x
+
+# 18. RUN consumes a token env without a secret mount
+RUN echo "auth" && npm config set //registry/:_authToken=${NPM_TOKEN}
+RUN DEPLOY_PASSWORD=$DEPLOY_PASSWORD ./deploy.sh
+
+# 22. download to /tmp then execute
+RUN curl -sSL https://example.com/x -o /tmp/inst && chmod +x /tmp/inst && /tmp/inst
+
+# 21. workdir root + write into ssh dir
+WORKDIR /
+COPY id_rsa /root/.ssh/id_rsa
+RUN cp config /etc/ssh/sshd_config
+
+# 25. broad chown -R + setuid bit
+RUN chown -R root:root /app
+RUN chmod u+s /usr/bin/custom-tool
+RUN chmod 4755 /usr/bin/other-tool
+
+# 23. ONBUILD trigger
+ONBUILD COPY . /app
+
+# 19. EXPOSE SSH
+EXPOSE 22
+
+# ---- final stage ----
+FROM registry.internal:5000/base/img:1.0
+
+# 17. multi-stage COPY --from of a secret/credential file
+COPY --from=builder /build/secrets/service.key /app/service.key
+COPY --from=builder /build/.npmrc /root/.npmrc
+
+# 20. shell-form ENTRYPOINT/CMD
+ENTRYPOINT node server.js
+CMD npm start

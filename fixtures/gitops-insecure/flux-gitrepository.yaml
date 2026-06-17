@@ -1,0 +1,23 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: app-repo
+  namespace: flux-system
+spec:
+  interval: 1m
+  url: https://github.com/untrusted-org/app
+  ref:
+    branch: main
+  insecure: true
+---
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: OCIRepository
+metadata:
+  name: app-oci
+  namespace: flux-system
+spec:
+  interval: 5m
+  url: oci://registry.example.com/app
+  ref:
+    tag: latest
+  insecure: true

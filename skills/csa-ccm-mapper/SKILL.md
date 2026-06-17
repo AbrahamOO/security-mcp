@@ -47,6 +47,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The full suite of detection modules in `src/gate/checks/` (especially `infra.ts`, `iac.ts`, `crypto.ts`, and `gitops.ts`) is the evidence source you map onto CCM v4 control specifications — your deterministic floor, not your ceiling. Treat their finding IDs as the raw evidence behind each CCM control, then reason past what single-line/single-file pattern matching can see to catch control gaps no single check encodes — and APPLY the fix (Edit the IaC/policy/assessment doc), not just advise:
+
+- **Cross-file / cross-finding reasoning the regex can't do:** map one finding to many CCM domains at once — an `iac.ts` cross-account `sts:AssumeRole` wildcard is simultaneously STA-04 (supply chain) and IAM-09 (least privilege); a plaintext `terraform.tfstate` is GRC-03 + CEK-02 — gaps invisible to any single-control scan.
+- **Semantic / effective-state analysis:** adjudicate whether a control is *implemented*, *partial*, or *missing* based on effective posture across IaC + GitOps drift, not the declared config — e.g. CEK-09 key rotation "enabled" but with no monitored schedule is PARTIAL, not implemented.
+- **External corroboration:** WebSearch/WebFetch for the current CCM v4 spec, runc/HTTP-2 and container-runtime CVEs, CSA STAR registry guidance, and FIPS 203 PQC migration for CEK quantum-readiness columns.
+- **Apply & prove:** write the hardened IaC + the CCM→ISO/SOC2/PCI assessment evidence inline, re-run the relevant `src/gate/checks/` modules as the regression floor that re-evidences each CCM control, then re-audit semantically; emit the LEARNING SIGNAL per fix and surface trade-offs with the secure default.
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

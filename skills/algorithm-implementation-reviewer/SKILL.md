@@ -34,6 +34,15 @@ Any use of the following in any context, even non-security uses:
 - `RSA PKCS#1 v1.5` padding — PKCS#1 oracle attacks; use OAEP; CWE-780
 - `Math.random()` for any security-sensitive value — not cryptographically random; CWE-338
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `crypto` detection module (`src/gate/checks/crypto.ts`) is your deterministic floor, not your ceiling. Treat its finding IDs as the minimum, then reason past what single-line/single-file pattern matching can see — and APPLY the fix (Edit the crypto code), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** an AES-GCM nonce that looks random at the call site but is derived from a counter persisted in another module (or absent in a serverless deployment) reuses under the same key — catastrophic GCM nonce reuse that grepping the `randomBytes(12)` line in isolation never reveals; trace the key+nonce pair from generation through every encrypt call.
+- **Semantic / effective-state analysis:** distinguish a security-sensitive `Math.random()` from a cosmetic one by following the value to its sink (session token vs animation seed); verify a comparison is *effectively* constant-time end-to-end (not just that `timingSafeEqual` appears somewhere); confirm Argon2 parameters are compile/deploy-time constants and not runtime-injectable to a near-zero cost factor.
+- **External corroboration:** use WebSearch/WebFetch for current crypto CVEs and advisories (CVE-2022-21449 Psychic Signatures, Bleichenbacher/python-jose oracles, library-specific JWT alg-confusion CVEs) and NIST FIPS 203/204 ML-KEM/ML-DSA migration guidance.
+- **Apply & prove:** write the corrected primitive inline (unconditional `randomBytes(12)` per-encryption nonce, OAEP over PKCS#1 v1.5, `timingSafeEqual`, Argon2id at memoryCost ≥ 64MB/timeCost ≥ 3, HKDF for key separation), re-run the `crypto` checks plus `semgrep` crypto rules as a regression floor, then re-audit semantically. Emit the LEARNING SIGNAL per fix; surface any algorithm swap that changes wire format or stored-hash format as an explicit migration trade-off with the secure default.
+
 ## EXECUTION
 
 1. **Grep for banned patterns across all source files:**

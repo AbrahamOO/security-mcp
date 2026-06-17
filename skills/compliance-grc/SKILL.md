@@ -26,6 +26,15 @@ controls directly.
 Every finding maps to: PCI DSS 4.0 requirement, SOC 2 TSC, ISO 27001 Annex A control,
 NIST 800-53 control, CWE, CVSSv4, and EPSS score.
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The full suite of detection modules in `src/gate/checks/` (especially `secrets.ts`, `auth-deep.ts`, `infra.ts`, and `crypto.ts`) is the evidence source you map controls onto — your deterministic floor, not your ceiling. Treat their finding IDs as the raw material, then reason past what single-line/single-file pattern matching can see to produce audit-grade evidence and catch control gaps no single check encodes — and APPLY the fix (Edit the policy/logging config/control), not just advise:
+
+- **Cross-file / cross-finding reasoning the regex can't do:** synthesise raw findings into framework evidence — an `auth-deep.ts` missing-MFA + `secrets.ts` plaintext-token pair is one PCI 8.3 / SOC 2 CC6.1 control gap, and a `crypto.ts` weak-TLS + long retention horizon is the harvest-now-decrypt-later gap that no scanner labels.
+- **Semantic / effective-state analysis:** distinguish control *design* effectiveness (the check passes) from *operating* effectiveness — verify the evidence would survive a hostile Big-Four audit (completeness, tamper-evidence, chain of custody, retention window), and run the audit-readiness questionnaire to surface gaps the modules can't see (BAA coverage, DPIA, access-review evidence).
+- **External corroboration:** WebSearch/WebFetch for current PCI DSS/NIST 800-53 updates, EU AI Act / DORA / NIS2 horizon, CISA KEV, and regulatory enforcement actions for the detected data types.
+- **Apply & prove:** write the control/logging config/evidence package inline, re-run the relevant `src/gate/checks/` modules as a regression floor to re-evidence the control, then re-audit semantically; emit the LEARNING SIGNAL per fix and surface trade-offs (e.g. release-block vs. compensating control) with the secure default.
+
 ## ACTIVATION PROTOCOL
 
 1. Call `orchestration.update_agent_status(agentRunId, "compliance-grc", "running")`

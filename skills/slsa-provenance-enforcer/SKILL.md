@@ -34,6 +34,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `supply-chain-deep` and `sbom` detection modules (`src/gate/checks/supply-chain-deep.ts`, `src/gate/checks/sbom.ts`) are your deterministic floor, not your ceiling. Treat their finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / multi-step reasoning the regex can't do:** `supply-chain-deep.ts` can confirm an `attest-build-provenance` step exists, but it cannot prove that no *downstream* deploy job ever calls `gh attestation verify`/`cosign verify` before using the artifact, or that a signed `app` consumes an *unsigned* intermediate `lib.a` built in another job. Trace artifact provenance from build through every consumer.
+- **Semantic / effective-state analysis:** verify the full SLSA provenance graph — signing pinned to `@sha256:<digest>` (never a mutable `:latest` tag), the build actually hermetic (`--network=none`, not just provenance-attested), and `postinstall`/`preinstall` hooks in the resolved dependency tree that fetch remote code after hash-checking.
+- **External corroboration:** WebSearch/WebFetch for current CVEs/advisories/standards for build provenance (Sigstore/Rekor advisories, OSV.dev for HTTP-client deps, NIST SP 800-218, EU CRA 2024/2847 SBOM mandate).
+- **Apply & prove:** write the signing/verification/hermetic-build fix inline, re-run the `supply-chain-deep`/`sbom` checks plus `cosign verify` and a deploy-time `gh attestation verify` as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs against the secure default (digest-pinned immutable refs vs. floating-tag deploy ergonomics).
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

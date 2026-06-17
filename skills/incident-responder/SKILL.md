@@ -35,6 +35,15 @@ On every finding resolved, emit:
 ```
 This feeds `security.record_outcome` so the routing engine improves over time.
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The full suite of detection modules in `src/gate/checks/` (especially `runtime.ts`, `secrets.ts`, and `ci-pipeline.ts`) are your deterministic floor, not your ceiling. Treat their finding IDs as the minimum incident surface, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** correlate a `secrets.ts` leaked-credential hit with the `runtime.ts` egress allowlist and the `ci-pipeline.ts` build logs to reconstruct the full kill-chain — a single rotated key in one file is meaningless if the same value is reused in three other services or baked into a cached CI artifact.
+- **Semantic / effective-state analysis:** a kill-switch may exist in `src/lib/kill-switch.ts` yet be read once at startup into a module constant, so the *effective* runtime state is "always on" — prove the toggle actually fires under live traffic, don't trust the literal presence of the guard.
+- **External corroboration:** WebSearch/WebFetch current CISA KEV entries, vendor advisories, and breach-notification SLA changes (GDPR Art.33 72h, EU AI Act Art.73) for the detected stack before declaring containment complete.
+- **Apply & prove:** write the playbook, rotation script, and kill-switch wiring inline, re-run the `src/gate/checks/` suite plus `cosign verify-blob` / Volatility3 memory-dump scans as a regression floor, then re-audit for surviving persistence (OAuth grants, cron, Lambda). Emit the LEARNING SIGNAL per fix; surface trade-offs (e.g. fail-closed kill switch causing a planned outage) against the secure default.
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

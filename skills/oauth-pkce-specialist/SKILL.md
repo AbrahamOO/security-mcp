@@ -34,6 +34,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `auth-deep` detection module (`src/gate/checks/auth-deep.ts`, OAuth/PKCE/session) is your deterministic floor, not your ceiling. Treat its finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / multi-step reasoning the regex can't do:** model the full authorization-code flow end-to-end — the authorize request, the `redirect_uri` allowlist, the callback handler, and the token exchange may live in four files; chain them to prove a redirect-URI-confusion / open-redirect / `state`-fixation / PKCE-downgrade attack actually lands a code or token in the attacker's hands.
+- **Semantic / effective-state analysis:** decide whether PKCE (`S256`, not `plain`), `state`/`nonce` validation, exact-match redirect URIs, and short-lived single-use codes are *effectively* enforced — a `code_challenge` that is generated but never verified server-side, or a `state` compared with a non-constant-time check, is no protection.
+- **External corroboration:** WebSearch/WebFetch for the current OAuth 2.0 Security BCP (RFC 9700), RFC 7636 PKCE, and CVEs/advisories for the IdP or auth library (e.g. passport, next-auth, authlib) in the project.
+- **Apply & prove:** write the flow fix inline, re-run the `auth-deep` checks (plus a burp/ZAP replay of the authorize→callback→token sequence with tampered `redirect_uri`/`state`/`code_verifier`) as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs with the secure default.
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

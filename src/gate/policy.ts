@@ -34,6 +34,13 @@ import { checkInjectionDeep } from "./checks/injection-deep.js";
 import { checkAuthDeep } from "./checks/auth-deep.js";
 import { checkSupplyChainDeep } from "./checks/supply-chain-deep.js";
 import { checkBusinessLogic } from "./checks/business-logic.js";
+import { checkAgenticInstructions } from "./checks/agentic-instructions.js";
+import { checkAiGovernance } from "./checks/ai-governance.js";
+import { checkIac } from "./checks/iac.js";
+import { checkGitOps } from "./checks/gitops.js";
+import { checkDataPlatform } from "./checks/data-platform.js";
+import { checkDockerDeep } from "./checks/docker-deep.js";
+import { checkCloudControls } from "./checks/cloud-controls.js";
 
 const PolicySchema = z.object({
   name: z.string(),
@@ -280,7 +287,14 @@ const CHECK_NAMES = [
   "auth-deep",
   "supply-chain-deep",
   "business-logic",
-  "scanners-run"
+  "scanners-run",
+  "agentic-instructions",
+  "ai-governance",
+  "iac",
+  "gitops",
+  "data-platform",
+  "docker-deep",
+  "cloud-controls"
 ] as const;
 
 /** Run every applicable security check in parallel and collect findings. */
@@ -324,7 +338,14 @@ async function runAllChecks(opts: {
     checkSupplyChainDeep({ changedFiles }),
     checkBusinessLogic({ changedFiles }),
     runDockerChecks({ changedFiles }),
-    runScanners({ surfaces, changedFiles })
+    runScanners({ surfaces, changedFiles }),
+    surfaces.agentic ? checkAgenticInstructions({ changedFiles }) : Promise.resolve([]),
+    surfaces.ai       ? checkAiGovernance({ changedFiles })        : Promise.resolve([]),
+    checkIac({ changedFiles }),
+    checkGitOps({ changedFiles }),
+    checkDataPlatform({ changedFiles }),
+    checkDockerDeep({ changedFiles }),
+    checkCloudControls({ changedFiles })
   ]);
 
   const findings: Finding[] = [];

@@ -35,6 +35,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `runtime`, `infra`, and `api` detection modules (`src/gate/checks/runtime.ts`, `src/gate/checks/infra.ts`, `src/gate/checks/api.ts`) are your deterministic floor, not your ceiling. Treat their finding IDs as the minimum, then reason past what single-line/single-file pattern matching can see — and APPLY the fix (Edit the code/config), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** an unauthenticated `POST /ingest` handler in one file fans out to N Lambda handlers defined in other files, none of which set `reserved_concurrent_executions` — the cost-amplification chain only exists across the route definition, the event bus, and the IaC, which no single grep sees.
+- **Semantic / effective-state analysis:** model the HTTP/2 and QUIC protocol state machines (RST_STREAM-before-response, half-open PQ handshakes, slow-body trickle within header-timeout windows) to find exhaustion the presence of a `keepalive_timeout` line cannot rule out.
+- **External corroboration:** use WebSearch/WebFetch for current DoS CVEs and advisories (e.g. CVE-2023-44487 Rapid Reset, QUIC amplification disclosures, Cloudflare/Datadog threat reports) relevant to the detected server, CDN, and serverless stack.
+- **Apply & prove:** write the limit/timeout/budget fix inline (Nginx/Caddy config, HTTP/2 settings, Terraform `reserved_concurrent_executions` + budget alerts), re-run the `runtime`/`infra`/`api` checks plus a load probe (`h2load`, `slowhttptest`) as a regression floor, then re-audit semantically. Emit the LEARNING SIGNAL per fix; surface any fix that lowers a concurrency or spend ceiling as an explicit availability-vs-cost trade-off with the secure default.
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

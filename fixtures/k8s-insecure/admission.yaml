@@ -1,0 +1,16 @@
+# INSECURE FIXTURE — admission policy gaps
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: app
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+---
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: legacy-psp
+spec:
+  privileged: true
+  allowedCapabilities:
+    - "*"

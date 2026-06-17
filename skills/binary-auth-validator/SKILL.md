@@ -34,6 +34,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `k8s.ts` and `supply-chain-deep.ts` detection modules (`src/gate/checks/k8s.ts`, `src/gate/checks/supply-chain-deep.ts`) are your deterministic floor, not your ceiling. Treat their finding IDs as the minimum, then reason past what single-line/single-file pattern matching can see — and APPLY the fix (Edit the Kyverno/Gatekeeper policy or Binary Authorization config), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** a `verifyImages` rule that covers `spec.containers[]` but a Pod manifest that runs an unsigned `initContainer` first, or a namespace carrying an exemption label — the policy reads clean while unsigned code executes.
+- **Semantic / effective-state analysis:** model the admission decision end-to-end — resolve the manifest-list digest to its platform-specific child digests, evaluate `failurePolicy` (fail-open vs fail-closed), and confirm signatures stored as OCI referrers (not just `tag.sig`) are actually read.
+- **External corroboration:** use WebSearch/WebFetch for current cosign/notation/Kyverno advisories, the OCI referrers API spec, and SLSA/EO 14028 SBOM-attestation requirements.
+- **Apply & prove:** write the fix inline (set `validationFailureAction: Enforce`, `failurePolicy: Fail`, cover init/ephemeral containers, require SBOM attestation), re-run the `k8s.ts`/`supply-chain-deep.ts` checks plus a `cosign verify` / `cosign verify-attestation` regression floor, then re-audit admission semantically. Emit the LEARNING SIGNAL per fix; surface any fix that changes intended behavior as an explicit trade-off with the secure default.
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

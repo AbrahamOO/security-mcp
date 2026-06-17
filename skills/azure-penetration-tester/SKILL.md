@@ -27,6 +27,15 @@ Write ARM/Bicep/Terraform fixes inline.
 Produce working PoC for every CRITICAL and HIGH finding before writing any remediation.
 Cross-correlate with orchestrator findings from other agents before declaring anything clean.
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `infra.ts` and `iac.ts` detection modules (`src/gate/checks/infra.ts`, `src/gate/checks/iac.ts`) are your deterministic floor, not your ceiling. Treat their finding IDs as the minimum, then reason past what single-line/single-file pattern matching can see — and APPLY the fix (Edit the Terraform/Bicep/ARM), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** a Managed Identity with `Contributor` at RG scope in one `.tf` file + an Azure Function with `AuthorizationLevel.Anonymous` in another = an unauthenticated-internet-to-subscription-backdoor chain that no per-file check sees.
+- **Semantic / effective-state analysis:** decode the effective ARM scope of each Managed Identity via its role assignments, and model the federated-credential (WIF) `subject` claim breadth — a wildcard `repo:org/*:*` on a write-capable principal is the escalation, not the literal string.
+- **External corroboration:** use WebSearch/WebFetch for current MSRC advisories, CIS Azure Foundations Benchmark updates, and Managed Identity / IMDS CVEs on NVD.
+- **Apply & prove:** write the fix inline (narrow MI scope, pin WIF subject to a branch, enforce Key Vault private endpoint, disable ACR admin user), re-run the `infra.ts`/`iac.ts` checks plus tfsec/checkov as a regression floor, then re-audit the IMDS-token escalation path semantically. Emit the LEARNING SIGNAL per fix; surface any fix that changes intended behavior as an explicit trade-off with the secure default.
+
 ## EXECUTION
 
 1. Scan all Terraform, Bicep, ARM templates, and Azure DevOps pipelines
@@ -549,3 +558,46 @@ On every finding resolved, emit:
 }
 ```
 Call `security.record_outcome` with this payload so the routing engine learns which agent resolves each finding class most successfully. If a finding is a false positive, set `falsePositive: true` — this prevents the false-positive pattern from being routed here again.
+
+---
+
+## §AUTOHARDEN-RULESET
+
+Your authoritative threat-rule set for Azure config drift is the registry at
+`defaults/cloud-controls/azure.json`. It enumerates CIS Azure Foundations + Microsoft Cloud Security
+Benchmark rules as detections paired with auto-remediations. Treat each rule as an attack surface,
+not a compliance checkbox: if a resource matches the insecure pattern it is exploitable — detect it,
+then fix it.
+
+### Execution
+
+1. Run the engine over the working tree: `npx -y security-mcp@latest autoharden` (`--dry-run` to
+   preview). It rewrites Terraform/`azurerm_*` in place for every `set-attr`, `insert-block`, and
+   `companion-resource` rule and reports `[MANUAL]` rules it cannot safely auto-apply. Bicep/ARM
+   and YAML pipelines stay `[MANUAL]` to avoid destroying structure/comments.
+2. Every auto-applied fix is verified by re-running its own detector before being kept; an edit
+   that does not clear the finding is reverted and reported manual.
+3. The read-only PR gate (`security.run_pr_gate` → the `cloud-controls` check) emits the same rules
+   as findings without mutating files — use it to confirm a clean tree post-fix.
+
+### Rule record contract (each entry in azure.json)
+
+- `ruleId` — also the gate Finding id
+- `threat` — the attack the misconfig enables (the "why")
+- `frameworks` — e.g. ["CIS Azure Foundations Benchmark 3.1", "Microsoft Cloud Security Benchmark DP-3"]
+- `detect` — { target, resourceType, forbid?, require?, requireCompanionType? }
+- `remediate` — { strategy, ensure? | companion? | snippet? }
+
+### Worked example (auto-applied)
+
+`AZURE_STORAGE_HTTPS_ONLY` — threat: plaintext HTTP to a storage account exposes blob traffic and
+SAS tokens on the wire. `enable_https_traffic_only = false` is rewritten to `true` in place; the
+detector then re-scans the block clean.
+
+### Coverage discipline (ties into §ZERO-MISS-MANDATE)
+
+You CANNOT declare Azure clean without running the full ruleset. For each rule output one of:
+`APPLIED: <ruleId> | <file> | re-scan CLEAN`, `MANUAL: <ruleId> | snippet emitted | <reason>`,
+`CLEAN: <ruleId> | 0 violations`, or `N/A: <ruleId> | not applicable: <evidence>`. Silent skip =
+FAILED COVERAGE. To extend coverage, add a record to `defaults/cloud-controls/azure.json` — no code
+change required; the engine consumes it on next run.

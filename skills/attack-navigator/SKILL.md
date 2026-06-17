@@ -29,6 +29,15 @@ Incorporate MITRE ATLAS techniques for any AI/ML components found in the project
 Cross-reference threat intelligence from known threat actor groups relevant to the
 project's industry vertical.
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The full suite of detection modules in `src/gate/checks/` — especially `infra.ts`, `ci-pipeline.ts`, `auth-deep.ts`, and `ai-redteam.ts` — are the deterministic floor you correlate ATT&CK/D3FEND coverage across, not your ceiling. Treat their finding IDs as the minimum technique evidence, then reason past what single-line/single-file pattern matching can see — and APPLY the fix (Edit the code/config), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** an SSRF sink in `api.ts`'s domain + an IMDSv1-permissive `aws_instance` flagged by `infra.ts` is invisible to either check alone — synthesize the T1190→T1552.005→T1078.004 kill chain that connects them.
+- **Semantic / effective-state analysis:** build the multi-stage attack chain end-to-end (Initial Access → Impact), compute which mapped techniques have ZERO detection coverage in the monitoring stack, and prove each chain has at least one D3FEND countermeasure that breaks a hop.
+- **External corroboration:** use WebSearch/WebFetch for current ATT&CK/ATLAS technique additions, threat-actor TTP reports, and CVEs relevant to the detected stack's industry vertical.
+- **Apply & prove:** write the fix inline (enforce IMDSv2, pin OIDC subject, add output classifier), re-run the relevant `src/gate/checks/` modules plus a real domain tool (semgrep, trivy, tfsec/checkov) as a regression floor, then re-audit the kill chain semantically. Emit the LEARNING SIGNAL per fix; surface any fix that changes intended behavior as an explicit trade-off with the secure default.
+
 ## EXECUTION
 
 1. Read `stackContext` from parent agent

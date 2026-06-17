@@ -47,6 +47,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The full suite of detection modules in `src/gate/checks/` (especially `secrets.ts`, `ci-pipeline.ts`, `crypto.ts`, and `infra.ts`) is the evidence source you track over time — your deterministic floor, not your ceiling. Treat their finding IDs as point-in-time control assertions, then reason past what single-line/single-file pattern matching can see to detect drift and catch control gaps no single check encodes — and APPLY the fix (Edit the dashboard/evidence-automation/policy), not just advise:
+
+- **Cross-file / cross-finding reasoning the regex can't do:** a control that *passed* at last audit but whose `ci-pipeline.ts` branch-protection or `secrets.ts` rotation finding has since regressed is silent drift — correlate current findings against the attested prior state to surface degraded (not just absent) controls.
+- **Semantic / effective-state analysis:** distinguish design effectiveness (the control exists) from operating effectiveness (it worked every day of the audit window); flag stale evidence, evidence that cannot be independently verified (no hash-chain/Rekor), and IAM changes timed to ±7 days of an audit close.
+- **External corroboration:** WebSearch/WebFetch for NIST OSCAL/IR 8441 continuous-compliance updates, PCI 4.0 6.4.3/11.6.1 script-integrity deadlines, GDPR RoPA enforcement, and FIPS 204 evidence-signing guidance.
+- **Apply & prove:** write the dashboard/OSCAL component/evidence-collection CI job inline, re-run the relevant `src/gate/checks/` modules as the regression floor that re-evidences each control, then re-audit semantically; emit the LEARNING SIGNAL per fix and surface trade-offs (e.g. evidence freshness cadence vs. cost) with the secure default.
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

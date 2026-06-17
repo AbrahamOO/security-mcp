@@ -34,6 +34,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `injection-deep`, `api`, and `infra` detection modules (`src/gate/checks/injection-deep.ts`, `src/gate/checks/api.ts`, `src/gate/checks/infra.ts`) are your deterministic floor, not your ceiling. Treat their SSRF finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / multi-step reasoning the regex can't do:** `injection-deep.ts` flags an unguarded `fetch(url)`, but it cannot see that an import-by-URL endpoint in another file uses a *separate* HTTP client that bypasses `ssrfSafeFetch`, or that a transitive dependency (`axios`/`got`/`undici`) issues outbound calls straight to `node:http`. Trace every outbound sink and correlate with the SBOM.
+- **Semantic / effective-state analysis:** model the SSRF→metadata→cloud-cred chain end to end — a validated public hostname that DNS-rebinds (TTL-0) to `169.254.169.254` at connect time, a parser differential (`http://127.0.0.1:80@host`), or a redirect chain landing on an internal IP — and confirm `infra.ts`-level IMDSv2 (`HttpTokens: required`) actually closes the IAM-credential escalation path.
+- **External corroboration:** WebSearch/WebFetch for current CVEs/advisories/standards for SSRF (PayloadsAllTheThings encoding matrix, axios CVE-2023-45857, current AWS/GCP/Azure metadata endpoints, EU CRA Art. 14 disclosure).
+- **Apply & prove:** write the canonical `ssrfSafeFetch` (re-resolve + IP-pin + manual redirect re-validation) inline and wire it as the sole outbound path, re-run the `injection-deep`/`api`/`infra` checks plus a `nuclei` SSRF-bypass template and an `rbndr.us` rebinding test as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs against the secure default (HTTPS-only + allowlist vs. legitimate arbitrary-webhook flexibility).
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

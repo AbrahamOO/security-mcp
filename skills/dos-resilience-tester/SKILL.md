@@ -34,6 +34,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `runtime` detection module (`src/gate/checks/runtime.ts`) is your deterministic floor, not your ceiling. Treat its finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** a body-size limit on the Express app means nothing if a GraphQL resolver fans out N+1 queries or a route handler calls `findMany()` with no `take` — trace user-controlled `limit`/`page`/query-depth params through to the actual DB or regex sink, across files, to find the unbounded path.
+- **Semantic / effective-state analysis:** model the algorithmic-complexity blast radius — does a crafted input cause catastrophic regex backtracking, GraphQL alias amplification, hash-flooding, or HTTP/2 Rapid Reset? Compute whether a single request can exhaust CPU/memory/DB connections, not just whether a `limit` literal appears somewhere.
+- **External corroboration:** WebSearch/WebFetch for current ReDoS/DoS CVEs in transitive dependencies and HTTP/2/QUIC amplification advisories for the server stack in use.
+- **Apply & prove:** write the fix inline (body/pagination caps, RE2 for nested-quantifier regex, depth+complexity rules, outbound `AbortSignal.timeout`, pool limits), re-run the `runtime` checks plus `safe-regex`/`osv-scanner` and a `k6`/`slowhttptest` load probe as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs with the secure default.
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

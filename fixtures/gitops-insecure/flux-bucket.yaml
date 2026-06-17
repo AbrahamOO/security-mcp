@@ -1,0 +1,11 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: Bucket
+metadata:
+  name: manifests
+  namespace: flux-system
+spec:
+  interval: 1m
+  provider: generic
+  bucketName: public-manifests
+  endpoint: storage.example.com
+  insecure: true

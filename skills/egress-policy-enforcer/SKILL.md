@@ -34,6 +34,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `infra` + `k8s` detection modules (`src/gate/checks/infra.ts`, `src/gate/checks/k8s.ts`) are your deterministic floor, not your ceiling. Treat their finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** an `egress 0.0.0.0/0` rule in one `.tf` is only half the story — correlate it with a `NetworkPolicy` that lacks an egress block, an app-layer `fetch()` taking a user-controlled URL, and absent VPC Flow Logs to prove an end-to-end exfiltration path the per-rule regex never sees.
+- **Semantic / effective-state analysis:** compute egress *reachability* — does an `0.0.0.0/0` IPv4 rule leave `::/0` open, does an allowlisted host silently follow a 301 redirect to `169.254.169.254`, can a permitted HTTPS-to-proxy path carry a smuggled `CONNECT` or DNS-over-HTTPS tunnel? Model the effective outbound surface, not the literal port list.
+- **External corroboration:** WebSearch/WebFetch for current SSRF-to-metadata, DNS-exfiltration, and HTTP/2 smuggling advisories relevant to the cloud and proxy stack in use.
+- **Apply & prove:** write the fix inline (explicit per-FQDN/port egress, `::/0` deny, NetworkPolicy egress block, app-layer allowlist with redirect re-validation), re-run the `infra`/`k8s` checks plus `tfsec`/`checkov` and a `scoutsuite` egress audit as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs with the secure default.
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

@@ -34,6 +34,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `runtime` (DoS/parser exhaustion) + `injection-deep` detection modules (`src/gate/checks/runtime.ts`, `src/gate/checks/injection-deep.ts`) are your deterministic floor, not your ceiling. Treat their finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / multi-step reasoning the regex can't do:** trace untrusted input from an HTTP route through a parser (`xml2js`/`fast-xml-parser`/JSON.parse/a regex) into the unbounded operation it drives — prove a billion-laughs/XXE expansion, deeply-nested JSON, decompression bomb, or catastrophic-backtracking regex (ReDoS) actually hangs the event loop or exhausts memory in this code path.
+- **Semantic / effective-state analysis:** decide whether body-size limits, entity-expansion caps, parse depth/timeouts, and `RegExp` complexity guards are *effectively* enforced before the costly parse, not declared on a sibling route — a 1MB limit means nothing if the bomb decompresses to gigabytes after it passes.
+- **External corroboration:** WebSearch/WebFetch for current parser/ReDoS CVEs and OWASP DoS / XML-entity-expansion guidance for the parser versions pinned in the project.
+- **Apply & prove:** write the limit/safe-parser fix inline, re-run the `runtime`/`injection-deep` checks (plus a load/fuzz harness firing nested + oversized + backtracking payloads while watching latency and RSS) as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs with the secure default.
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

@@ -27,6 +27,15 @@ Audit all Android security controls against OWASP MASVS L1 and L2. Write Kotlin/
 Document every bypass technique alongside the control that would prevent it. Only activated if
 Android or cross-platform mobile is detected in the repository.
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `mobile-android` detection module (`src/gate/checks/mobile-android.ts`) is your deterministic floor, not your ceiling. Treat its finding IDs as the minimum, then reason past what single-line/single-file pattern matching can see — and APPLY the fix (Edit the manifest/Kotlin/Java/NSC), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** an `exported="true"` provider in the manifest whose backing implementation derives a file path from a URI parameter in a separate `.kt` file enables path traversal to `shared_prefs` — the vulnerability only exists when the manifest declaration and the provider code are read together, which a per-file grep misses.
+- **Semantic / effective-state analysis:** trace a token from `EncryptedSharedPreferences` through backup rules (`fullBackupContent`/`dataExtractionRules`) to confirm it is *effectively* excluded from `adb backup`; model the Binder/Parcelable deserialization surface and the deep-link/`taskAffinity` state to find task-hijack and intent-spoof paths that a single attribute check cannot.
+- **External corroboration:** use WebSearch/WebFetch for current Android platform CVEs and advisories (CVE-2024-0044 run-as, StrandHogg 2.0, SafetyNet→Play Integrity deprecation) and the device `ro.build.version.security_patch` relevance to the detected `minSdkVersion`.
+- **Apply & prove:** write the fix inline (manifest `android:permission`/`taskAffinity=""`/`FLAG_IMMUTABLE`, NSC pin-set with backup pin, `EncryptedSharedPreferences`, server-side IAP/Integrity verdict check), rebuild and re-run the `mobile-android` checks plus a static MASVS pass (`mobsf`/`apkleaks`) and the §POC-REQUIREMENT retest as a regression floor, then re-audit semantically. Emit the LEARNING SIGNAL per fix; surface any hardening that breaks a legitimate deep-link or backup flow as an explicit UX-vs-security trade-off with the secure default.
+
 ## EXECUTION
 
 ### 1. Data Storage (MASVS-STORAGE)

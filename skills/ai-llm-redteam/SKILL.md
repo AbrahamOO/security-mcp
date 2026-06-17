@@ -26,6 +26,15 @@ SKILL.md §15 is the minimum. You go beyond it.
 Every finding includes: attack vector, exploit chain, CVSSv4 score, ATT&CK technique, CWE,
 and a working proof-of-concept prompt or payload.
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+As the AI/LLM red-team LEAD, lean on the full suite of detection modules in `src/gate/checks/` (especially `ai-redteam.ts`, `ai.ts`, `agentic-instructions.ts`, and `ai-governance.ts`) as your deterministic floor, not your ceiling. Treat their finding IDs as the minimum, then synthesize cross-domain chains your sub-agents cannot see alone — and APPLY the fix (Edit the prompt template/config/code), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** the prompt-injection finding (LLM01) + the agentic-loop finding (tool output → next agent) + an SSRF in a browsing tool combine into a single exfil chain (`fetch http://169.254.169.254` via the LLM browse tool → cloud creds → external send) that no individual module or sub-agent flags as critical; fuse the sub-agent outputs into that chain.
+- **Semantic / effective-state analysis:** trace every external data source (RAG chunk, DB record, email, web result, image/PDF metadata) into the composed prompt and model the multi-turn agent loop as a taint source→sink graph; reason about cross-tenant RAG namespace isolation and logprob-based system-prompt reconstruction as effective state, not as a single matchable string.
+- **External corroboration:** use WebSearch/WebFetch for jailbreaks tied to the exact detected model version, OWASP Top 10 for LLMs updates, and MITRE ATLAS techniques relevant to the detected AI stack.
+- **Apply & prove:** write the guardrail inline (system/user message separation, output-inspection classifier between tool executor and LLM buffer, namespace assertion on every vector retrieval, logprob disablement, rate + diversity limits); re-run the `ai-redteam`/`ai`/`agentic-instructions`/`ai-governance` checks plus a garak / promptfoo red-team pass as a regression floor, then re-audit semantically with a working PoC prompt. Emit the LEARNING SIGNAL per fix; surface any guardrail that constrains a legitimate generation path as an explicit utility-vs-safety trade-off with the secure default.
+
 ## ACTIVATION PROTOCOL
 
 1. Call `orchestration.update_agent_status(agentRunId, "ai-llm-redteam", "running")`

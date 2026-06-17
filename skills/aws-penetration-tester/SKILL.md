@@ -20,6 +20,15 @@ a compromised Lambda to full account takeover. You know every `iam:PassRole` abu
 Find every AWS misconfiguration that could allow privilege escalation, data exfiltration,
 or account compromise. Write the Terraform fix or IAM policy correction inline.
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `infra.ts` and `iac.ts` detection modules (`src/gate/checks/infra.ts`, `src/gate/checks/iac.ts`) are your deterministic floor, not your ceiling. Treat their finding IDs as the minimum, then reason past what single-line/single-file pattern matching can see — and APPLY the fix (Edit the Terraform/IAM policy), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** `iam:PassRole` granted in one policy file + `lambda:CreateFunction` (or `ec2:RunInstances`) in a role it can assume in another = a full privilege-escalation chain no single-line grep flags.
+- **Semantic / effective-state analysis:** compute the *effective* permissions and blast radius of each role across its full assume-role/trust-policy graph — an `Owner`-equivalent reachable from a Lambda with a public Function URL is the real finding, not the wildcard in isolation.
+- **External corroboration:** use WebSearch/WebFetch for current AWS Security Bulletins, HackTricks Cloud escalation techniques, and CVEs for detected service versions (e.g. runc/EKS).
+- **Apply & prove:** write the fix inline (scope `PassRole` with `iam:PassedToService`, enforce IMDSv2 `http_tokens=required` + hop limit 1, add `ExternalId`), re-run the `infra.ts`/`iac.ts` checks plus tfsec/checkov as a regression floor, then re-audit the escalation graph semantically. Emit the LEARNING SIGNAL per fix; surface any fix that changes intended behavior as an explicit trade-off with the secure default.
+
 ## EXECUTION
 
 1. Scan all Terraform, CloudFormation, CDK, and serverless.yml files for AWS resources
@@ -514,3 +523,48 @@ On every finding resolved, emit:
 }
 ```
 Call `security.record_outcome` with this payload so the routing engine learns which agent resolves each finding class most successfully. If a finding is a false positive, set `falsePositive: true` — this prevents the false-positive pattern from being routed here again.
+
+---
+
+## §AUTOHARDEN-RULESET
+
+Your authoritative threat-rule set for AWS config drift is the registry at
+`defaults/cloud-controls/aws.json`. It enumerates AWS FSBP + CIS AWS Foundations rules as
+detections paired with auto-remediations. Treat each rule as an attack surface, not a compliance
+checkbox: if a resource matches the insecure pattern it is exploitable — detect it, then fix it.
+
+### Execution
+
+1. Run the detect-and-remediate engine over the working tree:
+   `npx -y security-mcp@latest autoharden` (add `--dry-run` to preview). It rewrites Terraform in
+   place with the hardened config for every `set-attr`, `insert-block`, and `companion-resource`
+   rule, and reports `[MANUAL]` rules it could not safely auto-apply.
+2. Every auto-applied fix is verified by re-running that rule's own detector against the mutated
+   file before being kept; an edit that does not clear the finding is reverted and reported manual.
+3. For `[MANUAL]` rules (runtime-state like GuardDuty/root-MFA, or a 0.0.0.0/0 CIDR replacement that
+   needs a human-chosen allowlist), apply the emitted snippet via your existing inline-fix workflow.
+4. The read-only PR gate (`security.run_pr_gate` → the `cloud-controls` check) emits the same rules
+   as findings without mutating files — use it to confirm a clean tree post-fix.
+
+### Rule record contract (each entry in aws.json)
+
+- `ruleId` — also the gate Finding id
+- `threat` — the attack the misconfig enables (the "why")
+- `frameworks` — e.g. ["AWS FSBP EC2.8", "CIS AWS Foundations Benchmark 5.6"] — context labels
+- `detect` — { target, resourceType, forbid?, require?, requireCompanionType? }
+- `remediate` — { strategy, ensure? | companion? | snippet? }
+
+### Worked example (auto-applied)
+
+`AWS_EC2_IMDSV2_REQUIRED` — threat: SSRF → IMDSv1 → instance-profile credential theft. A bare
+`aws_instance` with no `metadata_options` is rewritten to add
+`metadata_options { http_tokens = "required", http_put_response_hop_limit = 1 }`; the detector then
+re-scans the block and finds it clean.
+
+### Coverage discipline (ties into §ZERO-MISS-MANDATE)
+
+You CANNOT declare AWS clean without running the full ruleset. For each rule output one of:
+`APPLIED: <ruleId> | <file> | re-scan CLEAN`, `MANUAL: <ruleId> | snippet emitted | <reason>`,
+`CLEAN: <ruleId> | 0 violations`, or `N/A: <ruleId> | not applicable: <evidence>`. Silent skip =
+FAILED COVERAGE. To extend coverage, add a record to `defaults/cloud-controls/aws.json` — no code
+change required; the engine consumes it on next run.

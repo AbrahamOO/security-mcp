@@ -1,0 +1,17 @@
+# INSECURE FIXTURE — privileged Helm hook job
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pre-install-hook
+  namespace: app
+  annotations:
+    "helm.sh/hook": pre-install
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: migrate:1.0.0
+          securityContext:
+            privileged: true

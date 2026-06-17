@@ -34,6 +34,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `supply-chain-deep`, `sbom`, and `ai` detection modules (`src/gate/checks/supply-chain-deep.ts`, `src/gate/checks/sbom.ts`, `src/gate/checks/ai.ts`) are your deterministic floor, not your ceiling. Treat their finding IDs as the minimum, then reason past what single-line/single-file pattern matching can see — and APPLY the fix (Edit the loader code/config/manifest), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** a `from_pretrained` revision pinned to a mutable tag in one config, an unverified `model.onnx.data` sidecar referenced from the protobuf, and a training-data S3 bucket with a public-write ACL in IaC together form a weight-poisoning chain no single grep for `torch.load` can see; trace the path from bucket → fine-tune script → serialized artifact → inference loader.
+- **Semantic / effective-state analysis:** resolve every `revision` to a 40-char commit SHA (not a force-pushable tag), enumerate ALL files referenced by `external_data_helper` and check each against the model SBOM, and reason about `trust_remote_code=True` reached transitively via a wrapper library or YAML config rather than only direct application code.
+- **External corroboration:** use WebSearch/WebFetch for current model supply-chain CVEs and advisories (CVE-2024-3094 xz, HF malicious-pickle campaigns, picklescan disclosures) and HF discussion/issue pages for the exact model IDs in use.
+- **Apply & prove:** write the fix inline (`weights_only=True`, safetensors load, pinned SHA + SHA-256 manifest entry, dataset allowlist), re-run the `supply-chain-deep`/`sbom`/`ai` checks plus `picklescan -r` and `grep -rn trust_remote_code=True` (including `site-packages`) as a regression floor, then re-audit semantically. Emit the LEARNING SIGNAL per fix; surface any pin or allowlist that blocks a previously-floating model as an explicit reproducibility-vs-freshness trade-off with the secure default.
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

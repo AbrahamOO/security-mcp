@@ -22,6 +22,15 @@ Find API abuse vectors: rate limiting gaps, key scoping issues, token cost ampli
 and model capability leakage. Implement rate limiting and access controls.
 Covers §15 ATLAS AML.T0040 (Inference API Abuse).
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `ai-redteam` + `ai` detection modules (`src/gate/checks/ai-redteam.ts`, `src/gate/checks/ai.ts`) are your deterministic floor, not your ceiling. Treat their finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / multi-step reasoning the regex can't do:** trace an inference endpoint from its route handler through the auth middleware to the model client to prove an unauthenticated/over-scoped caller can issue unbounded queries; model the full extraction flow — high-volume probing → logit/confidence leakage → surrogate-model training (ATLAS AML.T0040) — across the files that expose logprobs, batch endpoints, or fine-tune APIs.
+- **Semantic / effective-state analysis:** decide whether rate limits, per-key quotas, and cost caps are *effectively* enforced at the model boundary, not merely declared on one route — a global limiter that resets per-instance or excludes the streaming endpoint is no defense against query-budget extraction.
+- **External corroboration:** WebSearch/WebFetch for current MITRE ATLAS case studies, model-extraction advisories, and provider rate-limit/abuse guidance for the inference stack in use.
+- **Apply & prove:** write the rate-limit/key-scoping/access-logging fix inline, re-run the `ai-redteam`/`ai` checks (plus a scripted high-volume query harness as the extraction-cost regression floor), then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs (limit aggressiveness vs. legitimate throughput) with the secure default.
+
 ## EXECUTION
 
 1. Identify all LLM API endpoints exposed by the application (both internal and external)

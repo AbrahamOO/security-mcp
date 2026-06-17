@@ -1,0 +1,1578 @@
+{
+  "runId": "bd8c86f0-2efe-40d3-935f-1dd2a40cba22",
+  "commitHash": "e5f76d664b7d59fbbd8092c71fbf15e8bc283bc5",
+  "savedAt": "2026-06-16T16:45:34.642Z",
+  "result": {
+    "status": "FAIL",
+    "policyVersion": "1.0.0",
+    "evaluatedAt": "2026-06-16T16:45:34.642Z",
+    "scope": {
+      "mode": "folder_by_folder",
+      "targets": [
+        "."
+      ],
+      "changedFiles": [
+        ".claude/advanced.md",
+        ".claude/CLAUDE.md",
+        ".claude/hidden.md",
+        ".mcp.json",
+        ".mcp/baselines/e5f76d664b7d59fbbd8092c71fbf15e8bc283bc5.json",
+        ".mcp/baselines/latest.json",
+        ".mcp/exceptions/security-exceptions.json",
+        ".mcp/mappings/evidence-map.json",
+        ".mcp/policies/security-policy.json",
+        ".mcp/scanners/security-tools.json",
+        "package.json",
+        "SKILL.md"
+      ],
+      "surfaces": {
+        "web": false,
+        "api": false,
+        "infra": false,
+        "mobileIos": false,
+        "mobileAndroid": false,
+        "ai": false,
+        "agentic": true
+      }
+    },
+    "findings": [
+      {
+        "id": "ARTIFACTS_NO_THREAT_MODEL",
+        "title": "No threat model file found in .mcp/, docs/, or security/",
+        "severity": "HIGH",
+        "evidence": [
+          "Searched for: threat-model.json, threat-model.md under .mcp/, docs/, security/",
+          "No match found."
+        ],
+        "requiredActions": [
+          "Create a threat model document (threat-model.json or threat-model.md) in .mcp/, docs/, or security/.",
+          "Include STRIDE analysis, OWASP Top-10 mapping, MITRE ATT&CK mapping, trust boundaries, and data flow diagrams.",
+          "Reference the threat model from your PR description and link it to changed components."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "ARTIFACTS_NO_SBOM",
+        "title": "No SBOM (Software Bill of Materials) found in repository",
+        "severity": "HIGH",
+        "evidence": [
+          "Searched for CycloneDX (.cdx.json, bom.json, bom.xml) and SPDX (.spdx, .spdx.json) files.",
+          "No match found."
+        ],
+        "requiredActions": [
+          "Generate an SBOM in CycloneDX or SPDX format and commit it to the repository.",
+          "For Node.js: `npx @cyclonedx/cyclonedx-npm --output-file sbom.json`.",
+          "For Python: `cyclonedx-bom -o sbom.json`.",
+          "Automate SBOM generation in CI so it stays current with every dependency change.",
+          "Ensure the SBOM is included in any artifact upload to your registry (SLSA Level 2+)."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "ARTIFACTS_COMPLIANCE_GAP",
+        "title": "Compliance-related files changed but no compliance gap analysis found",
+        "severity": "MEDIUM",
+        "evidence": [
+          "Changed files triggering this check: .mcp/policies/security-policy.json",
+          "Searched .mcp/, security/, and docs/ for compliance-gap* or compliance-findings* — no match found."
+        ],
+        "requiredActions": [
+          "Produce a compliance gap analysis document before merging compliance/policy changes.",
+          "Place it as compliance-gap-<date>.md in .mcp/, security/, or docs/.",
+          "The gap analysis must map each changed control to its framework requirement (HIPAA §164, PCI DSS 4.0, GDPR Art. 32, etc.).",
+          "Document any residual risk and obtain sign-off from the compliance owner."
+        ],
+        "sla": "30d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "GIT_HISTORY_SECRET",
+        "title": "Secret detected in git history (3 findings)",
+        "severity": "HIGH",
+        "files": [
+          "skills/stride-pasta-analyst/SKILL.md",
+          "src/mcp/server.ts"
+        ],
+        "evidence": [
+          "commit=f6e03ae7 file=skills/stride-pasta-analyst/SKILL.md rule=jwt",
+          "commit=47fbcb09 file=src/mcp/server.ts rule=generic-api-key",
+          "commit=4dc3bc47 file=src/mcp/server.ts rule=generic-api-key"
+        ],
+        "requiredActions": [
+          "Secrets in git history remain exposed even after removal from the working tree.",
+          "Rotate all exposed credentials immediately.",
+          "Use git-filter-repo or BFG Repo-Cleaner to purge the secrets from history, then force-push and notify all collaborators to re-clone.",
+          "Enable branch protection and secret scanning alerts on the remote host."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "LOCKFILE_MISSING",
+        "title": "No JS lockfile found",
+        "severity": "HIGH",
+        "requiredActions": [
+          "Add and commit a lockfile (package-lock.json, pnpm-lock.yaml, or yarn.lock).",
+          "Pin versions and enable dependency scanning in CI."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control SECRET_MANAGER_ONLY",
+        "severity": "HIGH",
+        "evidence": [
+          "no_hardcoded_secrets",
+          "secret_manager_refs"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control SECRET_MANAGER_ONLY",
+        "severity": "HIGH",
+        "evidence": [
+          "no_hardcoded_secrets",
+          "secret_manager_refs"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control SECRET_MANAGER_ONLY.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control NIST_AC_ACCESS_CONTROL",
+        "severity": "HIGH",
+        "evidence": [
+          "deny_by_default_authz",
+          "service_to_service_auth"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control NIST_AC_ACCESS_CONTROL",
+        "severity": "HIGH",
+        "evidence": [
+          "deny_by_default_authz",
+          "service_to_service_auth"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control NIST_AC_ACCESS_CONTROL.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control NIST_AU_AUDIT_LOGGING",
+        "severity": "HIGH",
+        "evidence": [
+          "audit_logging_configured",
+          "log_retention_policy"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control NIST_AU_AUDIT_LOGGING",
+        "severity": "HIGH",
+        "evidence": [
+          "audit_logging_configured",
+          "log_retention_policy"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control NIST_AU_AUDIT_LOGGING.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control NIST_SC_TRANSMISSION",
+        "severity": "HIGH",
+        "evidence": [
+          "tls_config_verified"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control NIST_SC_TRANSMISSION",
+        "severity": "HIGH",
+        "evidence": [
+          "tls_config_verified"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control NIST_SC_TRANSMISSION.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control NIST_IR_INCIDENT_RESPONSE",
+        "severity": "HIGH",
+        "evidence": [
+          "ir_playbook_present",
+          "ir_playbook_tested"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control NIST_IR_INCIDENT_RESPONSE",
+        "severity": "HIGH",
+        "evidence": [
+          "ir_playbook_present",
+          "ir_playbook_tested"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control NIST_IR_INCIDENT_RESPONSE.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control SOC2_CC6_LOGICAL_ACCESS",
+        "severity": "HIGH",
+        "evidence": [
+          "mfa_enforced",
+          "deny_by_default_authz"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control SOC2_CC6_LOGICAL_ACCESS",
+        "severity": "HIGH",
+        "evidence": [
+          "mfa_enforced",
+          "deny_by_default_authz"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control SOC2_CC6_LOGICAL_ACCESS.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control SOC2_CC7_SYSTEM_MONITORING",
+        "severity": "HIGH",
+        "evidence": [
+          "audit_logging_configured",
+          "alerting_configured"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control SOC2_CC7_SYSTEM_MONITORING",
+        "severity": "HIGH",
+        "evidence": [
+          "audit_logging_configured",
+          "alerting_configured"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control SOC2_CC7_SYSTEM_MONITORING.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control MITRE_INITIAL_ACCESS",
+        "severity": "HIGH",
+        "evidence": [
+          "mfa_enforced",
+          "email_filtering",
+          "public_surface_hardened"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control MITRE_INITIAL_ACCESS",
+        "severity": "HIGH",
+        "evidence": [
+          "mfa_enforced",
+          "email_filtering",
+          "public_surface_hardened"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control MITRE_INITIAL_ACCESS.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control MITRE_CREDENTIAL_ACCESS",
+        "severity": "HIGH",
+        "evidence": [
+          "no_hardcoded_secrets",
+          "secret_manager_refs",
+          "rate_limiting_present"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control MITRE_CREDENTIAL_ACCESS",
+        "severity": "HIGH",
+        "evidence": [
+          "no_hardcoded_secrets",
+          "secret_manager_refs",
+          "rate_limiting_present"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control MITRE_CREDENTIAL_ACCESS.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control MITRE_EXFILTRATION",
+        "severity": "HIGH",
+        "evidence": [
+          "egress_controls",
+          "dlp_configured"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control MITRE_EXFILTRATION",
+        "severity": "HIGH",
+        "evidence": [
+          "egress_controls",
+          "dlp_configured"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control MITRE_EXFILTRATION.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control MITRE_DEFENSE_EVASION",
+        "severity": "HIGH",
+        "evidence": [
+          "audit_logging_configured",
+          "artifact_signing"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control MITRE_DEFENSE_EVASION",
+        "severity": "HIGH",
+        "evidence": [
+          "audit_logging_configured",
+          "artifact_signing"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control MITRE_DEFENSE_EVASION.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control SLSA_L3_PROVENANCE",
+        "severity": "HIGH",
+        "evidence": [
+          "artifact_signing",
+          "hermetic_build_configured"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control SLSA_L3_PROVENANCE",
+        "severity": "HIGH",
+        "evidence": [
+          "artifact_signing",
+          "hermetic_build_configured"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control SLSA_L3_PROVENANCE.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control ZERO_TRUST_CONTINUOUS_VERIFY",
+        "severity": "HIGH",
+        "evidence": [
+          "deny_by_default_authz",
+          "service_to_service_auth"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control ZERO_TRUST_CONTINUOUS_VERIFY",
+        "severity": "HIGH",
+        "evidence": [
+          "deny_by_default_authz",
+          "service_to_service_auth"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control ZERO_TRUST_CONTINUOUS_VERIFY.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control BUSINESS_LOGIC_REVIEWED",
+        "severity": "HIGH",
+        "evidence": [
+          "pentest-report.json",
+          "threat-model.json"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control BUSINESS_LOGIC_REVIEWED",
+        "severity": "HIGH",
+        "evidence": [
+          "pentest-report.json",
+          "threat-model.json"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control BUSINESS_LOGIC_REVIEWED.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control HIPAA_PHI_CONTROLS",
+        "severity": "HIGH",
+        "evidence": [
+          "hipaa-phi-audit.json"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control HIPAA_PHI_CONTROLS",
+        "severity": "HIGH",
+        "evidence": [
+          "hipaa-phi-audit.json"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control HIPAA_PHI_CONTROLS.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "SBOM_MISSING",
+        "title": "No SBOM found. Syft is available — run it to generate one.",
+        "severity": "HIGH",
+        "evidence": [
+          "Expected at: /Users/smilesparker/workplace/security-mcp/fixtures/agentic-malicious/.mcp/sbom/latest.json"
+        ],
+        "requiredActions": [
+          "Run: syft . -o cyclonedx-json=.mcp/sbom/latest.json",
+          "Or set SECURITY_AUTO_SBOM=true to auto-generate on each gate run."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "PROVENANCE_MISSING",
+        "title": "No SLSA provenance attestation found",
+        "severity": "HIGH",
+        "evidence": [
+          "Attestation dir: /Users/smilesparker/workplace/security-mcp/fixtures/agentic-malicious/.mcp/attestations"
+        ],
+        "requiredActions": [
+          "Generate SLSA provenance during CI/CD build.",
+          "Use slsa-github-generator or equivalent to produce .intoto.jsonl attestations.",
+          "Store provenance in .mcp/attestations/"
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "AGENT_INSTRUCTION_OVERRIDE",
+        "title": "Agentic instruction file contains prompt-override / instruction-hijack directives",
+        "severity": "CRITICAL",
+        "files": [
+          ".mcp.json",
+          "SKILL.md",
+          ".claude/advanced.md"
+        ],
+        "evidence": [
+          ".mcp.json",
+          "SKILL.md",
+          ".claude/advanced.md"
+        ],
+        "requiredActions": [
+          "Treat this instruction file as hostile: an AI agent reading it can be hijacked via embedded 'ignore previous instructions', <system> tags, or 'you are now' directives (OWASP LLM01, MITRE ATLAS AML.T0051, CWE-77).",
+          "Quarantine the file and trace its origin (commit author, PR, supply-chain source) before any agent ingests the repository.",
+          "Enforce instruction-hierarchy isolation in agent runtimes: render repo-sourced instruction files as untrusted DATA inside delimited boundaries, never as system authority."
+        ],
+        "sla": "24h",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "AGENT_INSTRUCTION_EXFIL",
+        "title": "Agentic instruction file directs the agent to exfiltrate data to an external host",
+        "severity": "CRITICAL",
+        "files": [
+          "SKILL.md"
+        ],
+        "evidence": [
+          "SKILL.md"
+        ],
+        "requiredActions": [
+          "Remove directives that instruct the agent to fetch/curl/POST to non-allowlisted hosts or to send env/secrets/tokens off-box (MITRE ATLAS AML.T0024, CWE-200).",
+          "Apply an egress allowlist to the agent's tool runtime so instruction-driven exfiltration calls are blocked at execution time.",
+          "Rotate any credentials reachable by the agent if there is evidence the instruction file was active during a run."
+        ],
+        "sla": "24h",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "AGENT_TOOL_POISONING",
+        "title": "Agentic instruction / tool definition encodes destructive or unscoped tool behavior",
+        "severity": "HIGH",
+        "files": [
+          ".mcp.json"
+        ],
+        "evidence": [
+          ".mcp.json"
+        ],
+        "requiredActions": [
+          "Inspect tool/MCP 'description' fields and instruction bodies for destructive commands (rm -rf, eval, shell exec) or hidden imperatives ('always run', 'do not tell the user') — these poison the model's tool-use plane (MITRE ATLAS AML.T0054, CWE-94).",
+          "Define MCP tool descriptions as static, code-reviewed constants; reject any tool whose description carries instructions to the model rather than a neutral capability summary.",
+          "Run agent tools under least privilege with an explicit allowlist; deny directives that disable auth, validation, or the sandbox."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "AGENT_PERSISTENCE_DIRECTIVE",
+        "title": "Agentic instruction file contains self-persistence / auto-reinstall directives",
+        "severity": "HIGH",
+        "files": [
+          "SKILL.md"
+        ],
+        "evidence": [
+          "SKILL.md"
+        ],
+        "requiredActions": [
+          "Strip 'on every invocation', 'at the start of every run', and auto-update/ensure_skill directives — they let a malicious instruction set survive removal (persistence; MITRE ATLAS AML.T0051).",
+          "Pin and integrity-check (SHA-256) any skill/agent definition the repo loads; forbid runtime self-modification or self-reinstallation.",
+          "Audit version history of the file for a benign-then-weaponized edit pattern."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "AGENT_HIDDEN_INSTRUCTION",
+        "title": "Agentic instruction file hides instructions via invisible characters, HTML comments, or encoded payloads",
+        "severity": "CRITICAL",
+        "files": [
+          ".claude/hidden.md"
+        ],
+        "evidence": [
+          ".claude/hidden.md"
+        ],
+        "requiredActions": [
+          "Inspect the file for zero-width/bidi Unicode (U+200B–U+200F, U+202A–U+202E, U+2060–U+2069, U+FEFF), HTML comments, CSS-hidden text, and base64 blobs that decode to instructions — all smuggle directives past human review (CWE-116, MITRE ATLAS AML.T0051).",
+          "Normalize instruction files to NFC and strip non-printable characters before any agent ingests them; add a pre-commit hook that rejects invisible characters.",
+          "Decode and review every embedded base64/hex blob; treat any that decodes to imperatives or URLs as a live injection payload."
+        ],
+        "sla": "24h",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "AGENT_CREDENTIAL_HARVEST",
+        "title": "Agentic instruction file directs the agent to read or reveal credentials",
+        "severity": "CRITICAL",
+        "files": [
+          ".claude/CLAUDE.md"
+        ],
+        "evidence": [
+          ".claude/CLAUDE.md"
+        ],
+        "requiredActions": [
+          "Remove directives instructing the agent to read .env, ~/.aws/credentials, ~/.ssh, keychains, or to dump process.env / print secrets (credential access; MITRE ATLAS AML.T0024, CWE-522).",
+          "Run agents with secrets injected out-of-band and scoped to least privilege so instruction-driven harvesting yields nothing useful.",
+          "Rotate any credentials the agent could reach and review run logs for prior harvesting attempts."
+        ],
+        "sla": "24h",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "AGENT_MEMORY_POISONING",
+        "title": "Agentic instruction file directs the agent to poison memory or suppress findings",
+        "severity": "HIGH",
+        "files": [
+          ".claude/CLAUDE.md"
+        ],
+        "evidence": [
+          ".claude/CLAUDE.md"
+        ],
+        "requiredActions": [
+          "Remove directives that tell the agent to write false-positive entries, whitelist findings, or mark vulnerabilities as safe/resolved — these blind future scans (data poisoning; MITRE ATLAS AML.T0051).",
+          "Make agent memory/finding-suppression writes require validated, authenticated provenance; never accept suppression instructions sourced from a scanned repository.",
+          "Audit existing agent memory for entries that may have been planted by this directive."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "AGENT_REMOTE_INSTRUCTION_LOAD",
+        "title": "Agentic instruction file pulls instructions or commands from an external location",
+        "severity": "CRITICAL",
+        "files": [
+          ".claude/advanced.md"
+        ],
+        "evidence": [
+          ".claude/advanced.md"
+        ],
+        "requiredActions": [
+          "Remove directives that load/fetch/follow instructions from a URL or run command-substitution ($(curl …), `wget …`) — the visible file looks clean while the real payload arrives at runtime (indirect injection; OWASP LLM01, MITRE ATLAS AML.T0051).",
+          "Forbid agents from following instructions sourced from any network location; all agent authority must come from reviewed, pinned local files.",
+          "Apply an egress allowlist so runtime instruction-fetching is blocked even if the directive survives review."
+        ],
+        "sla": "24h",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "AGENT_PERMISSION_ESCALATION",
+        "title": "Agentic instruction file requests elevated permissions or tool access",
+        "severity": "HIGH",
+        "files": [
+          ".claude/advanced.md"
+        ],
+        "evidence": [
+          ".claude/advanced.md"
+        ],
+        "requiredActions": [
+          "Remove requests to skip permissions (--dangerously-skip-permissions, bypassPermissions, auto-approve), broaden allowed-tools to wildcards (Bash(*)), or run without confirmation — repo-sourced files must never widen the agent's own privileges (excessive agency; OWASP LLM08, CWE-269).",
+          "Pin the agent's permission mode and tool allowlist in trusted operator config, never in repo-readable instruction files.",
+          "Require human approval for any change to allowed-tools or permission scope."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "AGENT_BACKDOOR_INSERT",
+        "title": "Agentic instruction file directs the agent to insert a backdoor or persistent access",
+        "severity": "CRITICAL",
+        "files": [
+          ".claude/advanced.md"
+        ],
+        "evidence": [
+          ".claude/advanced.md"
+        ],
+        "requiredActions": [
+          "Remove directives to add SSH keys / authorized_keys, create admin accounts, plant reverse/bind shells, add webhooks, hardcode credentials, or disable MFA/signature checks (persistence + privilege escalation; MITRE ATT&CK T1098, CWE-912).",
+          "Treat the repository as potentially compromised: diff for any backdoor the agent may already have written, and review authorized_keys / IAM / webhook config.",
+          "Block agent write-access to auth-sensitive paths (authorized_keys, IAM policies, CI secrets) entirely."
+        ],
+        "sla": "24h",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      },
+      {
+        "id": "AGENT_PROMPT_LEAK",
+        "title": "Agentic instruction file attempts to extract the agent's system prompt or instructions",
+        "severity": "MEDIUM",
+        "files": [
+          ".claude/advanced.md"
+        ],
+        "evidence": [
+          ".claude/advanced.md"
+        ],
+        "requiredActions": [
+          "Remove directives asking the agent to repeat/print/reveal its system prompt, rules, or configuration — prompt-leak is reconnaissance that enables a tailored jailbreak (MITRE ATLAS AML.T0056).",
+          "Configure the agent runtime to refuse system-prompt disclosure and to treat such requests as adversarial probes.",
+          "Log and alert on prompt-extraction attempts as a precursor to a targeted attack."
+        ],
+        "sla": "30d",
+        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+      }
+    ],
+    "suppressedFindings": [],
+    "controlCoverage": [
+      {
+        "id": "ZERO_TRUST",
+        "description": "All services enforce authentication and authorization with no implicit trust.",
+        "automation": "evidence",
+        "frameworks": [
+          "NIST 800-207",
+          "OWASP ASVS"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "SECRET_MANAGER_ONLY",
+        "description": "Secrets stored only in a dedicated secret manager.",
+        "automation": "evidence",
+        "frameworks": [
+          "NIST 800-53",
+          "SOC 2"
+        ],
+        "status": "missing",
+        "details": [
+          "no_hardcoded_secrets",
+          "secret_manager_refs"
+        ]
+      },
+      {
+        "id": "TLS_13",
+        "description": "TLS configuration is verified.",
+        "automation": "evidence",
+        "frameworks": [
+          "NIST 800-53",
+          "PCI DSS 4.0"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "CSP_NO_INLINE",
+        "description": "CSP is configured without unsafe inline execution.",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP ASVS",
+          "CWE-79"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "CSRF",
+        "description": "CSRF protections and tests are present.",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP Top 10",
+          "OWASP ASVS"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "SSRF",
+        "description": "SSRF guards and tests are present.",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP Top 10",
+          "CWE-918"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "MOBILE_MASVS",
+        "description": "Mobile release configuration meets MASVS baseline.",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP MASVS"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "AI_BOUNDED_OUTPUTS",
+        "description": "AI outputs are schema-validated and tools are allowlisted.",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP LLM Top 10",
+          "MITRE ATLAS"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "NIST_AC_ACCESS_CONTROL",
+        "description": "Access control policies enforce least privilege and separation of duties (NIST 800-53 AC).",
+        "automation": "evidence",
+        "frameworks": [
+          "NIST 800-53"
+        ],
+        "status": "missing",
+        "details": [
+          "deny_by_default_authz",
+          "service_to_service_auth"
+        ]
+      },
+      {
+        "id": "NIST_AU_AUDIT_LOGGING",
+        "description": "Audit events are logged, immutable, timestamped, and retained ≥1 year (NIST 800-53 AU).",
+        "automation": "evidence",
+        "frameworks": [
+          "NIST 800-53",
+          "SOC 2"
+        ],
+        "status": "missing",
+        "details": [
+          "audit_logging_configured",
+          "log_retention_policy"
+        ]
+      },
+      {
+        "id": "NIST_IA_IDENTIFICATION",
+        "description": "All users and services are uniquely identified and authenticated (NIST 800-53 IA).",
+        "automation": "evidence",
+        "frameworks": [
+          "NIST 800-53",
+          "OWASP ASVS"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "NIST_SC_TRANSMISSION",
+        "description": "All data in transit is encrypted using approved algorithms (NIST 800-53 SC).",
+        "automation": "evidence",
+        "frameworks": [
+          "NIST 800-53",
+          "PCI DSS 4.0"
+        ],
+        "status": "missing",
+        "details": [
+          "tls_config_verified"
+        ]
+      },
+      {
+        "id": "NIST_SI_INPUT_VALIDATION",
+        "description": "All inputs are validated, sanitized, and encoded before processing (NIST 800-53 SI).",
+        "automation": "evidence",
+        "frameworks": [
+          "NIST 800-53",
+          "OWASP Top 10"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "NIST_IR_INCIDENT_RESPONSE",
+        "description": "Incident response playbooks exist, are tested, and have defined MTTD/MTTR SLAs (NIST 800-53 IR).",
+        "automation": "evidence",
+        "frameworks": [
+          "NIST 800-53",
+          "SOC 2"
+        ],
+        "status": "missing",
+        "details": [
+          "ir_playbook_present",
+          "ir_playbook_tested"
+        ]
+      },
+      {
+        "id": "PCI_REQ3_STORED_DATA",
+        "description": "Cardholder data at rest is encrypted and PAN is never stored in plaintext (PCI DSS 4.0 Req 3).",
+        "automation": "evidence",
+        "frameworks": [
+          "PCI DSS 4.0"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "PCI_REQ4_TRANSIT",
+        "description": "Cardholder data in transit uses TLS 1.2+ with approved cipher suites (PCI DSS 4.0 Req 4).",
+        "automation": "evidence",
+        "frameworks": [
+          "PCI DSS 4.0"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "SOC2_CC6_LOGICAL_ACCESS",
+        "description": "Logical access to systems is restricted and uses MFA for privileged accounts (SOC 2 CC6).",
+        "automation": "evidence",
+        "frameworks": [
+          "SOC 2 Type II"
+        ],
+        "status": "missing",
+        "details": [
+          "mfa_enforced",
+          "deny_by_default_authz"
+        ]
+      },
+      {
+        "id": "SOC2_CC7_SYSTEM_MONITORING",
+        "description": "System components are monitored for anomalous activity and security events (SOC 2 CC7).",
+        "automation": "evidence",
+        "frameworks": [
+          "SOC 2 Type II"
+        ],
+        "status": "missing",
+        "details": [
+          "audit_logging_configured",
+          "alerting_configured"
+        ]
+      },
+      {
+        "id": "MITRE_INITIAL_ACCESS",
+        "description": "Controls in place to prevent initial access vectors: phishing, supply chain, public-facing exploits (TA0001).",
+        "automation": "evidence",
+        "frameworks": [
+          "MITRE ATT&CK Enterprise"
+        ],
+        "status": "missing",
+        "details": [
+          "mfa_enforced",
+          "email_filtering",
+          "public_surface_hardened"
+        ]
+      },
+      {
+        "id": "MITRE_CREDENTIAL_ACCESS",
+        "description": "Controls prevent credential dumping, brute force, and credential theft (TA0006).",
+        "automation": "evidence",
+        "frameworks": [
+          "MITRE ATT&CK Enterprise"
+        ],
+        "status": "missing",
+        "details": [
+          "no_hardcoded_secrets",
+          "secret_manager_refs",
+          "rate_limiting_present"
+        ]
+      },
+      {
+        "id": "MITRE_EXFILTRATION",
+        "description": "Controls prevent unauthorized data exfiltration over network, cloud storage, or encoding (TA0010).",
+        "automation": "evidence",
+        "frameworks": [
+          "MITRE ATT&CK Enterprise"
+        ],
+        "status": "missing",
+        "details": [
+          "egress_controls",
+          "dlp_configured"
+        ]
+      },
+      {
+        "id": "MITRE_DEFENSE_EVASION",
+        "description": "Logging is tamper-evident; code signing prevents unauthorized binary substitution (TA0005).",
+        "automation": "evidence",
+        "frameworks": [
+          "MITRE ATT&CK Enterprise"
+        ],
+        "status": "missing",
+        "details": [
+          "audit_logging_configured",
+          "artifact_signing"
+        ]
+      },
+      {
+        "id": "MITRE_LATERAL_MOVEMENT",
+        "description": "Network segmentation and mTLS prevent lateral movement between services (TA0008).",
+        "automation": "evidence",
+        "frameworks": [
+          "MITRE ATT&CK Enterprise",
+          "NIST 800-207"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "MITRE_IMPACT",
+        "description": "Data backups are encrypted and tested; ransomware-resistant backup policies in place (TA0040).",
+        "automation": "evidence",
+        "frameworks": [
+          "MITRE ATT&CK Enterprise"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "MITRE_COMMAND_CONTROL",
+        "description": "Egress filtering blocks C2 channels; DNS monitoring detects beaconing (TA0011).",
+        "automation": "evidence",
+        "frameworks": [
+          "MITRE ATT&CK Enterprise"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "AI_LLM02_OUTPUT_HANDLING",
+        "description": "LLM outputs are validated against a schema before use in downstream systems (OWASP LLM02).",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP LLM Top 10 2025"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "AI_LLM04_MODEL_DOS",
+        "description": "Rate limiting and input length limits prevent model resource exhaustion (OWASP LLM04).",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP LLM Top 10 2025"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "AI_LLM07_PLUGIN_DESIGN",
+        "description": "LLM plugins and tools operate on an explicit allowlist with minimal permissions (OWASP LLM07).",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP LLM Top 10 2025"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "AI_LLM08_EXCESSIVE_AGENCY",
+        "description": "LLM agents cannot take irreversible actions without human confirmation (OWASP LLM08).",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP LLM Top 10 2025",
+          "NIST AI RMF"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "AI_LLM_ALGORITHMIC_FAIRNESS",
+        "description": "ML decision systems affecting people carry fairness/bias evaluation (disparate impact, equalized odds, demographic parity) and representativeness evidence.",
+        "automation": "evidence",
+        "frameworks": [
+          "EU AI Act",
+          "NIST AI RMF",
+          "ISO 42001"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "AI_SHADOW_AI_DATA_LEAKAGE",
+        "description": "Secrets and PII are redacted/tokenized before reaching any LLM payload, preventing shadow-AI data leakage to model providers.",
+        "automation": "evidence",
+        "frameworks": [
+          "NIST AI RMF",
+          "OWASP LLM Top 10 2025"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "SLSA_L3_PROVENANCE",
+        "description": "Build artifacts have signed SLSA Level 3 provenance from a hermetic, ephemeral CI build.",
+        "automation": "evidence",
+        "frameworks": [
+          "SLSA",
+          "NIST 800-218"
+        ],
+        "status": "missing",
+        "details": [
+          "artifact_signing",
+          "hermetic_build_configured"
+        ]
+      },
+      {
+        "id": "ZERO_TRUST_MICROSEG",
+        "description": "Network microsegmentation enforces deny-by-default between all services.",
+        "automation": "evidence",
+        "frameworks": [
+          "NIST 800-207",
+          "CISA Zero Trust Maturity Model"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "ZERO_TRUST_CONTINUOUS_VERIFY",
+        "description": "Every request is continuously verified — no persistent trust based on network location.",
+        "automation": "evidence",
+        "frameworks": [
+          "NIST 800-207"
+        ],
+        "status": "missing",
+        "details": [
+          "deny_by_default_authz",
+          "service_to_service_auth"
+        ]
+      },
+      {
+        "id": "BUSINESS_LOGIC_REVIEWED",
+        "description": "Business logic abuse scenarios (state skipping, negative values, race conditions) are tested before release.",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP Testing Guide OTG-BUSLOGIC",
+          "NIST SP 800-53 SA-11"
+        ],
+        "status": "missing",
+        "details": [
+          "pentest-report.json",
+          "threat-model.json"
+        ]
+      },
+      {
+        "id": "HTTP_SMUGGLING_MITIGATED",
+        "description": "Proxy and origin servers normalize CL/TE headers; H2C upgrade disabled.",
+        "automation": "evidence",
+        "frameworks": [
+          "CWE-444",
+          "OWASP Testing Guide OTG-INPVAL-016"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "SUBDOMAIN_TAKEOVER_MITIGATED",
+        "description": "DNS audit confirms no dangling CNAME records pointing to unprovisioned services.",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP Testing Guide OTG-CONFIG-010"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "AI_MULTIMODAL_INJECTION_PREVENTED",
+        "description": "Multimodal inputs (image, audio, document) are treated as untrusted and cannot inject instructions.",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP LLM01",
+          "MITRE ATLAS AML.T0054"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "AI_MEMORY_POISONING_PREVENTED",
+        "description": "Agent memory and scratchpad content is validated before use in downstream instructions.",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP LLM08",
+          "MITRE ATLAS"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "AI_MODEL_INVERSION_MITIGATED",
+        "description": "Model cannot be probed to recite training PII or memorized secrets.",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP LLM06",
+          "MITRE ATLAS AML.T0057"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "MASVS_ANTI_REVERSING",
+        "description": "Mobile release binary uses code obfuscation and anti-instrumentation controls (MASVS-RESILIENCE).",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP MASVS 2.0 RESILIENCE"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "PCI_3DS_V2_ENFORCED",
+        "description": "EMV 3DS version 2.2+ is used for all card-not-present high-risk transactions.",
+        "automation": "evidence",
+        "frameworks": [
+          "PCI DSS 4.0 Req 8",
+          "EMV 3DS 2.2"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "HIPAA_PHI_CONTROLS",
+        "description": "Protected Health Information (PHI) is encrypted at rest and in transit; access is limited and audited.",
+        "automation": "evidence",
+        "frameworks": [
+          "HIPAA §164.312",
+          "NIST SP 800-53 SC-28"
+        ],
+        "status": "missing",
+        "details": [
+          "hipaa-phi-audit.json"
+        ]
+      },
+      {
+        "id": "SECRETS_SCANNER_READY",
+        "description": "A dedicated secrets scanner is installed and runnable.",
+        "automation": "tooling",
+        "frameworks": [
+          "NIST 800-218",
+          "SLSA"
+        ],
+        "status": "missing",
+        "details": [
+          "gitleaks"
+        ]
+      },
+      {
+        "id": "SBOM_SCANNER_READY",
+        "description": "An SBOM generator (Syft) is installed and runnable.",
+        "automation": "tooling",
+        "frameworks": [
+          "SLSA",
+          "NIST 800-218",
+          "Executive Order 14028"
+        ],
+        "status": "missing",
+        "details": [
+          "syft"
+        ]
+      },
+      {
+        "id": "NIST_SA_SYSTEM_SERVICES",
+        "description": "Third-party components are assessed for security risk before adoption (NIST 800-53 SA).",
+        "automation": "tooling",
+        "frameworks": [
+          "NIST 800-53",
+          "NIST 800-218"
+        ],
+        "status": "missing",
+        "details": [
+          "osv-scanner"
+        ]
+      },
+      {
+        "id": "NIST_SR_SUPPLY_CHAIN",
+        "description": "Supply chain integrity is verified via SBOM, provenance attestation, and dependency scanning (NIST 800-53 SR).",
+        "automation": "tooling",
+        "frameworks": [
+          "NIST 800-53",
+          "SLSA",
+          "Executive Order 14028"
+        ],
+        "status": "missing",
+        "details": [
+          "syft",
+          "osv-scanner"
+        ]
+      },
+      {
+        "id": "PCI_REQ6_SECURE_SYSTEMS",
+        "description": "All software components are up-to-date and protected against known vulnerabilities (PCI DSS 4.0 Req 6).",
+        "automation": "tooling",
+        "frameworks": [
+          "PCI DSS 4.0"
+        ],
+        "status": "missing",
+        "details": [
+          "osv-scanner",
+          "trivy"
+        ]
+      },
+      {
+        "id": "SBOM_GENERATED",
+        "description": "A CycloneDX or SPDX SBOM is generated on every release and stored as a signed artifact.",
+        "automation": "tooling",
+        "frameworks": [
+          "Executive Order 14028",
+          "NIST 800-218",
+          "SLSA"
+        ],
+        "status": "missing",
+        "details": [
+          "syft"
+        ]
+      },
+      {
+        "id": "IR_PLAYBOOKS_CURRENT",
+        "description": "Incident response playbooks exist for all surfaces, are tested within 90 days, and have contact lists.",
+        "automation": "tooling",
+        "frameworks": [
+          "NIST 800-53",
+          "SOC 2 Type II"
+        ],
+        "status": "satisfied",
+        "details": []
+      },
+      {
+        "id": "CRYPTO_APPROVED_ALGORITHMS",
+        "description": "Only NIST-approved cryptographic algorithms are used (AES-256, SHA-256+, RSA-2048+).",
+        "automation": "tooling",
+        "frameworks": [
+          "NIST SP 800-131A",
+          "FIPS 140-3"
+        ],
+        "status": "missing",
+        "details": [
+          "semgrep"
+        ]
+      },
+      {
+        "id": "DLP_NO_PII_IN_LOGS",
+        "description": "PII, PAN, SSN, and credentials are never written to application logs.",
+        "automation": "tooling",
+        "frameworks": [
+          "GDPR",
+          "HIPAA",
+          "PCI DSS 4.0"
+        ],
+        "status": "missing",
+        "details": [
+          "semgrep"
+        ]
+      }
+    ],
+    "scannerReadiness": {
+      "configured": [],
+      "missing": []
+    },
+    "confidence": {
+      "score": 3,
+      "automatedCoverage": 4,
+      "missingControls": 23,
+      "riskAcceptedControls": 0,
+      "scannerReadiness": 0,
+      "summary": "Automated coverage 4%, scanner readiness 0%, missing controls 23, risk-accepted controls 0. Change type: general."
+    },
+    "baselineDiff": {
+      "regressions": [],
+      "improvements": [],
+      "newFindings": [
+        {
+          "id": "AGENT_REMOTE_INSTRUCTION_LOAD",
+          "title": "Agentic instruction file pulls instructions or commands from an external location",
+          "severity": "CRITICAL",
+          "files": [
+            ".claude/advanced.md"
+          ],
+          "evidence": [
+            ".claude/advanced.md"
+          ],
+          "requiredActions": [
+            "Remove directives that load/fetch/follow instructions from a URL or run command-substitution ($(curl …), `wget …`) — the visible file looks clean while the real payload arrives at runtime (indirect injection; OWASP LLM01, MITRE ATLAS AML.T0051).",
+            "Forbid agents from following instructions sourced from any network location; all agent authority must come from reviewed, pinned local files.",
+            "Apply an egress allowlist so runtime instruction-fetching is blocked even if the directive survives review."
+          ],
+          "sla": "24h",
+          "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        },
+        {
+          "id": "AGENT_PERMISSION_ESCALATION",
+          "title": "Agentic instruction file requests elevated permissions or tool access",
+          "severity": "HIGH",
+          "files": [
+            ".claude/advanced.md"
+          ],
+          "evidence": [
+            ".claude/advanced.md"
+          ],
+          "requiredActions": [
+            "Remove requests to skip permissions (--dangerously-skip-permissions, bypassPermissions, auto-approve), broaden allowed-tools to wildcards (Bash(*)), or run without confirmation — repo-sourced files must never widen the agent's own privileges (excessive agency; OWASP LLM08, CWE-269).",
+            "Pin the agent's permission mode and tool allowlist in trusted operator config, never in repo-readable instruction files.",
+            "Require human approval for any change to allowed-tools or permission scope."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        },
+        {
+          "id": "AGENT_BACKDOOR_INSERT",
+          "title": "Agentic instruction file directs the agent to insert a backdoor or persistent access",
+          "severity": "CRITICAL",
+          "files": [
+            ".claude/advanced.md"
+          ],
+          "evidence": [
+            ".claude/advanced.md"
+          ],
+          "requiredActions": [
+            "Remove directives to add SSH keys / authorized_keys, create admin accounts, plant reverse/bind shells, add webhooks, hardcode credentials, or disable MFA/signature checks (persistence + privilege escalation; MITRE ATT&CK T1098, CWE-912).",
+            "Treat the repository as potentially compromised: diff for any backdoor the agent may already have written, and review authorized_keys / IAM / webhook config.",
+            "Block agent write-access to auth-sensitive paths (authorized_keys, IAM policies, CI secrets) entirely."
+          ],
+          "sla": "24h",
+          "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        },
+        {
+          "id": "AGENT_PROMPT_LEAK",
+          "title": "Agentic instruction file attempts to extract the agent's system prompt or instructions",
+          "severity": "MEDIUM",
+          "files": [
+            ".claude/advanced.md"
+          ],
+          "evidence": [
+            ".claude/advanced.md"
+          ],
+          "requiredActions": [
+            "Remove directives asking the agent to repeat/print/reveal its system prompt, rules, or configuration — prompt-leak is reconnaissance that enables a tailored jailbreak (MITRE ATLAS AML.T0056).",
+            "Configure the agent runtime to refuse system-prompt disclosure and to treat such requests as adversarial probes.",
+            "Log and alert on prompt-extraction attempts as a precursor to a targeted attack."
+          ],
+          "sla": "30d",
+          "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        }
+      ],
+      "resolvedFindings": [],
+      "coverageChange": 0
+    }
+  }
+}

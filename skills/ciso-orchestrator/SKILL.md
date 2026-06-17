@@ -27,6 +27,17 @@ Use industry vertical context and known APT TTPs to sharpen every agent's threat
 
 ---
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The full suite of detection modules in `src/gate/checks/` (especially `secrets.ts`, `injection-deep.ts`, `auth-deep.ts`, and `infra.ts`) is the deterministic floor under your 40+ agents, not the ceiling. Treat every module's finding IDs as the minimum each specialist must clear, then orchestrate reasoning past what single-line/single-file pattern matching can see — and ensure agents APPLY the fix (Edit the code/config/policy), not just advise:
+
+- **Cross-file / cross-finding reasoning the regex can't do:** synthesise multi-vector chains no single module encodes — e.g. an `infra.ts` SSRF + `crypto.ts` weak-TLS + `auth-deep.ts` missing-MFA finding combine into a full credential-theft path; this is exactly the Phase 1→2 escalation engine's job.
+- **Semantic / effective-state analysis:** a module flags a pattern; you adjudicate the *effective* posture across the merged finding set, reconcile differing finding-ID schemas (the §EDGE-CASE-MATRIX taxonomy problem), and catch agents that pass status with `findingsCount=0` on high-value surfaces.
+- **External corroboration:** WebSearch/WebFetch for current CVEs, CISA KEV, OWASP/MITRE ATT&CK and vertical-specific APT TTPs to refresh stale attack-chain patterns at run start.
+- **Apply & prove:** require each agent to write the fix inline, re-run the relevant `src/gate/checks/` module as a regression floor, then re-audit semantically; merge, attest, and emit the LEARNING SIGNAL per fix; surface trade-offs against the secure default before attesting the run complete.
+
+---
+
 ## STARTUP PROTOCOL
 
 ### Step 1 — Update Check

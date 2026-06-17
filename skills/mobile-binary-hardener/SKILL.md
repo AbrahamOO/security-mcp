@@ -34,6 +34,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `mobile-android.ts` and `mobile-ios.ts` detection modules (`src/gate/checks/mobile-android.ts`, `src/gate/checks/mobile-ios.ts`) are your deterministic floor, not your ceiling. Treat their finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** `minifyEnabled = true` in `build.gradle` is negated by a `-keep class com.example.**` wildcard in a consumer `proguard-rules.pro` three modules away, and a stripped native binary still leaks symbols if an unstripped `.so`/`dSYM` is bundled in the artifact rather than uploaded separately. Cross-reference build config, ProGuard rules, the actual APK/IPA contents, and the dependency tree — not one file.
+- **Semantic / effective-state analysis:** a ProGuard-obfuscated class is *effectively* recoverable by an LLM-augmented decompiler; an OTA/CodePush update path that fetches over HTTPS but skips bundle signature verification is effectively unsigned dynamic code loading. Judge the real reverse-engineering and tamper resistance, not the literal `minifyEnabled` flag.
+- **External corroboration:** WebSearch/WebFetch current advisories (Frida-gadget-in-SDK reports, malicious AAR/Gradle plugin campaigns like ShadowSDK, ML-DSA code-signing migration, EU CRA SBOM mandate) for the detected toolchain.
+- **Apply & prove:** harden the release config, ProGuard rules, and signature-verification path inline, then re-run `src/gate/checks/mobile-android.ts`/`mobile-ios.ts` plus a `mobsf` static scan, `apktool d` + `apksigner verify --print-certs`, `readelf -S`/`strings` Frida-gadget sweep over every `.so`, and a `frida` attach attempt as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs (e.g. aggressive obfuscation breaking reflection-based libraries) against the secure default.
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

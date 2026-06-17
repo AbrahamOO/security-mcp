@@ -35,6 +35,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The full suite of detection modules in `src/gate/checks/` — especially `injection-deep.ts`, `auth-deep.ts`, `api.ts`, and `secrets.ts` — are the deterministic floor you correlate CAPEC→CWE→ATT&CK chains across, not your ceiling. Treat their finding IDs as the minimum surface evidence, then reason past what single-line/single-file pattern matching can see — and APPLY the fix (Edit the vulnerable code), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** a `req.query` value (CAPEC-88 input surface) flowing through a util module into `$queryRaw` (CAPEC-66) is a taint chain neither the input-side nor sink-side grep resolves alone — trace source→sink across files to confirm the CAPEC mapping is live, not theoretical.
+- **Semantic / effective-state analysis:** for each CAPEC mapping, determine whether the mitigating control is *effective* (parameterized query actually used on the tainted path, `algorithms` pinned on the reached `jwt.verify`, authz enforced on the IDOR'd object) and build the compound CAPEC→CWE→CVE exploit chain.
+- **External corroboration:** use WebSearch/WebFetch for the current CAPEC catalog, CWE→CVE mappings on NVD, and D3FEND countermeasures for each mapped pattern.
+- **Apply & prove:** write the fix inline for each OPEN CAPEC finding, re-run the relevant `src/gate/checks/` modules plus semgrep as a regression floor, then re-audit the taint chain semantically. Emit the LEARNING SIGNAL per fix; surface any fix that changes intended behavior as an explicit trade-off with the secure default.
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

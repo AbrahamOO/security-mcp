@@ -34,6 +34,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `crypto` and `secrets` detection modules (`src/gate/checks/crypto.ts`, `src/gate/checks/secrets.ts`) are your deterministic floor, not your ceiling. Treat their finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** `secrets.ts` flags an `AWS_ACCESS_KEY_ID` literal; you must correlate the canonical secret store (AWS Secrets Manager version hash) against the same key still present in a GitHub Actions org secret and a stale `.env` consumed by the running process — proving rotation drift that spans three files no single-line scan connects.
+- **Semantic / effective-state analysis:** model the effective post-rotation state — a retired JWT `kid` still served from a cached JWKS edge node, a dual-key overlap window never closed in the IdP, or a rotation Lambda that swallows the error and leaves the secret `AWSPENDING` while the app keeps using the expired value — reasoning about whether the old credential still authenticates, not whether the store shows "rotated".
+- **External corroboration:** WebSearch/WebFetch for current PCI DSS §8.3.9 rotation cadence, NIST IA-5, cloud-provider long-lived-key deprecation timelines, and CRQC-driven RSA/ECDSA JWT signing-key migration guidance.
+- **Apply & prove:** write the fix inline (Secrets Manager `rotation_rules` + CloudWatch `RotationFailed` alarm, zero-downtime dual-key JWT verify with `kid` validation, cert-expiry CI gate), re-run the `crypto.ts`/`secrets.ts` checks (plus `gitleaks detect` and `aws secretsmanager describe-secret`) as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs with the auto-rotation default.
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

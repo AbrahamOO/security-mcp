@@ -34,6 +34,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `auth-deep` detection module (`src/gate/checks/auth-deep.ts`) is your deterministic floor, not your ceiling. Treat its session/timeout finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / multi-step reasoning the regex can't do:** `auth-deep.ts` flags an absent `maxAge` in `auth.config.ts`, but it cannot correlate that the `changePassword` handler in one file never calls the `invalidateAllSessions` Redis sweep defined in another, nor that a `reset-by-email` flow takes a second code path with no revocation. Trace the full set of credential-change entry points to every session store.
+- **Semantic / effective-state analysis:** model the entire session lifecycle — issue → slide (`updateAge`) → idle → absolute cap → revoke — and prove the *effective* lifetime, e.g. an SSE/WebSocket keepalive silently resetting the idle timer, or a `client_id` split bypassing a per-app concurrent-session cap that looks correct per file.
+- **External corroboration:** WebSearch/WebFetch for current CVEs/advisories/standards for session management (next-auth state-binding advisories, PCI DSS 8.3.13 idle-timeout, NIST AC-12).
+- **Apply & prove:** write the config/middleware fix inline, re-run the `auth-deep` checks (plus a token-entropy pass with `ent`/`dieharder` and a live "change password → old cookie rejected" test) as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs against the secure default (shorter absolute lifetime vs. user re-login friction).
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

@@ -1,0 +1,35 @@
+# INSECURE FIXTURE — network & exposure depth
+apiVersion: v1
+kind: Service
+metadata:
+  name: open-lb
+  namespace: app
+spec:
+  type: LoadBalancer
+  loadBalancerSourceRanges:
+    - 0.0.0.0/0
+  externalIPs:
+    - 203.0.113.10
+  selector:
+    app: escape
+  ports:
+    - port: 443
+      targetPort: 8443
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: no-tls-ingress
+  namespace: app
+spec:
+  rules:
+    - host: app.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: open-lb
+                port:
+                  number: 443

@@ -34,6 +34,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The full suite of detection modules in `src/gate/checks/` (especially the threat-model/scoring path — `infra.ts`, `auth-deep.ts`, `injection-deep.ts`, `api.ts` — as your risk-input feed) is your deterministic floor, not your ceiling. Treat every emitted finding ID as a quantified threat input into the Trike Actor × Action × Asset matrix, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / multi-step reasoning the regex can't do:** a single check finding is one cell in the matrix; the real risk is the *chain* — e.g. an IP-trust finding (infra) + a long-lived credential finding (auth-deep) compose into a lateral-movement path no single module scores. Build the attack tree per asset that spans modules, and recompute `P(exploit) × Impact` for the composed path, not the isolated finding.
+- **Semantic / effective-state analysis:** map the stated Actor × Action "Denied" matrix against the *actual* permission checks in code — gaps between modeled-denied and runtime-allowed are the highest-value Trike findings. Model availability (DDoS-class), supply-chain (dependency asset rows), and LLM-inference assets that flat asset registers omit; flag CRITICAL assets with >5yr retention as harvest-now-decrypt-later (risk 15) today.
+- **External corroboration:** WebSearch/WebFetch for current CVEs/advisories/standards for risk modeling — ground-truth probability scores against live exploit data (CISA KEV, EPSS), and use tools like `garak` / `semgrep p/owasp-top-ten` to validate the matrix against real attacker enumeration speed.
+- **Apply & prove:** write the fix — regenerate `docs/security/trike-risk-model.md` with the corrected asset register and risk-ranked backlog — re-run the relevant `src/gate/checks/` modules as a regression floor to confirm the threat input is resolved, then re-audit the matrix. Emit the LEARNING SIGNAL per fix; surface trade-offs with the secure default (e.g. risk acceptance criteria vs. mitigation cost).
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

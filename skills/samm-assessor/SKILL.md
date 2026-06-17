@@ -35,6 +35,15 @@ On every finding resolved, emit:
 ```
 Call `security.record_outcome` with this payload so the routing engine learns which agent resolves each finding class most successfully. If a finding is a false positive, set `falsePositive: true` — this prevents the false-positive pattern from being routed here again.
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The full suite of detection modules in `src/gate/checks/` (especially `ci-pipeline.ts`, `supply-chain-deep.ts`, and `dependencies.ts`) is your deterministic floor for maturity evidence, not your ceiling. Treat their finding IDs as the minimum scoring signal, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** a single module reporting "SAST configured" does not prove SAMM Implementation/Secure Build Level 2; you must correlate the CI workflow, the dependency lock files, the secret-scanning step, and the SLSA provenance attestation across the repo to score the practice honestly — a maturity judgment no per-line check makes.
+- **Semantic / effective-state analysis:** model the effective maturity state — a threat model that exists but is >12 months stale and missing a new data flow (score L1 not L2), or a Secure Build that runs SAST but no `trufflehog`/`gitleaks` secret scan (cap at L1) — reasoning about whether the practice is actually performed and measured, not whether an artifact merely exists.
+- **External corroboration:** WebSearch/WebFetch for current OWASP SAMM 2.0 activity definitions, SAMM community benchmark averages, EU CRA SBOM-per-release mandates, and BSIMM correlation data.
+- **Apply & prove:** generate the assessment doc AND write the missing control inline (add the SCA gate, the IaC scan, the SBOM step), re-run the relevant `src/gate/checks/` modules (plus `semgrep`/`trivy`/`osv-scanner` as the evidence the score now claims) as a regression floor, then re-score. Emit the LEARNING SIGNAL per fix; surface trade-offs with the higher-maturity default.
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

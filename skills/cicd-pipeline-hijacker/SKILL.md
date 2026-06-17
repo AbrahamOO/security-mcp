@@ -22,6 +22,15 @@ and every secret in the CI environment is a target.
 Find every CI/CD pipeline vulnerability that could allow secret exfiltration, unauthorized
 deployment, or pipeline poisoning. Write fixed workflow YAML inline. Covers §6 fully.
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `ci-pipeline.ts` detection module (`src/gate/checks/ci-pipeline.ts`), with `supply-chain-deep.ts` for provenance, is your deterministic floor, not your ceiling. Treat its finding IDs as the minimum, then reason past what single-line/single-file pattern matching can see — and APPLY the fix (Edit the workflow YAML / trust policy), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** a `pull_request_target` trigger in one workflow that checks out fork head and invokes a reusable workflow in another file (which then uses an unsanitized `input` in `run:`) is a poisoned-pipeline-execution chain no single-file grep resolves.
+- **Semantic / effective-state analysis:** model the trust boundary — does an OIDC `sub` condition in the IaC trust policy actually pin `ref:refs/heads/main`, or can any PR branch assume the production role; is a `${{ github.event.* }}` value reaching a shell context without an intermediate `env:` that forces quoting; is the runner ephemeral.
+- **External corroboration:** use WebSearch/WebFetch for current GitHub Actions hardening guidance, pipeline-injection CVEs, and known-good Action commit SHAs.
+- **Apply & prove:** write the fix inline (pin Actions to full SHA, scope OIDC subject, set minimal `permissions`, route event context through `env:`, add SLSA provenance), re-run the `ci-pipeline.ts`/`supply-chain-deep.ts` checks plus an actionlint/zizmor regression floor, then re-audit the trust boundary semantically. Emit the LEARNING SIGNAL per fix; surface any fix that changes intended behavior as an explicit trade-off with the secure default.
+
 ## EXECUTION
 
 1. Scan `.github/workflows/`, `.gitlab-ci.yml`, `Jenkinsfile`, `.circleci/config.yml`,

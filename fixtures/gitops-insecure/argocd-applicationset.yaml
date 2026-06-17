@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: pr-previews
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: []
+  generators:
+    - scmProvider:
+        github:
+          organization: "*"
+          allBranches: true
+    - pullRequest:
+        github:
+          owner: any-org
+          repo: any-repo
+  template:
+    metadata:
+      name: '{{.branch}}-preview'
+    spec:
+      project: default
+      destination:
+        namespace: '{{.branch}}'
+        server: https://kubernetes.default.svc

@@ -34,6 +34,15 @@ On every finding resolved, emit:
 }
 ```
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `auth-deep` and `api` detection modules (`src/gate/checks/auth-deep.ts`, `src/gate/checks/api.ts`) are your deterministic floor, not your ceiling. Treat their finding IDs as the minimum, then reason past what single-line/single-file pattern matching can see — and APPLY the fix (Edit the auth/webhook handler), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** a JWT issued with a `jti` in one service but validated against a *per-service local* Redis cache in others means the token replays once per microservice; the gap only appears when you trace the `jti` write site against every distinct validation site across services, not in any single file.
+- **Semantic / effective-state analysis:** model the protocol state machine — webhook signature valid yet replayable within the timestamp window because the event-ID nonce store is never consulted, OAuth code accepted twice because the comparison is `exp >= now` not `>`, SAML signature valid on the outer node while a wrapped assertion is processed, idempotency keys predictable enough to be pre-registered by the attacker.
+- **External corroboration:** use WebSearch/WebFetch for current replay CVEs and advisories (CVE-2017-11427 SAML XML signature wrapping, WebAuthn challenge-reuse patterns, OIDC nonce guidance) relevant to the detected auth/webhook libraries.
+- **Apply & prove:** write the fix inline (centralized `jti` revocation store, webhook timestamp window + event-ID nonce check, server-generated random idempotency key, per-ceremony WebAuthn challenge with short TTL), re-run the `auth-deep`/`api` checks plus a replay probe (re-send the captured token/webhook/code and assert rejection) as a regression floor, then re-audit semantically. Emit the LEARNING SIGNAL per fix; surface any tightening of expiry or nonce windows that affects legitimate retries as an explicit reliability-vs-replay trade-off with the secure default.
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

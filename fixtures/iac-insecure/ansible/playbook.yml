@@ -1,0 +1,23 @@
+---
+- hosts: web
+  become: true
+  vars:
+    ansible_become_pass: HardcodedSudoPass1
+    ansible_ssh_pass: PlaintextSshPass2
+    ansible_password: AnotherPlaintextPw3
+  tasks:
+    - name: fetch secret over tls
+      uri:
+        url: https://internal/api
+        validate_certs: no
+
+    - name: write credential
+      copy:
+        content: "{{ db_secret }}"
+        dest: /etc/app/secret
+      no_log: false
+
+    - name: install pkg
+      apt:
+        name: nginx
+        validate_certs: false

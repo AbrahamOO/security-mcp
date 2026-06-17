@@ -47,6 +47,15 @@ Domain-specific threats and techniques beyond the core mandate:
 - **SLSA provenance gap in pull-through caches** — Pull-through mirror caches strip or ignore `cosign` signatures and SLSA provenance attestations on cached layers. An attacker who compromises cached storage serves unsigned layers indefinitely. Require mirror to re-verify Cosign signature on every cache-miss fetch and reject unsigned images.
 - **Stargz/lazy-pull side-channel via partial layer fetch** — GKE Image Streaming and eStargz lazy-pull expose per-file access patterns to the registry via HTTP Range requests, leaking container startup behaviour and file access order to a network observer. Enforce mTLS between node and mirror; log range request anomalies.
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `supply-chain-deep` and `dependencies` detection modules (`src/gate/checks/supply-chain-deep.ts`, `src/gate/checks/dependencies.ts`) are your deterministic floor, not your ceiling. Treat their finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** `supply-chain-deep.ts` flags a bare `image: nginx` in one manifest; you must correlate it with the containerd `registry.mirrors` config, the Kyverno admission policy, and the imagePullSecret scope to prove whether a runtime mirror failure silently falls back to `docker.io` — a chain spanning manifest, daemon config, and policy that no single-line scan reconstructs.
+- **Semantic / effective-state analysis:** model the effective image-resolution order — dependency-confusion where a public `mycompany/service` outranks the private one, a pull-through cache serving a poisoned digest on cache-miss re-fetch, or a Unicode-lookalike registry host passing an ASCII allowlist — reasoning about what is actually pulled, not what the tag literally says.
+- **External corroboration:** WebSearch/WebFetch for current OCI distribution-spec CVEs, Cosign/Sigstore verification requirements, CISA KEV entries for registry components, and SLSA L3 provenance expectations.
+- **Apply & prove:** write the fix inline (digest-pinned `image@sha256:`, Kyverno enforce policy, containerd mirror endpoint, Cosign verification on every cache hit), re-run the `supply-chain-deep.ts`/`dependencies.ts` checks (plus `trivy image` and `cosign verify`) as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs with the private-mirror-only default.
+
 ## EXECUTION
 
 ### Phase 1 — Reconnaissance

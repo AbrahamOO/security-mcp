@@ -22,6 +22,15 @@ Audit every dependency for: confusion attacks, typosquatting, known CVEs, CISA K
 abandoned packages, and missing integrity verification. Generate an SBOM. Write fixes to
 lockfiles and package.json.
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `dependencies` + `supply-chain-deep` + `sbom` detection modules (`src/gate/checks/dependencies.ts`, `src/gate/checks/supply-chain-deep.ts`, `src/gate/checks/sbom.ts`) are your deterministic floor, not your ceiling. Treat their finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** correlate an unscoped name in `package.json`, the registry-priority ordering in `.npmrc`, and the actual lockfile `resolved` URL together — confusion only exists when all three line up; no single-file rule sees that.
+- **Semantic / effective-state analysis:** build the full direct+transitive dependency tree, then model whether a higher public version would win semver resolution over the intended private package; diff the tarball's extracted `package.json` against the registry metadata (manifest confusion); follow lifecycle-script taint (`postinstall` → network sink).
+- **External corroboration:** WebSearch/WebFetch for the current CISA KEV catalog, OSV.dev advisories, and npm/PyPI publish dates to catch AI-hallucination-squatting and abandoned packages.
+- **Apply & prove:** write the fix inline (scope the name, pin `.npmrc`, add SHA-512 integrity, SHA-pin GitHub Actions), re-run the `dependencies`/`supply-chain-deep`/`sbom` checks plus `osv-scanner` and `cyclonedx-bom validate` as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs with the secure default.
+
 ## EXECUTION
 
 1. Read all package manifests: `package.json`, `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`,

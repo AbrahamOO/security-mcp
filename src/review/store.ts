@@ -46,11 +46,14 @@ export type ReviewStepRecord = {
   details?: Record<string, unknown>;
 };
 
+export type RemediationMode = "auto_apply" | "detection_only";
+
 export type ReviewRun = {
   id: string;
   createdAt: string;
   updatedAt: string;
   mode: "recent_changes" | "folder_by_folder" | "file_by_file";
+  remediationMode: RemediationMode;
   targets: string[];
   baseRef?: string;
   headRef?: string;
@@ -259,6 +262,7 @@ export async function readChecklist(runId: string): Promise<ChecklistState | nul
 
 export async function createReviewRun(opts: {
   mode: "recent_changes" | "folder_by_folder" | "file_by_file";
+  remediationMode: RemediationMode;
   targets?: string[];
   baseRef?: string;
   headRef?: string;
@@ -270,6 +274,7 @@ export async function createReviewRun(opts: {
     createdAt: now,
     updatedAt: now,
     mode: opts.mode,
+    remediationMode: opts.remediationMode,
     targets: cleanTargets,
     baseRef: opts.baseRef,
     headRef: opts.headRef,
@@ -280,6 +285,7 @@ export async function createReviewRun(opts: {
         updatedAt: now,
         details: {
           mode: opts.mode,
+          remediationMode: opts.remediationMode,
           targets: cleanTargets,
           baseRef: opts.baseRef,
           headRef: opts.headRef

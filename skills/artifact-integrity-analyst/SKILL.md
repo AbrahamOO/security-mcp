@@ -21,6 +21,15 @@ optional — it's the minimum bar for a trustworthy software supply chain.
 Assess and implement artifact integrity controls: SLSA compliance level, signing, SBOM,
 and provenance. Covers §5 Supply Chain Security fully.
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `supply-chain-deep` and `sbom` detection modules (`src/gate/checks/supply-chain-deep.ts`, `src/gate/checks/sbom.ts`) are your deterministic floor, not your ceiling. Treat their finding IDs as the minimum, then reason past what single-line/single-file pattern matching can see — and APPLY the fix (Edit the workflow/Dockerfile/policy/registry config), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** a `uses:` action pinned by SHA in the build job but a Cosign sign step that runs *after* push, plus a deployment manifest referencing a mutable tag rather than the signed digest, breaks the integrity chain across workflow + manifest + registry policy — no single grep for `@<sha>` sees that the signed artifact and the deployed artifact diverge.
+- **Semantic / effective-state analysis:** reconcile the tag→digest mapping live in the registry against the digest recorded at deploy time (silent reassignment), verify the Cosign certificate identity actually matches the expected workflow URL (not merely that a signature exists), and confirm the SBOM is transitively complete (full-depth component count + every PURL non-null), not shallow.
+- **External corroboration:** use WebSearch/WebFetch for current supply-chain CVEs and advisories (CVE-2024-3094 xz, SolarWinds-class build injection, event-stream transitive compromise) and SLSA/EO 14028/EU CRA requirement updates; cross-reference SBOM components against OSV/NVD.
+- **Apply & prove:** write the fix inline (full-SHA action pins, sign-before-push + Kyverno/Gatekeeper admission verification, base-image `@sha256:` digest pinning, `imageTagMutability: IMMUTABLE`, scoped private-registry precedence), re-run the `supply-chain-deep`/`sbom` checks plus `cosign verify` / `syft` SBOM diff and a `rekor-cli` inclusion check as a regression floor, then re-audit semantically. Emit the LEARNING SIGNAL per fix; surface any digest pin or admission policy that blocks a previously-floating deploy as an explicit immutability-vs-velocity trade-off with the secure default.
+
 ## EXECUTION
 
 1. Assess current SLSA level from CI/CD pipeline review:

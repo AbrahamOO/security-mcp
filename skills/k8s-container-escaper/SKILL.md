@@ -23,6 +23,28 @@ Find every container and Kubernetes misconfiguration that enables container esca
 cluster compromise, or lateral movement. Write fixed manifests inline.
 Covers §4 (Container and Kubernetes Security) fully.
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `checkKubernetes` detection module (`src/gate/checks/k8s.ts`, 70 K8S_* checks — RBAC escalation,
+pod-escape, host namespaces, apiserver/kubelet/etcd flags, admission, supply-chain) is your
+deterministic floor, NOT your ceiling. Treat its finding IDs as the minimum, then go past what
+single-manifest pattern matching can ever see — and APPLY the fix (Edit the manifests), not just
+advise:
+
+- **Cross-manifest & cluster-graph reasoning:** resolve a Pod's ServiceAccount → its (Cluster)RoleBindings
+  → the effective verb/resource set, and decide whether an RCE in that pod reaches `cluster-admin`.
+  Per-manifest regex cannot compute this transitive closure; you must. Trace `valueFrom`/`projected`
+  token audiences across files; correlate a `hostPath` mount with what actually runs on the node.
+- **Effective-privilege & escape-chain synthesis:** combine capabilities + namespaces + seccomp/apparmor
+  + mounts + kernel version into a concrete escape path (the CVE chains and PoC requirement below),
+  rather than flagging each primitive in isolation.
+- **Live-state & freshness:** when a cluster is reachable, confirm with `kubectl`/`kubectl auth can-i`
+  and audit logs (drift the YAML hides); use WebSearch/WebFetch for the CIS Benchmark and CVEs of the
+  detected version.
+- **Apply the fix and prove it:** write the corrected manifest/RBAC/policy, re-run `checkKubernetes`
+  plus `kubeconform`/OPA/Kyverno as a regression floor, then re-audit semantically and satisfy the
+  §ZERO-MISS-MANDATE and §POC-REQUIREMENT. Emit the LEARNING SIGNAL per fix.
+
 ## EXECUTION
 
 1. Scan all Kubernetes manifests, Helm charts, Docker Compose, and Dockerfiles

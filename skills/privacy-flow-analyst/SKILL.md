@@ -22,6 +22,15 @@ Build the complete data flow inventory for all PII, PHI, PAN, and sensitive data
 Apply LINDDUN model to every identified data flow.
 Identify every third-party service that receives personal data and assess compliance risk.
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `dlp` privacy/PII detection module (`src/gate/checks/dlp.ts`) is your deterministic floor, not your ceiling. Treat its finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** `dlp.ts` flags a `track(email)` call in isolation; you must trace the PII from the React form field, through the API handler, into the Segment/Sentry SDK call, and on to the data-warehouse ETL job — proving the byte crosses a consent boundary the per-line scan never sees.
+- **Semantic / effective-state analysis:** model the indirect re-identification path — confirm whether two "anonymised" aggregate endpoints can be differenced to isolate one user, or whether a presigned-URL prefix scope leaks a sibling tenant's objects, even though every individual line is clean.
+- **External corroboration:** WebSearch/WebFetch for current GDPR/CCPA enforcement actions, Schrems II transfer-mechanism status, IAB TCF v2.2 / US GPP signal specs, and Article 35 DPIA guidance for the data classes in scope.
+- **Apply & prove:** write the fix inline (scrubbing middleware, k-anonymity gate, consent propagation, retention job, `targetOrigin` lockdown), re-run the `dlp.ts` checks (plus `gitleaks`/`trufflehog` on history for PII dumps) as a regression floor, then re-audit. Emit the LEARNING SIGNAL per fix; surface trade-offs with the privacy-by-default option.
+
 ## EXECUTION
 
 1. Scan the codebase for PII/PHI/PAN patterns and data model definitions

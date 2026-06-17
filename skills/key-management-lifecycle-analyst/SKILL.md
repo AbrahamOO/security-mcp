@@ -22,6 +22,15 @@ Find every key management gap: hardcoded keys, unrotated keys, over-scoped keys,
 key hierarchy, and post-quantum readiness. Write secrets manager configurations and rotation
 scripts inline.
 
+## BEYOND THE CHECKS — AUTONOMOUS DETECT & FIX
+
+The `crypto.ts` detection module (`src/gate/checks/crypto.ts`) — keys/TLS/algorithms — is your deterministic floor, not your ceiling. Treat its finding IDs as the minimum, then reason past single-line/single-file pattern matching — and APPLY the fix (Edit), not just advise:
+
+- **Cross-file / data-flow reasoning the regex can't do:** a `JWT_SECRET` flagged in one `.env` is only the start — trace the same value across `docker-compose.yml`, k8s `Secret` manifests, CI env vars, and git history, since a "rotated" key reused elsewhere defeats rotation entirely. Confirm DEK/KEK separation by following the key material from generation through every use site, not just the declaration.
+- **Semantic / effective-state analysis:** a key in AWS Secrets Manager with a rotation Lambda *configured* but a `kid`-less JWT verifier still trusts old tokens forever; an HSM-backed key whose policy has `Principal: "*"` is effectively public. Judge the effective blast radius and rotation behavior, not the presence of a secrets-manager reference.
+- **External corroboration:** WebSearch/WebFetch current NIST PQC status (FIPS 203/204/205), NIST 800-57, and CVEs for the detected crypto libraries (e.g. Psychic Signatures CVE-2022-21449, XZ CVE-2024-3094) before scoring long-lived keys.
+- **Apply & prove:** write the secrets-manager reference, rotation script, and HKDF hierarchy inline, then re-run `src/gate/checks/crypto.ts` plus `trufflehog --only-verified` and `gitleaks` as a regression floor, then re-audit git history. Emit the LEARNING SIGNAL per fix; surface trade-offs (e.g. short DEK cache TTL increasing KMS call cost) against the secure default.
+
 ## EXECUTION
 
 1. **Hardcoded key detection (CRITICAL for any match):**
