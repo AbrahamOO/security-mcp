@@ -1,10 +1,12 @@
 import fg from "fast-glob";
 import { readFileSafe } from "../../repo/fs.js";
 import { Finding } from "../result.js";
-import { detectTerraform, Violation } from "../cloud-controls/detect.js";
+import { detectBicep, detectCloudFormation, detectTerraform, Violation } from "../cloud-controls/detect.js";
 import { CloudRule, loadCloudRules } from "../cloud-controls/types.js";
 
-const TF_GLOBS = ["**/*.tf"];
+// .tf = Terraform (HCL); .bicep = Bicep; json/yaml/template are CloudFormation/SAM
+// candidates (gated by a content check so arbitrary JSON/YAML is skipped cheaply).
+const GLOBS = ["**/*.tf", "**/*.bicep", "**/*.json", "**/*.yaml", "**/*.yml", "**/*.template"];
 const IGNORE = [
   "**/node_modules/**",
   "**/.git/**",
@@ -12,6 +14,12 @@ const IGNORE = [
   "**/.claude/**",
   "src/gate/**"
 ];
+
+function detectForFile(file: string, text: string, rules: CloudRule[]): Violation[] {
+  if (file.endsWith(".tf")) return detectTerraform(file, text, rules);
+  if (file.endsWith(".bicep")) return detectBicep(file, text, rules);
+  return detectCloudFormation(file, text, rules);
+}
 
 const MAX_EVIDENCE = 20;
 
@@ -39,7 +47,7 @@ export async function checkCloudControls(opts: { changedFiles: string[] }): Prom
   const rules = await loadCloudRules();
   if (rules.length === 0) return [];
 
-  const files = await fg(TF_GLOBS, { dot: true, followSymbolicLinks: false, ignore: IGNORE });
+  const files = await fg(GLOBS, { dot: true, followSymbolicLinks: false, ignore: IGNORE });
   const byRule = new Map<string, Violation[]>();
 
   for (const file of files) {
@@ -49,7 +57,7 @@ export async function checkCloudControls(opts: { changedFiles: string[] }): Prom
     } catch {
       continue;
     }
-    for (const v of detectTerraform(file, text, rules)) {
+    for (const v of detectForFile(file, text, rules)) {
       const list = byRule.get(v.rule.ruleId);
       if (list) list.push(v);
       else byRule.set(v.rule.ruleId, [v]);

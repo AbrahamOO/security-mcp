@@ -1197,6 +1197,120 @@
       "requiredActions": [
         "Enforce Entra ID-only auth (azuread_authentication_only = true) on the azurerm_mssql_server."
       ]
+    },
+    {
+      "ruleId": "BICEP_STORAGE_HTTPS_ONLY",
+      "threat": "A Bicep storage account allowing plaintext HTTP lets blob traffic and SAS tokens be intercepted.",
+      "frameworks": ["CIS Azure Foundations Benchmark 3.1", "Microsoft Cloud Security Benchmark DP-3"],
+      "severity": "HIGH",
+      "title": "Bicep storage account must require HTTPS",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Storage/storageAccounts",
+        "forbid": "supportsHttpsTrafficOnly\\s*:\\s*false"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties: { supportsHttpsTrafficOnly: true } on the Microsoft.Storage/storageAccounts resource."
+      },
+      "requiredActions": [
+        "Set supportsHttpsTrafficOnly: true on the storage account."
+      ]
+    },
+    {
+      "ruleId": "BICEP_STORAGE_MIN_TLS",
+      "threat": "A Bicep storage account allowing TLS 1.0/1.1 exposes data to downgrade attacks.",
+      "frameworks": ["CIS Azure Foundations Benchmark 3.12"],
+      "severity": "MEDIUM",
+      "title": "Bicep storage account must require TLS 1.2",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Storage/storageAccounts",
+        "require": "minimumTlsVersion\\s*:\\s*'TLS1_2'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties: { minimumTlsVersion: 'TLS1_2' } on the Microsoft.Storage/storageAccounts resource."
+      },
+      "requiredActions": [
+        "Set minimumTlsVersion: 'TLS1_2' on the storage account."
+      ]
+    },
+    {
+      "ruleId": "BICEP_SQL_NO_PUBLIC",
+      "threat": "A Bicep SQL server with public network access is reachable from the internet.",
+      "frameworks": ["CIS Azure Foundations Benchmark 4.1", "Microsoft Cloud Security Benchmark NS-2"],
+      "severity": "HIGH",
+      "title": "Bicep SQL server must disable public network access",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Sql/servers",
+        "forbid": "publicNetworkAccess\\s*:\\s*'Enabled'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties: { publicNetworkAccess: 'Disabled' } on the Microsoft.Sql/servers resource and use a private endpoint."
+      },
+      "requiredActions": [
+        "Set publicNetworkAccess: 'Disabled' on the SQL server."
+      ]
+    },
+    {
+      "ruleId": "BICEP_KEYVAULT_PURGE_PROTECTION",
+      "threat": "A Bicep Key Vault without purge protection can be permanently deleted, destroying secrets and recovery options.",
+      "frameworks": ["CIS Azure Foundations Benchmark 8.5"],
+      "severity": "MEDIUM",
+      "title": "Bicep Key Vault must enable purge protection",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.KeyVault/vaults",
+        "require": "enablePurgeProtection\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties: { enablePurgeProtection: true } on the Microsoft.KeyVault/vaults resource."
+      },
+      "requiredActions": [
+        "Set enablePurgeProtection: true on the Key Vault."
+      ]
+    },
+    {
+      "ruleId": "BICEP_AKS_RBAC",
+      "threat": "A Bicep AKS cluster without RBAC grants flat, unscoped access — any leaked credential is cluster-admin.",
+      "frameworks": ["CIS Azure Foundations Benchmark 8.7"],
+      "severity": "HIGH",
+      "title": "Bicep AKS cluster must enable RBAC",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.ContainerService/managedClusters",
+        "require": "enableRBAC\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties: { enableRBAC: true } on the Microsoft.ContainerService/managedClusters resource."
+      },
+      "requiredActions": [
+        "Set enableRBAC: true on the AKS cluster."
+      ]
+    },
+    {
+      "ruleId": "BICEP_REDIS_NO_NONSSL",
+      "threat": "A Bicep Redis cache with the non-SSL port enabled lets cache traffic be intercepted in plaintext.",
+      "frameworks": ["Microsoft Cloud Security Benchmark DP-3"],
+      "severity": "MEDIUM",
+      "title": "Bicep Redis cache must disable the non-SSL port",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Cache/Redis",
+        "forbid": "enableNonSslPort\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties: { enableNonSslPort: false } on the Microsoft.Cache/Redis resource."
+      },
+      "requiredActions": [
+        "Set enableNonSslPort: false on the Redis cache."
+      ]
     }
   ]
 }

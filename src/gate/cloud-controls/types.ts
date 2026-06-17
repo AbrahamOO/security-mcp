@@ -11,10 +11,14 @@ export const CloudProviderSchema = z.enum(["aws", "gcp", "azure"]);
 export type CloudProvider = z.infer<typeof CloudProviderSchema>;
 
 const DetectSchema = z.object({
-  // How the rule body is matched. "terraform" matches HCL resource blocks;
-  // "cfn-json" matches CloudFormation/ARM JSON resource nodes (detect-only).
-  target: z.enum(["terraform", "cfn-json"]),
-  // Terraform resource type (e.g. "aws_instance") or CFN type ("AWS::S3::Bucket").
+  // How the rule body is matched:
+  //   "terraform"      — HCL resource blocks (supports auto-fix).
+  //   "cloudformation" — CloudFormation/SAM resources in JSON or YAML (detect-only).
+  //   "bicep"          — Bicep resource declarations (detect-only).
+  // Only "terraform" supports auto-remediation; the others are emit-and-fix-manually.
+  target: z.enum(["terraform", "cloudformation", "bicep"]),
+  // Resource type for the target: Terraform "aws_instance", CloudFormation
+  // "AWS::S3::Bucket", or Bicep "Microsoft.Storage/storageAccounts".
   resourceType: z.string(),
   // Regex; if it matches inside the resource block the resource is INSECURE.
   forbid: z.string().optional(),

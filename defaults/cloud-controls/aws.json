@@ -2126,6 +2126,139 @@
       "requiredActions": [
         "Enable access_log_settings on the aws_api_gateway_stage."
       ]
+    },
+    {
+      "ruleId": "CFN_S3_NO_PUBLIC_ACL",
+      "threat": "A CloudFormation S3 bucket with a public-read ACL exposes all objects to anonymous download.",
+      "frameworks": ["AWS FSBP S3.2", "AWS FSBP S3.3"],
+      "severity": "CRITICAL",
+      "title": "CloudFormation S3 bucket must not use a public ACL",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::S3::Bucket",
+        "forbid": "\"?AccessControl\"?\\s*:\\s*\"?Public"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Remove AccessControl: PublicRead/PublicReadWrite and add a PublicAccessBlockConfiguration with all four flags = true to the AWS::S3::Bucket."
+      },
+      "requiredActions": [
+        "Set a private ACL and a PublicAccessBlockConfiguration on the AWS::S3::Bucket."
+      ]
+    },
+    {
+      "ruleId": "CFN_RDS_NOT_PUBLIC",
+      "threat": "A CloudFormation RDS instance marked publicly accessible is reachable from the internet.",
+      "frameworks": ["AWS FSBP RDS.2"],
+      "severity": "CRITICAL",
+      "title": "CloudFormation RDS instance must not be publicly accessible",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::RDS::DBInstance",
+        "forbid": "\"?PubliclyAccessible\"?\\s*:\\s*\"?true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set PubliclyAccessible: false on the AWS::RDS::DBInstance and place it in private subnets."
+      },
+      "requiredActions": [
+        "Set PubliclyAccessible: false on the AWS::RDS::DBInstance."
+      ]
+    },
+    {
+      "ruleId": "CFN_RDS_STORAGE_ENCRYPTED",
+      "threat": "A CloudFormation RDS instance without storage encryption exposes the database at rest.",
+      "frameworks": ["AWS FSBP RDS.3"],
+      "severity": "HIGH",
+      "title": "CloudFormation RDS instance must encrypt storage",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::RDS::DBInstance",
+        "require": "\"?StorageEncrypted\"?\\s*:\\s*\"?true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set StorageEncrypted: true (and KmsKeyId) on the AWS::RDS::DBInstance."
+      },
+      "requiredActions": [
+        "Set StorageEncrypted: true on the AWS::RDS::DBInstance."
+      ]
+    },
+    {
+      "ruleId": "CFN_EBS_VOLUME_ENCRYPTED",
+      "threat": "A CloudFormation EBS volume without encryption exposes data at rest if exfiltrated.",
+      "frameworks": ["AWS FSBP EC2.3"],
+      "severity": "HIGH",
+      "title": "CloudFormation EBS volume must be encrypted",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::EC2::Volume",
+        "require": "\"?Encrypted\"?\\s*:\\s*\"?true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set Encrypted: true (and KmsKeyId) on the AWS::EC2::Volume."
+      },
+      "requiredActions": [
+        "Set Encrypted: true on the AWS::EC2::Volume."
+      ]
+    },
+    {
+      "ruleId": "CFN_SG_OPEN_INGRESS",
+      "threat": "A CloudFormation security group allowing 0.0.0.0/0 exposes ports directly to the internet.",
+      "frameworks": ["AWS FSBP EC2.13"],
+      "severity": "HIGH",
+      "title": "CloudFormation security group must not open ingress to 0.0.0.0/0",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::EC2::SecurityGroup",
+        "forbid": "0\\.0\\.0\\.0/0"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Restrict CidrIp from 0.0.0.0/0 to specific ranges on the AWS::EC2::SecurityGroup ingress rules."
+      },
+      "requiredActions": [
+        "Remove 0.0.0.0/0 ingress from the AWS::EC2::SecurityGroup."
+      ]
+    },
+    {
+      "ruleId": "CFN_REDSHIFT_NOT_PUBLIC",
+      "threat": "A CloudFormation Redshift cluster marked publicly accessible is reachable from the internet.",
+      "frameworks": ["AWS FSBP Redshift.1"],
+      "severity": "HIGH",
+      "title": "CloudFormation Redshift cluster must not be publicly accessible",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::Redshift::Cluster",
+        "forbid": "\"?PubliclyAccessible\"?\\s*:\\s*\"?true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set PubliclyAccessible: false on the AWS::Redshift::Cluster."
+      },
+      "requiredActions": [
+        "Set PubliclyAccessible: false on the AWS::Redshift::Cluster."
+      ]
+    },
+    {
+      "ruleId": "CFN_LAMBDA_URL_AUTH",
+      "threat": "A CloudFormation Lambda URL with AuthType NONE is an unauthenticated internet endpoint.",
+      "frameworks": ["AWS FSBP Lambda.1"],
+      "severity": "CRITICAL",
+      "title": "CloudFormation Lambda URL must require IAM auth",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::Lambda::Url",
+        "forbid": "\"?AuthType\"?\\s*:\\s*\"?NONE"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set AuthType: AWS_IAM on the AWS::Lambda::Url, or front it with an authenticated gateway."
+      },
+      "requiredActions": [
+        "Set AuthType: AWS_IAM on the AWS::Lambda::Url."
+      ]
     }
   ]
 }
