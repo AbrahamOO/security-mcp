@@ -2512,6 +2512,177 @@
       ]
     },
     {
+      "ruleId": "AWS_RDS_IAM_AUTH",
+      "threat": "Without IAM database authentication, the database relies solely on long-lived static passwords that, once leaked, grant standing access with no central revocation.",
+      "frameworks": [
+        "AWS FSBP RDS.12"
+      ],
+      "severity": "MEDIUM",
+      "title": "RDS instance should enable IAM database authentication",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_db_instance",
+        "require": "iam_database_authentication_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "iam_database_authentication_enabled": "true"
+        }
+      },
+      "requiredActions": [
+        "Set iam_database_authentication_enabled = true on the aws_db_instance so connections use short-lived IAM tokens instead of static passwords."
+      ]
+    },
+    {
+      "ruleId": "AWS_DEFAULT_SG_RESTRICTED",
+      "threat": "The default security group is attached implicitly to resources that omit one; an open 0.0.0.0/0 rule on it silently exposes those resources to the internet.",
+      "frameworks": [
+        "AWS FSBP EC2.2",
+        "CIS AWS Foundations Benchmark 5.4"
+      ],
+      "severity": "HIGH",
+      "title": "Default security group must not allow open traffic",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_default_security_group",
+        "forbid": "0\\.0\\.0\\.0/0"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Remove all ingress/egress rules from aws_default_security_group (leave the blocks empty) so it denies all traffic; never reference 0.0.0.0/0 on it."
+      },
+      "requiredActions": [
+        "Strip the open rules from the aws_default_security_group; the default SG should permit no traffic and no resource should rely on it."
+      ]
+    },
+    {
+      "ruleId": "AWS_LB_LISTENER_TLS_POLICY",
+      "threat": "An HTTPS listener bound to a TLS 1.0/1.1 security policy lets a network attacker force a downgrade to weak ciphers and decrypt or tamper with traffic.",
+      "frameworks": [
+        "AWS FSBP ELB.17"
+      ],
+      "severity": "MEDIUM",
+      "title": "Load balancer listener must not use a TLS 1.0/1.1 policy",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_lb_listener",
+        "forbid": "ssl_policy\\s*=\\s*\"[^\"]*TLS-1-[01]"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set ssl_policy to a modern TLS 1.2+ policy such as \"ELBSecurityPolicy-TLS13-1-2-2021-06\" on the aws_lb_listener."
+      },
+      "requiredActions": [
+        "Replace the TLS-1-0/TLS-1-1 ssl_policy with a TLS 1.2+ policy (e.g. ELBSecurityPolicy-TLS13-1-2-2021-06)."
+      ]
+    },
+    {
+      "ruleId": "AWS_CLOUDFRONT_TLS12",
+      "threat": "A CloudFront distribution that accepts viewer connections below TLS 1.2 is exposed to protocol-downgrade attacks against clients.",
+      "frameworks": [
+        "AWS FSBP CloudFront.10"
+      ],
+      "severity": "MEDIUM",
+      "title": "CloudFront distribution must require TLS 1.2 minimum",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_cloudfront_distribution",
+        "require": "minimum_protocol_version\\s*=\\s*\"TLSv1.2"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set viewer_certificate { minimum_protocol_version = \"TLSv1.2_2021\" } on the aws_cloudfront_distribution (only effective with a custom ACM certificate, not the default CloudFront cert)."
+      },
+      "requiredActions": [
+        "Set minimum_protocol_version = \"TLSv1.2_2021\" in viewer_certificate on the aws_cloudfront_distribution."
+      ]
+    },
+    {
+      "ruleId": "AWS_BACKUP_VAULT_ENCRYPTED",
+      "threat": "A backup vault without a customer-managed KMS key encrypts recovery points with default keys, so anyone with default-key access can read the backups that exist precisely to survive a breach.",
+      "frameworks": [
+        "AWS FSBP Backup.1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Backup vault must use a customer-managed KMS key",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_backup_vault",
+        "require": "kms_key_arn"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set kms_key_arn to a customer-managed aws_kms_key ARN on the aws_backup_vault."
+      },
+      "requiredActions": [
+        "Set kms_key_arn to a CMK ARN on the aws_backup_vault."
+      ]
+    },
+    {
+      "ruleId": "AWS_APIGATEWAYV2_STAGE_LOGGING",
+      "threat": "An HTTP API (v2) stage without access logging leaves API abuse, scraping, and injection attempts with no forensic trail.",
+      "frameworks": [
+        "AWS FSBP APIGateway.9"
+      ],
+      "severity": "LOW",
+      "title": "API Gateway v2 stage should enable access logging",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_apigatewayv2_stage",
+        "require": "access_log_settings"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add access_log_settings { destination_arn = <log-group>, format = ... } to the aws_apigatewayv2_stage."
+      },
+      "requiredActions": [
+        "Enable access_log_settings on the aws_apigatewayv2_stage."
+      ]
+    },
+    {
+      "ruleId": "AWS_ELASTICACHE_AUTH_TOKEN",
+      "threat": "An ElastiCache replication group with transit encryption but no auth token accepts any in-VPC client; a lateral-movement foothold can read all cached session data without credentials.",
+      "frameworks": [
+        "AWS FSBP ElastiCache.6"
+      ],
+      "severity": "MEDIUM",
+      "title": "ElastiCache replication group should require an auth token",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_elasticache_replication_group",
+        "require": "auth_token"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set auth_token (a strong secret sourced from Secrets Manager) on the aws_elasticache_replication_group; requires transit_encryption_enabled = true."
+      },
+      "requiredActions": [
+        "Set auth_token on the aws_elasticache_replication_group, sourced from a secret store. Auto-fix cannot generate the token."
+      ]
+    },
+    {
+      "ruleId": "AWS_SAGEMAKER_ENDPOINT_KMS",
+      "threat": "A SageMaker endpoint configuration without a KMS key leaves the inference instance's attached storage — which holds model artifacts and buffered request data — encrypted only with default keys.",
+      "frameworks": [
+        "AWS FSBP SageMaker.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "SageMaker endpoint config should use a customer-managed KMS key",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_sagemaker_endpoint_configuration",
+        "require": "kms_key_arn"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set kms_key_arn to a customer-managed aws_kms_key ARN on the aws_sagemaker_endpoint_configuration."
+      },
+      "requiredActions": [
+        "Set kms_key_arn to a CMK ARN on the aws_sagemaker_endpoint_configuration."
+      ]
+    },
+    {
       "ruleId": "CFN_S3_NO_PUBLIC_ACL",
       "threat": "A CloudFormation S3 bucket with a public-read ACL exposes all objects to anonymous download.",
       "frameworks": [
@@ -3497,6 +3668,510 @@
       },
       "requiredActions": [
         "Set DeletionProtection: true on the AWS::QLDB::Ledger."
+      ]
+    },
+    {
+      "ruleId": "CFN_CLOUDFRONT_DEFAULT_ROOT",
+      "threat": "Without a default root object, requests to the root can expose origin content.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "LOW",
+      "title": "CloudFormation CloudFront should define a default root object",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::CloudFront::Distribution",
+        "require": "DefaultRootObject"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set DefaultRootObject on the AWS::CloudFront::Distribution."
+      },
+      "requiredActions": [
+        "Set DefaultRootObject on the AWS::CloudFront::Distribution."
+      ]
+    },
+    {
+      "ruleId": "CFN_CLOUDFRONT_LOGGING",
+      "threat": "No access logging leaves abuse and scraping unrecorded.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "LOW",
+      "title": "CloudFormation CloudFront should enable access logging",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::CloudFront::Distribution",
+        "require": "Logging"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a Logging block (dedicated bucket) to the AWS::CloudFront::Distribution."
+      },
+      "requiredActions": [
+        "Add a Logging block (dedicated bucket) to the AWS::CloudFront::Distribution."
+      ]
+    },
+    {
+      "ruleId": "CFN_CLOUDFRONT_WAF",
+      "threat": "No WAF means no managed protection against L7 attacks.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "LOW",
+      "title": "CloudFormation CloudFront should attach a WAF",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::CloudFront::Distribution",
+        "require": "WebACLId"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set WebACLId to a WAFv2 web ACL (CLOUDFRONT scope)."
+      },
+      "requiredActions": [
+        "Set WebACLId to a WAFv2 web ACL (CLOUDFRONT scope)."
+      ]
+    },
+    {
+      "ruleId": "CFN_CLOUDFRONT_MIN_TLS",
+      "threat": "Allowing legacy TLS exposes viewers to downgrade attacks.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "MEDIUM",
+      "title": "CloudFormation CloudFront must require TLS 1.2",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::CloudFront::Distribution",
+        "require": "\"?MinimumProtocolVersion\"?\\s*:\\s*\"?TLSv1.2"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set ViewerCertificate.MinimumProtocolVersion to a TLSv1.2_* policy."
+      },
+      "requiredActions": [
+        "Set ViewerCertificate.MinimumProtocolVersion to a TLSv1.2_* policy."
+      ]
+    },
+    {
+      "ruleId": "CFN_CW_LOG_RETENTION",
+      "threat": "Infinite retention accumulates sensitive data forever.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "LOW",
+      "title": "CloudFormation log group must set a retention period",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::Logs::LogGroup",
+        "require": "RetentionInDays"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set RetentionInDays on the AWS::Logs::LogGroup."
+      },
+      "requiredActions": [
+        "Set RetentionInDays on the AWS::Logs::LogGroup."
+      ]
+    },
+    {
+      "ruleId": "CFN_CW_LOG_KMS",
+      "threat": "Log data is stored unencrypted with broad default access.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "LOW",
+      "title": "CloudFormation log group should be CMK-encrypted",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::Logs::LogGroup",
+        "require": "KmsKeyId"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set KmsKeyId (CMK) on the AWS::Logs::LogGroup."
+      },
+      "requiredActions": [
+        "Set KmsKeyId (CMK) on the AWS::Logs::LogGroup."
+      ]
+    },
+    {
+      "ruleId": "CFN_SECRETSMANAGER_KMS",
+      "threat": "Default-key encryption is readable by broad KMS access.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "LOW",
+      "title": "CloudFormation secret should use a customer-managed key",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::SecretsManager::Secret",
+        "require": "KmsKeyId"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set KmsKeyId (CMK) on the AWS::SecretsManager::Secret."
+      },
+      "requiredActions": [
+        "Set KmsKeyId (CMK) on the AWS::SecretsManager::Secret."
+      ]
+    },
+    {
+      "ruleId": "CFN_ECR_ENCRYPTION",
+      "threat": "Default keys may not be customer-managed.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "LOW",
+      "title": "CloudFormation ECR repository should declare KMS encryption",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::ECR::Repository",
+        "require": "EncryptionConfiguration"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add EncryptionConfiguration: { EncryptionType: KMS } to the repository."
+      },
+      "requiredActions": [
+        "Add EncryptionConfiguration: { EncryptionType: KMS } to the repository."
+      ]
+    },
+    {
+      "ruleId": "CFN_MSK_TRANSIT",
+      "threat": "Plaintext broker traffic exposes Kafka messages.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "MEDIUM",
+      "title": "CloudFormation MSK cluster must encrypt in transit",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::MSK::Cluster",
+        "require": "EncryptionInTransit"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set EncryptionInfo.EncryptionInTransit.ClientBroker: TLS."
+      },
+      "requiredActions": [
+        "Set EncryptionInfo.EncryptionInTransit.ClientBroker: TLS."
+      ]
+    },
+    {
+      "ruleId": "CFN_ATHENA_ENFORCE",
+      "threat": "Clients can override encryption/output settings otherwise.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "LOW",
+      "title": "CloudFormation Athena workgroup must enforce its config",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::Athena::WorkGroup",
+        "require": "\"?EnforceWorkGroupConfiguration\"?\\s*:\\s*\"?true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set WorkGroupConfiguration.EnforceWorkGroupConfiguration: true."
+      },
+      "requiredActions": [
+        "Set WorkGroupConfiguration.EnforceWorkGroupConfiguration: true."
+      ]
+    },
+    {
+      "ruleId": "CFN_APIGW_XRAY",
+      "threat": "Abuse against the stage is harder to detect without tracing.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "LOW",
+      "title": "CloudFormation API Gateway stage should enable X-Ray",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::ApiGateway::Stage",
+        "require": "\"?TracingEnabled\"?\\s*:\\s*\"?true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set TracingEnabled: true on the AWS::ApiGateway::Stage."
+      },
+      "requiredActions": [
+        "Set TracingEnabled: true on the AWS::ApiGateway::Stage."
+      ]
+    },
+    {
+      "ruleId": "CFN_APIGW_LOGGING",
+      "threat": "API abuse goes unrecorded without access logging.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "LOW",
+      "title": "CloudFormation API Gateway stage should log access",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::ApiGateway::Stage",
+        "require": "AccessLogSetting"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add AccessLogSetting (destination + format) to the stage."
+      },
+      "requiredActions": [
+        "Add AccessLogSetting (destination + format) to the stage."
+      ]
+    },
+    {
+      "ruleId": "CFN_LAMBDA_CODE_SIGNING",
+      "threat": "Tampered packages run unchecked without code signing.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "LOW",
+      "title": "CloudFormation Lambda should enforce code signing",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::Lambda::Function",
+        "require": "CodeSigningConfigArn"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set CodeSigningConfigArn on the AWS::Lambda::Function."
+      },
+      "requiredActions": [
+        "Set CodeSigningConfigArn on the AWS::Lambda::Function."
+      ]
+    },
+    {
+      "ruleId": "CFN_EKS_SECRETS_ENCRYPTION",
+      "threat": "Kubernetes Secrets are only base64 in etcd otherwise.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "MEDIUM",
+      "title": "CloudFormation EKS cluster should encrypt secrets",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::EKS::Cluster",
+        "require": "EncryptionConfig"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add EncryptionConfig (KMS, resources=[secrets]) to the cluster."
+      },
+      "requiredActions": [
+        "Add EncryptionConfig (KMS, resources=[secrets]) to the cluster."
+      ]
+    },
+    {
+      "ruleId": "CFN_EKS_LOGGING",
+      "threat": "API audit events are not recorded otherwise.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "MEDIUM",
+      "title": "CloudFormation EKS cluster should enable control-plane logging",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::EKS::Cluster",
+        "require": "ClusterLogging|Logging"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Enable Logging.ClusterLogging (api, audit) on the cluster."
+      },
+      "requiredActions": [
+        "Enable Logging.ClusterLogging (api, audit) on the cluster."
+      ]
+    },
+    {
+      "ruleId": "CFN_DOCDB_BACKUP",
+      "threat": "No point-in-time recovery without a backup window.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "LOW",
+      "title": "CloudFormation DocumentDB must set backup retention",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::DocDB::DBCluster",
+        "require": "BackupRetentionPeriod"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set BackupRetentionPeriod >= 7 on the AWS::DocDB::DBCluster."
+      },
+      "requiredActions": [
+        "Set BackupRetentionPeriod >= 7 on the AWS::DocDB::DBCluster."
+      ]
+    },
+    {
+      "ruleId": "CFN_NEPTUNE_BACKUP",
+      "threat": "No point-in-time recovery without a backup window.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "LOW",
+      "title": "CloudFormation Neptune must set backup retention",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::Neptune::DBCluster",
+        "require": "BackupRetentionPeriod"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set BackupRetentionPeriod >= 7 on the AWS::Neptune::DBCluster."
+      },
+      "requiredActions": [
+        "Set BackupRetentionPeriod >= 7 on the AWS::Neptune::DBCluster."
+      ]
+    },
+    {
+      "ruleId": "CFN_RDS_COPY_TAGS",
+      "threat": "Access-control tags are lost on snapshots otherwise.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "LOW",
+      "title": "CloudFormation RDS should copy tags to snapshots",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::RDS::DBInstance",
+        "require": "\"?CopyTagsToSnapshot\"?\\s*:\\s*\"?true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set CopyTagsToSnapshot: true on the AWS::RDS::DBInstance."
+      },
+      "requiredActions": [
+        "Set CopyTagsToSnapshot: true on the AWS::RDS::DBInstance."
+      ]
+    },
+    {
+      "ruleId": "CFN_S3_LOGGING",
+      "threat": "Bulk object reads leave no forensic trail without logging.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "LOW",
+      "title": "CloudFormation S3 bucket should enable access logging",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::S3::Bucket",
+        "require": "LoggingConfiguration"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add LoggingConfiguration (dedicated log bucket) to the AWS::S3::Bucket."
+      },
+      "requiredActions": [
+        "Add LoggingConfiguration (dedicated log bucket) to the AWS::S3::Bucket."
+      ]
+    },
+    {
+      "ruleId": "CFN_MQ_NOT_PUBLIC",
+      "threat": "A public broker is reachable from the internet.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "HIGH",
+      "title": "CloudFormation Amazon MQ broker must not be public",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::AmazonMQ::Broker",
+        "forbid": "\"?PubliclyAccessible\"?\\s*:\\s*\"?true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set PubliclyAccessible: false on the AWS::AmazonMQ::Broker."
+      },
+      "requiredActions": [
+        "Set PubliclyAccessible: false on the AWS::AmazonMQ::Broker."
+      ]
+    },
+    {
+      "ruleId": "CFN_MEMORYDB_TLS",
+      "threat": "Cache traffic is plaintext without TLS.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "MEDIUM",
+      "title": "CloudFormation MemoryDB cluster must enable TLS",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::MemoryDB::Cluster",
+        "require": "\"?TLSEnabled\"?\\s*:\\s*\"?true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set TLSEnabled: true on the AWS::MemoryDB::Cluster."
+      },
+      "requiredActions": [
+        "Set TLSEnabled: true on the AWS::MemoryDB::Cluster."
+      ]
+    },
+    {
+      "ruleId": "CFN_ELASTICACHE_AUTO_MINOR",
+      "threat": "Disabling upgrades leaves the engine on vulnerable versions.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "LOW",
+      "title": "CloudFormation ElastiCache must allow minor upgrades",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::ElastiCache::ReplicationGroup",
+        "forbid": "\"?AutoMinorVersionUpgrade\"?\\s*:\\s*\"?false"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set AutoMinorVersionUpgrade: true on the replication group."
+      },
+      "requiredActions": [
+        "Set AutoMinorVersionUpgrade: true on the replication group."
+      ]
+    },
+    {
+      "ruleId": "CFN_ELASTICACHE_SNAPSHOT_RETENTION",
+      "threat": "No restore point without snapshot retention.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "LOW",
+      "title": "CloudFormation ElastiCache (Redis) should retain snapshots",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::ElastiCache::ReplicationGroup",
+        "require": "SnapshotRetentionLimit"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set SnapshotRetentionLimit >= 1 on the replication group."
+      },
+      "requiredActions": [
+        "Set SnapshotRetentionLimit >= 1 on the replication group."
+      ]
+    },
+    {
+      "ruleId": "CFN_RDS_ENHANCED_MONITORING",
+      "threat": "OS-level metrics for attack detection are missing otherwise.",
+      "frameworks": [
+        "AWS FSBP"
+      ],
+      "severity": "LOW",
+      "title": "CloudFormation RDS should enable enhanced monitoring",
+      "detect": {
+        "target": "cloudformation",
+        "resourceType": "AWS::RDS::DBInstance",
+        "require": "MonitoringInterval"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set MonitoringInterval (and MonitoringRoleArn) on the AWS::RDS::DBInstance."
+      },
+      "requiredActions": [
+        "Set MonitoringInterval (and MonitoringRoleArn) on the AWS::RDS::DBInstance."
       ]
     }
   ]
