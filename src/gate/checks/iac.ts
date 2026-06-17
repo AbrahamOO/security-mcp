@@ -248,7 +248,6 @@ const TF_BACKEND_KMS_PATTERN = String.raw`kms_key_id\s*=`;
 const TF_BACKEND_HTTP_PATTERN =
   String.raw`backend\s+"http"|` +
   String.raw`backend\s+"http"\s*\{`;
-const TF_LOCKFILE_PATTERN = String.raw`use_lockfile\s*=\s*true`;
 
 // Module supply chain: git over http / registry without version / branch ref.
 const TF_MODULE_GIT_HTTP_PATTERN =

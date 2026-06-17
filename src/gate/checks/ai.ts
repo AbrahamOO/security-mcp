@@ -110,7 +110,7 @@ const MEMORY_WRITE_RE = /(?:memory\.add|memory\.save|memory\.set|memoryStore\.wr
 const VECTOR_UPSERT_RE = /(?:upsert|addDocuments|add_documents|indexDocuments|ingestDocument|vectorStore\.add|\.from_documents)\s*\([^)]*(?:userInput|req\.body|req\.file|formData|upload)/i;
 
 // ─── AI_TOKEN_SMUGGLING ───────────────────────────────────────────────────────
-const ZERO_WIDTH_RE = /[\u200b\u200c\u200d\u200e\u200f\u2060\ufeff\u202e\u202f\u2028\u2029\u00ad]/;
+const ZERO_WIDTH_RE = /\u200b|\u200c|\u200d|\u200e|\u200f|\u2060|\ufeff|\u202e|\u202f|\u2028|\u2029|\u00ad/;
 
 // ─── AI_AGENTIC_PRIVILEGE_ESCALATION ─────────────────────────────────────────
 const TOOL_REGISTER_RE = /(?:tools\.push|tools\.add|registerTool|addTool|extend_tools|capabilities\.push)\s*\([^)]*(?:response|output|completion|llm|agent)/i;

@@ -212,7 +212,7 @@ async function checkRsaPaddingScheme(): Promise<Finding[]> {
 	return findings;
 }
 
-async function checkShaUsedForPassword(weakHashHits: { file: string; line: number; preview: string }[]): Promise<Finding[]> {
+async function checkShaUsedForPassword(_weakHashHits: { file: string; line: number; preview: string }[]): Promise<Finding[]> {
 	const findings: Finding[] = [];
 
 	// Detect SHA-256/384/512 used in password context
