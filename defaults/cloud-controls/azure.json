@@ -1437,6 +1437,93 @@
       ]
     },
     {
+      "ruleId": "AZURE_AKS_NETWORK_POLICY",
+      "threat": "An AKS cluster without a network policy plugin allows unrestricted pod-to-pod traffic, so a single compromised pod can move laterally to every workload in the cluster.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.3"
+      ],
+      "severity": "MEDIUM",
+      "title": "AKS cluster should enforce a network policy",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_kubernetes_cluster",
+        "require": "network_policy\\s*=\\s*\"(azure|calico|cilium)\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set network_profile { network_policy = \"azure\" } (or calico/cilium) on the azurerm_kubernetes_cluster. The network policy plugin can only be set at cluster creation."
+      },
+      "requiredActions": [
+        "Set network_policy in network_profile on the azurerm_kubernetes_cluster to restrict pod-to-pod traffic."
+      ]
+    },
+    {
+      "ruleId": "AZURE_PG_FLEX_NO_PUBLIC",
+      "threat": "A PostgreSQL flexible server with public network access is directly reachable from the internet for brute force and CVE exploitation.",
+      "frameworks": [
+        "Microsoft Cloud Security Benchmark NS-2",
+        "CIS Azure Foundations Benchmark 4.3"
+      ],
+      "severity": "HIGH",
+      "title": "PostgreSQL flexible server must disable public network access",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_postgresql_flexible_server",
+        "require": "public_network_access_enabled\\s*=\\s*false"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "public_network_access_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set public_network_access_enabled = false on the azurerm_postgresql_flexible_server and use a private endpoint or VNet integration."
+      ]
+    },
+    {
+      "ruleId": "AZURE_LINUX_WEBAPP_FTPS",
+      "threat": "An app accepting plaintext FTP exposes deployment credentials and source to interception on the wire.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9.10"
+      ],
+      "severity": "MEDIUM",
+      "title": "Linux web app must not allow plaintext FTP",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_linux_web_app",
+        "forbid": "ftps_state\\s*=\\s*\"AllAllowed\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set site_config { ftps_state = \"FtpsOnly\" } (or \"Disabled\") on the azurerm_linux_web_app."
+      },
+      "requiredActions": [
+        "Set ftps_state = \"FtpsOnly\" or \"Disabled\" in site_config on the azurerm_linux_web_app."
+      ]
+    },
+    {
+      "ruleId": "AZURE_LINUX_WEBAPP_NO_REMOTE_DEBUG",
+      "threat": "Remote debugging left enabled on a production web app is an unauthenticated control channel into the running process.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 9.x"
+      ],
+      "severity": "LOW",
+      "title": "Linux web app must disable remote debugging",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "azurerm_linux_web_app",
+        "forbid": "remote_debugging_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set site_config { remote_debugging_enabled = false } on the azurerm_linux_web_app."
+      },
+      "requiredActions": [
+        "Set remote_debugging_enabled = false in site_config on the azurerm_linux_web_app."
+      ]
+    },
+    {
       "ruleId": "BICEP_STORAGE_HTTPS_ONLY",
       "threat": "A Bicep storage account allowing plaintext HTTP lets blob traffic and SAS tokens be intercepted.",
       "frameworks": [
@@ -2024,6 +2111,363 @@
       },
       "requiredActions": [
         "Set properties.disableLocalAccounts: true and use Entra ID integration."
+      ]
+    },
+    {
+      "ruleId": "BICEP_STORAGE_NO_PUBLIC_NETWORK",
+      "threat": "A public storage account is reachable from the internet.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "MEDIUM",
+      "title": "Bicep storage should disable public network access",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Storage/storageAccounts",
+        "require": "publicNetworkAccess\\s*:\\s*'Disabled'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.publicNetworkAccess: 'Disabled' and use a private endpoint."
+      },
+      "requiredActions": [
+        "Set properties.publicNetworkAccess: 'Disabled' and use a private endpoint."
+      ]
+    },
+    {
+      "ruleId": "BICEP_NSG_NO_OPEN_ADMIN",
+      "threat": "A rule with source '*' exposes admin ports to the internet.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "HIGH",
+      "title": "Bicep NSG rule must not allow any source",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Network/networkSecurityGroups",
+        "forbid": "sourceAddressPrefix\\s*:\\s*'\\*'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Restrict sourceAddressPrefix to specific CIDRs (especially for 22/3389)."
+      },
+      "requiredActions": [
+        "Restrict sourceAddressPrefix to specific CIDRs (especially for 22/3389)."
+      ]
+    },
+    {
+      "ruleId": "BICEP_AKS_NETWORK_POLICY",
+      "threat": "Without a network policy a compromised pod moves laterally freely.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "MEDIUM",
+      "title": "Bicep AKS cluster should enable a network policy",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.ContainerService/managedClusters",
+        "require": "networkPolicy"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.networkProfile.networkPolicy: 'azure' (or 'calico')."
+      },
+      "requiredActions": [
+        "Set properties.networkProfile.networkPolicy: 'azure' (or 'calico')."
+      ]
+    },
+    {
+      "ruleId": "BICEP_AKS_AZURE_POLICY",
+      "threat": "No admission-time guardrails against insecure workloads otherwise.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "LOW",
+      "title": "Bicep AKS cluster should enable the Azure Policy add-on",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.ContainerService/managedClusters",
+        "require": "azurepolicy"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Enable addonProfiles.azurepolicy.enabled: true on the AKS cluster."
+      },
+      "requiredActions": [
+        "Enable addonProfiles.azurepolicy.enabled: true on the AKS cluster."
+      ]
+    },
+    {
+      "ruleId": "BICEP_APP_SERVICE_FTPS",
+      "threat": "Plain FTP deployment exposes credentials over an unencrypted channel.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "LOW",
+      "title": "Bicep web app should restrict FTP to FTPS",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Web/sites",
+        "require": "ftpsState\\s*:\\s*'(FtpsOnly|Disabled)'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.siteConfig.ftpsState: 'FtpsOnly' (or 'Disabled')."
+      },
+      "requiredActions": [
+        "Set properties.siteConfig.ftpsState: 'FtpsOnly' (or 'Disabled')."
+      ]
+    },
+    {
+      "ruleId": "BICEP_APP_SERVICE_CLIENT_CERT",
+      "threat": "No mutual TLS for service-to-service callers otherwise.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "LOW",
+      "title": "Bicep web app should require incoming client certificates",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Web/sites",
+        "require": "clientCertEnabled\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.clientCertEnabled: true on internal apps."
+      },
+      "requiredActions": [
+        "Set properties.clientCertEnabled: true on internal apps."
+      ]
+    },
+    {
+      "ruleId": "BICEP_APP_SERVICE_NO_REMOTE_DEBUG",
+      "threat": "Remote debugging exposes an attach point into the running app.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "LOW",
+      "title": "Bicep web app must disable remote debugging",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Web/sites",
+        "forbid": "remoteDebuggingEnabled\\s*:\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.siteConfig.remoteDebuggingEnabled: false."
+      },
+      "requiredActions": [
+        "Set properties.siteConfig.remoteDebuggingEnabled: false."
+      ]
+    },
+    {
+      "ruleId": "BICEP_SERVICEBUS_NO_PUBLIC",
+      "threat": "A public namespace is reachable for credential abuse.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "MEDIUM",
+      "title": "Bicep Service Bus namespace should disable public network access",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.ServiceBus/namespaces",
+        "require": "publicNetworkAccess\\s*:\\s*'Disabled'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.publicNetworkAccess: 'Disabled' and use a private endpoint."
+      },
+      "requiredActions": [
+        "Set properties.publicNetworkAccess: 'Disabled' and use a private endpoint."
+      ]
+    },
+    {
+      "ruleId": "BICEP_EVENTHUB_NO_PUBLIC",
+      "threat": "A public namespace is reachable for credential abuse and interception.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "MEDIUM",
+      "title": "Bicep Event Hub namespace should disable public network access",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.EventHub/namespaces",
+        "require": "publicNetworkAccess\\s*:\\s*'Disabled'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.publicNetworkAccess: 'Disabled' and use a private endpoint."
+      },
+      "requiredActions": [
+        "Set properties.publicNetworkAccess: 'Disabled' and use a private endpoint."
+      ]
+    },
+    {
+      "ruleId": "BICEP_REDIS_NO_PUBLIC",
+      "threat": "A public Redis cache is reachable from the internet for abuse.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "MEDIUM",
+      "title": "Bicep Redis cache should disable public network access",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Cache/Redis",
+        "require": "publicNetworkAccess\\s*:\\s*'Disabled'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.publicNetworkAccess: 'Disabled' and use a private endpoint."
+      },
+      "requiredActions": [
+        "Set properties.publicNetworkAccess: 'Disabled' and use a private endpoint."
+      ]
+    },
+    {
+      "ruleId": "BICEP_POSTGRES_NO_PUBLIC",
+      "threat": "A public database server is reachable for brute force.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "MEDIUM",
+      "title": "Bicep PostgreSQL server should disable public network access",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.DBforPostgreSQL/servers",
+        "require": "publicNetworkAccess\\s*:\\s*'Disabled'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.publicNetworkAccess: 'Disabled' and use a private endpoint."
+      },
+      "requiredActions": [
+        "Set properties.publicNetworkAccess: 'Disabled' and use a private endpoint."
+      ]
+    },
+    {
+      "ruleId": "BICEP_MYSQL_NO_PUBLIC",
+      "threat": "A public database server is reachable for brute force.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "MEDIUM",
+      "title": "Bicep MySQL server should disable public network access",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.DBforMySQL/servers",
+        "require": "publicNetworkAccess\\s*:\\s*'Disabled'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.publicNetworkAccess: 'Disabled' and use a private endpoint."
+      },
+      "requiredActions": [
+        "Set properties.publicNetworkAccess: 'Disabled' and use a private endpoint."
+      ]
+    },
+    {
+      "ruleId": "BICEP_MARIADB_NO_PUBLIC",
+      "threat": "A public database server is reachable for brute force.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "MEDIUM",
+      "title": "Bicep MariaDB server should disable public network access",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.DBforMariaDB/servers",
+        "require": "publicNetworkAccess\\s*:\\s*'Disabled'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.publicNetworkAccess: 'Disabled' and use a private endpoint."
+      },
+      "requiredActions": [
+        "Set properties.publicNetworkAccess: 'Disabled' and use a private endpoint."
+      ]
+    },
+    {
+      "ruleId": "BICEP_DATA_FACTORY_NO_PUBLIC",
+      "threat": "A public Data Factory exposes integration runtime and linked-service creds.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "MEDIUM",
+      "title": "Bicep Data Factory should disable public network access",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.DataFactory/factories",
+        "require": "publicNetworkAccess\\s*:\\s*'Disabled'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.publicNetworkAccess: 'Disabled' and use a managed private endpoint."
+      },
+      "requiredActions": [
+        "Set properties.publicNetworkAccess: 'Disabled' and use a managed private endpoint."
+      ]
+    },
+    {
+      "ruleId": "BICEP_APP_CONFIG_NO_PUBLIC",
+      "threat": "Public config exposes feature flags and sometimes secrets.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "MEDIUM",
+      "title": "Bicep App Configuration should disable public network access",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.AppConfiguration/configurationStores",
+        "require": "publicNetworkAccess\\s*:\\s*'Disabled'"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.publicNetworkAccess: 'Disabled' and use a private endpoint."
+      },
+      "requiredActions": [
+        "Set properties.publicNetworkAccess: 'Disabled' and use a private endpoint."
+      ]
+    },
+    {
+      "ruleId": "BICEP_VM_NO_PASSWORD_AUTH",
+      "threat": "Password auth exposes SSH to brute force.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "MEDIUM",
+      "title": "Bicep Linux VM must disable password authentication",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Compute/virtualMachines",
+        "forbid": "disablePasswordAuthentication\\s*:\\s*false"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set properties.osProfile.linuxConfiguration.disablePasswordAuthentication: true and use SSH keys."
+      },
+      "requiredActions": [
+        "Set properties.osProfile.linuxConfiguration.disablePasswordAuthentication: true and use SSH keys."
+      ]
+    },
+    {
+      "ruleId": "BICEP_SEARCH_NO_PUBLIC_DUP",
+      "threat": "A Search service with no network rules is broadly reachable.",
+      "frameworks": [
+        "CIS Azure Foundations Benchmark"
+      ],
+      "severity": "LOW",
+      "title": "Bicep Search service should restrict network access",
+      "detect": {
+        "target": "bicep",
+        "resourceType": "Microsoft.Search/searchServices",
+        "require": "networkRuleSet"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a networkRuleSet (or set publicNetworkAccess: 'disabled')."
+      },
+      "requiredActions": [
+        "Add a networkRuleSet (or set publicNetworkAccess: 'disabled')."
       ]
     }
   ]

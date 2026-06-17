@@ -893,6 +893,82 @@
       "requiredActions": [
         "Use a COS/COS_CONTAINERD image_type on the google_container_node_pool."
       ]
+    },
+    {
+      "ruleId": "GCP_GKE_LEGACY_ABAC",
+      "threat": "Legacy ABAC grants broad, static permissions that bypass fine-grained RBAC; any leaked node or pod token inherits sweeping cluster access.",
+      "frameworks": ["CIS GCP Foundations Benchmark 7.3"],
+      "severity": "MEDIUM",
+      "title": "GKE cluster must not enable legacy ABAC",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_container_cluster",
+        "forbid": "enable_legacy_abac\\s*\\{[^}]*enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Remove enable_legacy_abac or set enable_legacy_abac { enabled = false } on the google_container_cluster and rely on RBAC."
+      },
+      "requiredActions": [
+        "Disable legacy ABAC on the google_container_cluster; enforce authorization via RBAC."
+      ]
+    },
+    {
+      "ruleId": "GCP_STORAGE_VERSIONING",
+      "threat": "Without object versioning, a malicious or accidental overwrite/delete of bucket objects is unrecoverable — no ransomware rollback.",
+      "frameworks": ["CIS GCP Foundations Benchmark 5.3"],
+      "severity": "LOW",
+      "title": "Storage bucket should enable object versioning",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_storage_bucket",
+        "require": "versioning\\s*\\{[^}]*enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add versioning { enabled = true } to the google_storage_bucket."
+      },
+      "requiredActions": [
+        "Add versioning { enabled = true } to the google_storage_bucket."
+      ]
+    },
+    {
+      "ruleId": "GCP_STORAGE_BUCKET_LOGGING",
+      "threat": "Without access/storage logging, bulk object reads (data exfiltration) leave no audit trail on the bucket.",
+      "frameworks": ["CIS GCP Foundations Benchmark 5.3"],
+      "severity": "LOW",
+      "title": "Storage bucket should enable access logging",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_storage_bucket",
+        "require": "logging\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a logging { log_bucket = <dedicated-log-bucket> } block to the google_storage_bucket pointing at a separate, access-restricted bucket."
+      },
+      "requiredActions": [
+        "Add a logging block to the google_storage_bucket targeting a dedicated log bucket."
+      ]
+    },
+    {
+      "ruleId": "GCP_COMPUTE_DISABLE_SERIAL_PORT",
+      "threat": "An enabled interactive serial console lets anyone with the project metadata permission attach and gain interactive access to the instance, bypassing SSH controls.",
+      "frameworks": ["CIS GCP Foundations Benchmark 4.5"],
+      "severity": "MEDIUM",
+      "title": "Compute instance must disable serial port access",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_instance",
+        "forbid": "serial-port-enable\\s*=\\s*\"?(true|1|TRUE)"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Remove serial-port-enable from metadata or set it to \"false\" on the google_compute_instance."
+      },
+      "requiredActions": [
+        "Set metadata serial-port-enable = \"false\" (or remove it) on the google_compute_instance."
+      ]
     }
   ]
 }
