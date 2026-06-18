@@ -143,7 +143,7 @@ It runs in three phases:
 
 1. **Discovery (parallel).** Seven leads run at once: threat modeling, AppSec code audit, cloud and infrastructure, supply chain, AI/LLM red team, mobile, and crypto/PKI.
 2. **Adversarial and compliance (parallel).** A penetration-test team reads Phase 1's threat model as its attack brief, while a compliance/GRC synthesizer maps findings to controls.
-3. **Synthesis.** Findings are merged and deduplicated, SKILL.md section coverage (§0 through §24) is verified, and a signed attestation is written.
+3. **Synthesis.** Each agent's findings file is schema-validated and verified against that agent's signed attestation before it is trusted, then findings are merged and deduplicated, SKILL.md section coverage (§0 through §24) is verified, and a signed attestation is written. A tampered attestation chain or a findings-hash mismatch forces the gate to FAIL.
 
 ```mermaid
 graph TD
@@ -167,7 +167,7 @@ graph TD
   end
 
   subgraph P3["Phase 3: synthesis"]
-    M["Merge + dedupe"] --> V["Verify §0-§24 coverage"] --> A["Signed attestation"]
+    M["Verify attestations + merge + dedupe"] --> V["Verify §0-§24 coverage"] --> A["Signed attestation"]
   end
 ```
 
@@ -382,6 +382,8 @@ A security tool is part of your supply chain, so security-mcp is built to resist
 - **Signed policy, exceptions, and baseline.** These files are HMAC-signed. When the policy is not signed, the gate floors `severity_block` to HIGH/CRITICAL, so an unsigned edit cannot relax the gate to PASS.
 - **Exceptions cannot quietly suppress.** By default an unsigned exceptions file may not suppress HIGH/CRITICAL findings. A break-glass env var exists for scanning intentionally-vulnerable fixtures.
 - **Honest attestation.** Attestation refuses to sign unless the latest gate result is PASS with all required steps complete. There are no forged green attestations.
+- **Verified inter-agent payloads.** The merge step that aggregates every agent's findings is the trust sink for a whole run, so it schema-validates each agent's findings file and checks its hash against that agent's signed attestation before trusting it. Findings dedupe keeps the highest severity per id, so a same-id low-severity entry cannot shadow a real CRITICAL. A tampered chain or a findings-hash mismatch forces FAIL. Set `SECURITY_REQUIRE_AGENT_ATTESTATION=1` to fail closed unless the run is HMAC-signed, fully attested, and clean — note that an *unsigned* attestation chain is only tamper-evident, not tamper-proof, against an attacker who can write the run directory, so the HMAC key is the real boundary.
+- **Per-tool-call audit trail.** Every MCP tool call is logged as one structured JSONL record (timestamp, agent id, tool, inputs, output summary, session credential, outcome) to `.mcp/audit/tool-calls.jsonl`. Secret-bearing keys and secret-shaped values (in inputs and in the output preview) are scrubbed; failed auth attempts are recorded as such, not as successes; the log rotates at 50 MB and writing never interrupts a tool call. Set `SECURITY_TOOL_AUDIT_LOG` to forward to an append-only sink.
 - **Locked-down data at rest.** Findings, agent memory, and signatures are written with `0o600` file permissions.
 - **Prompt-injection defense.** Tool outputs that originate from the repo are sanitized before they reach an LLM.
 - **Verified installer.** Downloaded scanner binaries are verified by SHA-256, unchecksummed binaries are refused, and there is no `curl | sh` install path.
@@ -495,10 +497,17 @@ Expired exceptions automatically become blocking findings until they are renewed
 | --- | --- |
 | `SECURITY_POLICY_HMAC_KEY` | Signs policy / exceptions / baseline (>=32 bytes) |
 | `SECURITY_REQUIRE_SIGNED_EXCEPTIONS` | Fail closed on any unsigned exceptions file |
+| `SECURITY_REQUIRE_AGENT_ATTESTATION` | Fail closed unless the agent run is signed + enforced + clean (see below) |
 | `SECURITY_ALLOW_UNSIGNED_HIGH_SUPPRESSION` | Break-glass: allow unsigned HIGH/CRITICAL suppression |
 | `SECURITY_ATTEST_ALLOW_INCOMPLETE` | Break-glass: attest without a complete PASS |
 | `SECURITY_ATTEST_KEY` | Signs attestation files |
-| `SECURITY_AUDIT_HMAC_KEY` | Signs the routing audit log |
+| `SECURITY_AUDIT_HMAC_KEY` | Signs the routing audit log and the per-agent attestation chain |
+
+### Observability
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `SECURITY_TOOL_AUDIT_LOG` | `.mcp/audit/tool-calls.jsonl` | Path for the per-tool-call structured audit log; point at an append-only / write-once sink for tamper-proof retention |
 
 ### Privacy and air-gap
 

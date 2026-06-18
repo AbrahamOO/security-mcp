@@ -115,6 +115,16 @@ function hashFindings(findings: AgentFinding[]): string {
   return sha256(JSON.stringify(findings));
 }
 
+/**
+ * Public helper: compute the canonical SHA-256 of a findings array exactly as
+ * `attestAgent` does. Used by orchestration.mergeAgentFindings to verify that an
+ * agent's findings file matches the hash that agent attested to — i.e. that the
+ * inter-agent payload was not tampered with between attestation and merge.
+ */
+export function computeFindingsHash(findings: AgentFinding[]): string {
+  return hashFindings(findings);
+}
+
 function buildChainPayload(record: Omit<AttestationRecord, "chainHash" | "hmacSha256">): string {
   return [
     record.agentRunId,

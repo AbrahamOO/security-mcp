@@ -3,6 +3,64 @@
 All notable changes to `security-mcp` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added — agentic threat-model hardening
+
+Closes two gaps from an agentic-AI threat model of security-mcp's own multi-agent
+system (article surfaces: inter-agent interactions and per-tool-call observability).
+
+- **Inter-agent payload integrity in `orchestration.merge_agent_findings`.** The merge
+  step is the single trust sink for an entire agent run. It now (a) validates every
+  agent's findings file against a strict zod schema before trusting it, and (b) verifies
+  each file's findings hash against that agent's signed attestation
+  (`security.attest_agent` / `audit-chain`) before the findings reach the gate.
+  - Attestation chain present → **enforced** mode: unattested or hash-mismatched agent
+    files are rejected from the merge; a hash mismatch (tampering) or a chain that fails
+    `verify_chain` forces the gate to **FAIL** even with zero findings.
+  - No attestation chain → **unattested** mode: findings are schema-validated only, with
+    a warning recorded in `merged-findings.json` under `signatureVerification`.
+  - Backward compatible: runs that never attested behave as before, plus the new
+    schema validation.
+- **Per-tool-call structured audit log.** Every MCP tool invocation now emits one
+  structured JSONL record (`src/mcp/tool-audit.ts`) with the eight mandatory fields:
+  timestamp, agent id, tool name, input parameters (secrets redacted), output result
+  (outcome + size + truncated preview), credentials used (session id, never the secret),
+  user context, and outcome status. Written to `.mcp/audit/tool-calls.jsonl` (`0o600`).
+  Point `SECURITY_TOOL_AUDIT_LOG` at an append-only / write-once sink for tamper-proof
+  retention. Logging never interrupts tool execution.
+
+### Hardened — from a three-agent adversarial review of the above
+
+- **`SECURITY_REQUIRE_AGENT_ATTESTATION`** (new, opt-in, default off): when set,
+  `merge_agent_findings` fails the gate closed unless the run is HMAC-signed,
+  `enforced`, chain-valid, and has zero rejected agents. Closes the "delete the
+  attestation chain to downgrade to unattested mode and skip hash checks" bypass.
+- **Honest unsigned-chain reporting:** an unsigned attestation chain is forgeable by
+  anyone who can write the run directory, so `merge_agent_findings` now surfaces
+  `verifyChain`'s unsigned-chain caveat in `signatureVerification.warning` even on the
+  success path instead of implying cryptographic enforcement.
+- **Dedupe keeps highest severity per finding id** (was first-occurrence-wins), so a
+  malicious or mislabeled same-id LOW can no longer shadow a real CRITICAL.
+- **Audit-log secret/PII scrubbing:** redaction now matches decorated key names
+  (`sharedSecret`, `hmacKey`, `refreshToken`, …) and scrubs secret-shaped *values*
+  (AWS keys, PEM private keys, JWTs, GitHub/Slack tokens, long hex/base64) in both
+  inputs and the output preview — the preview previously logged tool output (e.g.
+  `repo.read_file` file contents) unredacted.
+- **Failed authentication is recorded as such**, not as a successful tool call;
+  `UNAUTHENTICATED` is matched only in its structured framing to avoid outcome-field
+  poisoning by returned file content.
+- **Audit-log robustness:** BigInt-safe serialization with a minimal fallback record
+  (no silent audit-evasion), 50 MB single-rotation size guard, and capped `agentId`.
+
+**Residual risk (accepted — local single-process trust model):** an *unsigned*
+attestation chain is tamper-evident, not tamper-proof, against an attacker with write
+access to `.mcp/agent-runs/{id}/`; the `SECURITY_AUDIT_HMAC_KEY` is the real boundary.
+Findings-hash canonicalization, per-agent id namespacing, and an immutable audit sink
+are not implemented in-code (the sink is a deployment option via `SECURITY_TOOL_AUDIT_LOG`).
+These controls assume distributed agent fleets holding cloud credentials; this is a
+single-tenant local stdio MCP whose trust root is the installed package.
+
 ## [1.3.2] - 2026-06-18
 
 ### Added — cloud security controls engine
