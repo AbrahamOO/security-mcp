@@ -287,6 +287,7 @@ const CHECK_NAMES = [
   "auth-deep",
   "supply-chain-deep",
   "business-logic",
+  "docker",
   "scanners-run",
   "agentic-instructions",
   "ai-governance",

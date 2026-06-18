@@ -20,3 +20,7 @@ HANDOFF.md
 .mcp/policies/
 .mcp/agent-runs/
 .mcp/memory/
+.mcp/baselines/
+
+# Generated baseline outputs inside fixtures
+fixtures/**/.mcp/baselines/

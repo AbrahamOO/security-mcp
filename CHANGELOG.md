@@ -3,7 +3,27 @@
 All notable changes to `security-mcp` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.3.2] - 2026-06-18
+
+### Added — cloud security controls engine
+
+- **Registry-driven cloud controls engine** (`security.run_pr_gate` check + `security-mcp autoharden`).
+  Detects misconfigurations in infrastructure-as-code against **998 rules** mapped to AWS
+  Foundational Security Best Practices (FSBP), CIS Benchmarks (AWS / GCP / Azure), and the Microsoft
+  Cloud Security Benchmark.
+  - Coverage: **AWS 483 · Azure 320 · GCP 195** rules across **Terraform/HCL (774)**,
+    **CloudFormation (128)**, and **Bicep (96)**.
+  - **Auto-remediation** for Terraform via `security-mcp autoharden` (`--dry-run` to preview): applies
+    `set-attr` and `companion-resource` fixes, then re-detects to verify each fix cleared the
+    violation before keeping it. Rules it cannot safely auto-fix are emitted as manual actions.
+
+### Added — CLI
+
+- `security-mcp ci:pr-gate` — run the policy gate directly from the CLI / `npx` (previously only
+  available as the `npm run ci:pr-gate` script). Honors the `SECURITY_GATE_*` environment variables
+  and exits non-zero on `HIGH`/`CRITICAL` findings.
+- `security-mcp sign-policy` — sign the active policy file with `SECURITY_POLICY_HMAC_KEY`, writing a
+  `0o600` `.hmac` sidecar so policy tampering is detected at gate startup.
 
 ### ⚠️ BREAKING CHANGES
 

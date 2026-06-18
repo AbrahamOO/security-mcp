@@ -13,12 +13,14 @@
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { runInstall } from "./install.js";
 import { main as runServer } from "../mcp/server.js";
 import { notifyIfUpdateAvailable } from "./update.js";
 import { autoHardenTree } from "../gate/cloud-controls/apply.js";
+import { runGateFromEnv } from "../ci/pr-gate.js";
+import { signPolicyFile } from "../gate/policy.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -65,6 +67,8 @@ COMMANDS
   config           Print MCP config JSON for manual editor setup
   doctor           Verify the installation is working correctly
   autoharden       Auto-apply FSBP/CIS hardening fixes to Terraform (use --dry-run to preview)
+  ci:pr-gate       Run the policy gate against the current diff (for CI/pre-commit)
+  sign-policy      Sign the policy file with SECURITY_POLICY_HMAC_KEY for tamper protection
 
 OPTIONS (install)
   --claude-code        Write config for Claude Code only
@@ -99,6 +103,13 @@ EXAMPLES
 
   # Verify installation health:
   npx -y security-mcp@latest doctor
+
+  # Run the policy gate in CI (fails the build on HIGH/CRITICAL findings):
+  npx -y security-mcp@latest ci:pr-gate
+
+  # Sign the policy file so tampering is detected at gate startup:
+  export SECURITY_POLICY_HMAC_KEY="$(openssl rand -hex 32)"
+  npx -y security-mcp@latest sign-policy
 
   # Print JSON config snippet:
   npx -y security-mcp@latest config
@@ -212,6 +223,41 @@ async function runAutoHarden(dryRun: boolean): Promise<void> {
   process.stdout.write("\n");
 }
 
+// Minimum HMAC key length, mirrors POLICY_HMAC_MIN_KEY_BYTES in src/gate/policy.ts.
+const POLICY_HMAC_MIN_KEY_BYTES = 32;
+
+function runSignPolicy(): void {
+  const key = process.env["SECURITY_POLICY_HMAC_KEY"];
+  if (!key || Buffer.byteLength(key, "utf-8") < POLICY_HMAC_MIN_KEY_BYTES) {
+    process.stderr.write(
+      `Error: SECURITY_POLICY_HMAC_KEY must be set and at least ${POLICY_HMAC_MIN_KEY_BYTES} bytes.\n` +
+        "Generate one with: openssl rand -hex 32\n"
+    );
+    process.exit(1);
+  }
+
+  const policyPath = process.env["SECURITY_GATE_POLICY"] || ".mcp/policies/security-policy.json";
+  if (!existsSync(policyPath)) {
+    process.stderr.write(
+      `Error: policy file not found at "${policyPath}".\n` +
+        "Create one first (cp node_modules/security-mcp/defaults/security-policy.json .mcp/policies/), " +
+        "or set SECURITY_GATE_POLICY to its path.\n"
+    );
+    process.exit(1);
+  }
+
+  const raw = readFileSync(policyPath, "utf-8");
+  const signature = signPolicyFile(raw, key);
+  // 0o600 — keep the sidecar non-world-readable, consistent with data-at-rest hardening.
+  writeFileSync(`${policyPath}.hmac`, signature + "\n", { mode: 0o600 });
+
+  process.stdout.write(`\nsecurity-mcp sign-policy v${VERSION}\n`);
+  process.stdout.write("=".repeat(40) + "\n\n");
+  process.stdout.write(`  [SIGNED] ${policyPath}\n`);
+  process.stdout.write(`  [WROTE]  ${policyPath}.hmac\n\n`);
+  process.stdout.write("Commit both files so CI can verify policy integrity at gate startup.\n\n");
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const useGlobalBinary = args.includes("--use-global-binary");
@@ -228,7 +274,8 @@ async function main(): Promise<void> {
 
   const command = args[0] ?? "serve";
 
-  if (command === "serve") {
+  if (command === "serve" || command === "ci:pr-gate") {
+    // Non-blocking: keep stdout reserved for protocol/JSON output.
     void notifyIfUpdateAvailable(VERSION);
   } else {
     await notifyIfUpdateAvailable(VERSION);
@@ -291,6 +338,17 @@ async function main(): Promise<void> {
 
     case "autoharden": {
       await runAutoHarden(args.includes("--dry-run"));
+      break;
+    }
+
+    case "ci:pr-gate": {
+      // Reads SECURITY_GATE_* env vars; exits non-zero when the gate fails.
+      await runGateFromEnv();
+      break;
+    }
+
+    case "sign-policy": {
+      runSignPolicy();
       break;
     }
 
