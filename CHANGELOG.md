@@ -3,7 +3,7 @@
 All notable changes to `security-mcp` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.3.3] - 2026-06-18
 
 ### Added — agentic threat-model hardening
 
@@ -60,6 +60,19 @@ Findings-hash canonicalization, per-agent id namespacing, and an immutable audit
 are not implemented in-code (the sink is a deployment option via `SECURITY_TOOL_AUDIT_LOG`).
 These controls assume distributed agent fleets holding cloud credentials; this is a
 single-tenant local stdio MCP whose trust root is the installed package.
+
+### Fixed — self-scan exceptions
+
+- Refreshed `.github/security-exceptions-ci.json` for the v1.3.2 998-rule cloud-controls
+  expansion: the insecure-by-design IaC test fixtures emit renamed detection IDs
+  (`CFN_S3_BLOCK_PUBLIC_ACCESS`, `CFN_CLOUDTRAIL_MULTIREGION`, `CFN_EC2_IMDSV2`,
+  `AWS_S3_ACL_NOT_PUBLIC`, `GCP_SQL_SSL_MODE_ENCRYPTED_ONLY`, `BICEP_STORAGE_NO_PUBLIC_BLOB`,
+  `AZURE_BICEP_STORAGE_NETWORK_DENY_DEFAULT`) that the stale exception list missed.
+- Excepted `CI_FORK_SECRET_EXPOSURE` on the repo's own `pull_request` workflow: GitHub does
+  not expose secrets to fork PRs, so the referenced `SECURITY_POLICY_HMAC_KEY` is not
+  reachable by fork contributors (conservative true-positive, not exploitable here).
+- Both are repo-local self-scan suppressions only; `.github/` is not in the published npm
+  package, so downstream detection is unaffected.
 
 ## [1.3.2] - 2026-06-18
 
