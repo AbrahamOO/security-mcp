@@ -431,11 +431,31 @@
         "SNOWFLAKE_SHARE_WILDCARD_PUBLIC",
         "SNOWFLAKE_STORAGE_INTEGRATION_WILDCARD",
         "SNOWFLAKE_WEAKENED_ACCOUNT_PARAM",
-        "SNOWFLAKE_WEAK_AUTH"
+        "SNOWFLAKE_WEAK_AUTH",
+        "CFN_S3_BLOCK_PUBLIC_ACCESS",
+        "CFN_CLOUDTRAIL_MULTIREGION",
+        "CFN_EC2_IMDSV2",
+        "AWS_S3_ACL_NOT_PUBLIC",
+        "GCP_SQL_SSL_MODE_ENCRYPTED_ONLY",
+        "BICEP_STORAGE_NO_PUBLIC_BLOB",
+        "AZURE_BICEP_STORAGE_NETWORK_DENY_DEFAULT"
       ],
       "control_ids": [],
-      "justification": "Self-scan false positives from deliberately-insecure TEST FIXTURES (fixtures/{iac,k8s,docker,data-platform,gitops,aws,gcp,azure,infra}-insecure) and INLINE DOCUMENTATION EXAMPLES in skills/*/SKILL.md that show insecure-then-hardened patterns. Not reachable production code: security-mcp ships no real Terraform/K8s/Docker/Snowflake/Databricks workloads, only detection rules, test fixtures consumed by src/tests/run.ts, and skill markdown. The cloud-controls auto-remediation engine and the iac/k8s/docker/gitops/data-platform checks intentionally flag these fixtures so tests can assert detection+remediation. Suppressed only in security-mcp's repo-local self-scan; .github/ is not in the published npm package (package.json files: dist/, prompts/, skills/, defaults/), so end-user detection is unaffected.",
+      "justification": "Self-scan false positives from deliberately-insecure TEST FIXTURES (fixtures/{iac,k8s,docker,data-platform,gitops,aws,gcp,azure,infra}-insecure) and INLINE DOCUMENTATION EXAMPLES in skills/*/SKILL.md that show insecure-then-hardened patterns. Not reachable production code: security-mcp ships no real Terraform/K8s/Docker/Snowflake/Databricks workloads, only detection rules, test fixtures consumed by src/tests/run.ts, and skill markdown. The cloud-controls auto-remediation engine and the iac/k8s/docker/gitops/data-platform checks intentionally flag these fixtures so tests can assert detection+remediation. Suppressed only in security-mcp's repo-local self-scan; .github/ is not in the published npm package (package.json files: dist/, prompts/, skills/, defaults/), so end-user detection is unaffected. The trailing CFN_S3_BLOCK_PUBLIC_ACCESS / CFN_CLOUDTRAIL_MULTIREGION / CFN_EC2_IMDSV2 / AWS_S3_ACL_NOT_PUBLIC / GCP_SQL_SSL_MODE_ENCRYPTED_ONLY / BICEP_STORAGE_NO_PUBLIC_BLOB / AZURE_BICEP_STORAGE_NETWORK_DENY_DEFAULT IDs are the v1.3.2 998-rule cloud-controls expansion's renamed detections for these same fixtures.",
       "ticket": "self-scan/cloud-controls-and-iac-fixtures",
+      "owner": "security-mcp-team",
+      "approver": "ciso-review-board",
+      "approval_role": "SecurityLead",
+      "expires_on": "2027-06-15"
+    },
+    {
+      "id": "self-scan-ci-fork-secret-no-op",
+      "finding_ids": [
+        "CI_FORK_SECRET_EXPOSURE"
+      ],
+      "control_ids": [],
+      "justification": "The repo's own .github/workflows/security-gate.yml triggers on 'pull_request' (NOT 'pull_request_target') and references secrets.SECURITY_POLICY_HMAC_KEY. GitHub does not expose repository secrets to pull_request runs from forks, so a fork contributor cannot read this secret; only same-repo branch PRs receive it. The reference is optional/no-op (the workflow documents the gate functions without the key) and exists to sign-verify the policy on trusted same-repo PRs. The detection is a conservative true-positive by rule (secrets.* present in a pull_request workflow) but is not exploitable here. Suppressed only in the repo-local self-scan; .github/ is not shipped in the npm package, so downstream CI_FORK_SECRET_EXPOSURE detection is unaffected.",
+      "ticket": "self-scan/ci-fork-secret-no-op",
       "owner": "security-mcp-team",
       "approver": "ciso-review-board",
       "approval_role": "SecurityLead",

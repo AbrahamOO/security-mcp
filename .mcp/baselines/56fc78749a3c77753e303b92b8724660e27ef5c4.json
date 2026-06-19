@@ -1,0 +1,2604 @@
+{
+  "runId": "7a3ffc02-0eb9-43ad-8ac4-44aa1a5dbf2c",
+  "commitHash": "56fc78749a3c77753e303b92b8724660e27ef5c4",
+  "savedAt": "2026-06-17T14:20:43.272Z",
+  "result": {
+    "status": "FAIL",
+    "policyVersion": "1.0.0",
+    "evaluatedAt": "2026-06-17T14:20:43.270Z",
+    "scope": {
+      "mode": "folder_by_folder",
+      "targets": [
+        "terraform"
+      ],
+      "changedFiles": [
+        "terraform/main.tf"
+      ],
+      "surfaces": {
+        "web": false,
+        "api": false,
+        "infra": true,
+        "mobileIos": false,
+        "mobileAndroid": false,
+        "ai": false,
+        "agentic": false
+      }
+    },
+    "findings": [
+      {
+        "id": "ARTIFACTS_NO_THREAT_MODEL",
+        "title": "No threat model file found in .mcp/, docs/, or security/",
+        "severity": "HIGH",
+        "evidence": [
+          "Searched for: threat-model.json, threat-model.md under .mcp/, docs/, security/",
+          "No match found."
+        ],
+        "requiredActions": [
+          "Create a threat model document (threat-model.json or threat-model.md) in .mcp/, docs/, or security/.",
+          "Include STRIDE analysis, OWASP Top-10 mapping, MITRE ATT&CK mapping, trust boundaries, and data flow diagrams.",
+          "Reference the threat model from your PR description and link it to changed components."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "ARTIFACTS_NO_SBOM",
+        "title": "No SBOM (Software Bill of Materials) found in repository",
+        "severity": "HIGH",
+        "evidence": [
+          "Searched for CycloneDX (.cdx.json, bom.json, bom.xml) and SPDX (.spdx, .spdx.json) files.",
+          "No match found."
+        ],
+        "requiredActions": [
+          "Generate an SBOM in CycloneDX or SPDX format and commit it to the repository.",
+          "For Node.js: `npx @cyclonedx/cyclonedx-npm --output-file sbom.json`.",
+          "For Python: `cyclonedx-bom -o sbom.json`.",
+          "Automate SBOM generation in CI so it stays current with every dependency change.",
+          "Ensure the SBOM is included in any artifact upload to your registry (SLSA Level 2+)."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "GIT_HISTORY_SECRET",
+        "title": "Secret detected in git history (21 findings)",
+        "severity": "HIGH",
+        "files": [
+          "fixtures/data-platform-insecure/databricks/etl_notebook.py",
+          "fixtures/data-platform-insecure/snowflake/connection.tf",
+          "fixtures/gitops-insecure/argocd-repo-creds.yaml",
+          "fixtures/gitops-insecure/flux-helmrelease-inline.yaml",
+          "fixtures/gitops-insecure/plaintext-secret.yaml",
+          "fixtures/iac-insecure/cloudformation/deep.json",
+          "fixtures/iac-insecure/pulumi/index.ts",
+          "fixtures/iac-insecure/terraform/prod.auto.tfvars",
+          "fixtures/iac-insecure/terraform/r3_providers.tf",
+          "fixtures/iac-insecure/terraform/secrets.tf",
+          "fixtures/k8s-insecure/secret.yaml",
+          "skills/stride-pasta-analyst/SKILL.md",
+          "src/mcp/server.ts"
+        ],
+        "evidence": [
+          "commit=4bd0a1f6 file=fixtures/data-platform-insecure/databricks/etl_notebook.py rule=generic-api-key",
+          "commit=4bd0a1f6 file=fixtures/data-platform-insecure/snowflake/connection.tf rule=hashicorp-tf-password",
+          "commit=4bd0a1f6 file=fixtures/data-platform-insecure/snowflake/connection.tf rule=hashicorp-tf-password",
+          "commit=4bd0a1f6 file=fixtures/gitops-insecure/argocd-repo-creds.yaml rule=github-pat",
+          "commit=4bd0a1f6 file=fixtures/gitops-insecure/argocd-repo-creds.yaml rule=private-key",
+          "commit=4bd0a1f6 file=fixtures/gitops-insecure/flux-helmrelease-inline.yaml rule=generic-api-key",
+          "commit=4bd0a1f6 file=fixtures/gitops-insecure/plaintext-secret.yaml rule=kubernetes-secret-yaml",
+          "commit=4bd0a1f6 file=fixtures/iac-insecure/cloudformation/deep.json rule=generic-api-key",
+          "commit=4bd0a1f6 file=fixtures/iac-insecure/pulumi/index.ts rule=generic-api-key",
+          "commit=4bd0a1f6 file=fixtures/iac-insecure/terraform/prod.auto.tfvars rule=generic-api-key",
+          "commit=4bd0a1f6 file=fixtures/iac-insecure/terraform/prod.auto.tfvars rule=generic-api-key",
+          "commit=4bd0a1f6 file=fixtures/iac-insecure/terraform/r3_providers.tf rule=generic-api-key",
+          "commit=4bd0a1f6 file=fixtures/iac-insecure/terraform/secrets.tf rule=generic-api-key",
+          "commit=4bd0a1f6 file=fixtures/iac-insecure/terraform/secrets.tf rule=generic-api-key",
+          "commit=4bd0a1f6 file=fixtures/iac-insecure/terraform/secrets.tf rule=generic-api-key",
+          "commit=4bd0a1f6 file=fixtures/iac-insecure/terraform/secrets.tf rule=hashicorp-tf-password",
+          "commit=4bd0a1f6 file=fixtures/k8s-insecure/secret.yaml rule=kubernetes-secret-yaml",
+          "commit=4bd0a1f6 file=fixtures/k8s-insecure/secret.yaml rule=generic-api-key",
+          "commit=f6e03ae7 file=skills/stride-pasta-analyst/SKILL.md rule=jwt",
+          "commit=47fbcb09 file=src/mcp/server.ts rule=generic-api-key"
+        ],
+        "requiredActions": [
+          "Secrets in git history remain exposed even after removal from the working tree.",
+          "Rotate all exposed credentials immediately.",
+          "Use git-filter-repo or BFG Repo-Cleaner to purge the secrets from history, then force-push and notify all collaborators to re-clone.",
+          "Enable branch protection and secret scanning alerts on the remote host."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control ZERO_TRUST",
+        "severity": "HIGH",
+        "evidence": [
+          "deny_by_default_authz",
+          "service_to_service_auth"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control ZERO_TRUST",
+        "severity": "HIGH",
+        "evidence": [
+          "deny_by_default_authz",
+          "service_to_service_auth"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control ZERO_TRUST.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control SECRET_MANAGER_ONLY",
+        "severity": "HIGH",
+        "evidence": [
+          "no_hardcoded_secrets"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control SECRET_MANAGER_ONLY",
+        "severity": "HIGH",
+        "evidence": [
+          "no_hardcoded_secrets"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control SECRET_MANAGER_ONLY.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control TLS_13",
+        "severity": "HIGH",
+        "evidence": [
+          "tls_config_verified"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control TLS_13.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control SSRF",
+        "severity": "HIGH",
+        "evidence": [
+          "ssrf_guard_present",
+          "ssrf_tests_present"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control SSRF",
+        "severity": "HIGH",
+        "evidence": [
+          "ssrf_guard_present",
+          "ssrf_tests_present"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control SSRF.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control NIST_AC_ACCESS_CONTROL",
+        "severity": "HIGH",
+        "evidence": [
+          "deny_by_default_authz",
+          "service_to_service_auth"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control NIST_AC_ACCESS_CONTROL",
+        "severity": "HIGH",
+        "evidence": [
+          "deny_by_default_authz",
+          "service_to_service_auth"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control NIST_AC_ACCESS_CONTROL.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control NIST_AU_AUDIT_LOGGING",
+        "severity": "HIGH",
+        "evidence": [
+          "audit_logging_configured",
+          "log_retention_policy"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control NIST_AU_AUDIT_LOGGING",
+        "severity": "HIGH",
+        "evidence": [
+          "audit_logging_configured",
+          "log_retention_policy"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control NIST_AU_AUDIT_LOGGING.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control NIST_IA_IDENTIFICATION",
+        "severity": "HIGH",
+        "evidence": [
+          "mfa_enforced",
+          "service_account_per_workload"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control NIST_IA_IDENTIFICATION",
+        "severity": "HIGH",
+        "evidence": [
+          "mfa_enforced",
+          "service_account_per_workload"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control NIST_IA_IDENTIFICATION.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control NIST_SC_TRANSMISSION",
+        "severity": "HIGH",
+        "evidence": [
+          "tls_config_verified"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control NIST_SC_TRANSMISSION.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control NIST_IR_INCIDENT_RESPONSE",
+        "severity": "HIGH",
+        "evidence": [
+          "ir_playbook_present",
+          "ir_playbook_tested"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control NIST_IR_INCIDENT_RESPONSE",
+        "severity": "HIGH",
+        "evidence": [
+          "ir_playbook_present",
+          "ir_playbook_tested"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control NIST_IR_INCIDENT_RESPONSE.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control PCI_REQ3_STORED_DATA",
+        "severity": "HIGH",
+        "evidence": [
+          "pan_encryption_configured",
+          "no_plaintext_pan"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control PCI_REQ3_STORED_DATA",
+        "severity": "HIGH",
+        "evidence": [
+          "pan_encryption_configured",
+          "no_plaintext_pan"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control PCI_REQ3_STORED_DATA.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control SOC2_CC6_LOGICAL_ACCESS",
+        "severity": "HIGH",
+        "evidence": [
+          "mfa_enforced",
+          "deny_by_default_authz"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control SOC2_CC6_LOGICAL_ACCESS",
+        "severity": "HIGH",
+        "evidence": [
+          "mfa_enforced",
+          "deny_by_default_authz"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control SOC2_CC6_LOGICAL_ACCESS.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control SOC2_CC7_SYSTEM_MONITORING",
+        "severity": "HIGH",
+        "evidence": [
+          "audit_logging_configured",
+          "alerting_configured"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control SOC2_CC7_SYSTEM_MONITORING",
+        "severity": "HIGH",
+        "evidence": [
+          "audit_logging_configured",
+          "alerting_configured"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control SOC2_CC7_SYSTEM_MONITORING.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control MITRE_INITIAL_ACCESS",
+        "severity": "HIGH",
+        "evidence": [
+          "mfa_enforced",
+          "email_filtering",
+          "public_surface_hardened"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control MITRE_INITIAL_ACCESS",
+        "severity": "HIGH",
+        "evidence": [
+          "mfa_enforced",
+          "email_filtering",
+          "public_surface_hardened"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control MITRE_INITIAL_ACCESS.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control MITRE_CREDENTIAL_ACCESS",
+        "severity": "HIGH",
+        "evidence": [
+          "no_hardcoded_secrets",
+          "rate_limiting_present"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control MITRE_CREDENTIAL_ACCESS",
+        "severity": "HIGH",
+        "evidence": [
+          "no_hardcoded_secrets",
+          "rate_limiting_present"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control MITRE_CREDENTIAL_ACCESS.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control MITRE_EXFILTRATION",
+        "severity": "HIGH",
+        "evidence": [
+          "egress_controls",
+          "dlp_configured"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control MITRE_EXFILTRATION",
+        "severity": "HIGH",
+        "evidence": [
+          "egress_controls",
+          "dlp_configured"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control MITRE_EXFILTRATION.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control MITRE_DEFENSE_EVASION",
+        "severity": "HIGH",
+        "evidence": [
+          "audit_logging_configured",
+          "artifact_signing"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control MITRE_DEFENSE_EVASION",
+        "severity": "HIGH",
+        "evidence": [
+          "audit_logging_configured",
+          "artifact_signing"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control MITRE_DEFENSE_EVASION.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control MITRE_LATERAL_MOVEMENT",
+        "severity": "HIGH",
+        "evidence": [
+          "network_segmentation",
+          "zero_trust_network"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control MITRE_LATERAL_MOVEMENT",
+        "severity": "HIGH",
+        "evidence": [
+          "network_segmentation",
+          "zero_trust_network"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control MITRE_LATERAL_MOVEMENT.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control MITRE_IMPACT",
+        "severity": "HIGH",
+        "evidence": [
+          "backup_encryption",
+          "backup_tested"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control MITRE_IMPACT",
+        "severity": "HIGH",
+        "evidence": [
+          "backup_encryption",
+          "backup_tested"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control MITRE_IMPACT.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control MITRE_COMMAND_CONTROL",
+        "severity": "HIGH",
+        "evidence": [
+          "egress_controls",
+          "dns_monitoring"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control MITRE_COMMAND_CONTROL",
+        "severity": "HIGH",
+        "evidence": [
+          "egress_controls",
+          "dns_monitoring"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control MITRE_COMMAND_CONTROL.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control SLSA_L3_PROVENANCE",
+        "severity": "HIGH",
+        "evidence": [
+          "artifact_signing",
+          "hermetic_build_configured"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control SLSA_L3_PROVENANCE",
+        "severity": "HIGH",
+        "evidence": [
+          "artifact_signing",
+          "hermetic_build_configured"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control SLSA_L3_PROVENANCE.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control ZERO_TRUST_MICROSEG",
+        "severity": "HIGH",
+        "evidence": [
+          "network_segmentation",
+          "zero_trust_network"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control ZERO_TRUST_MICROSEG",
+        "severity": "HIGH",
+        "evidence": [
+          "network_segmentation",
+          "zero_trust_network"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control ZERO_TRUST_MICROSEG.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control ZERO_TRUST_CONTINUOUS_VERIFY",
+        "severity": "HIGH",
+        "evidence": [
+          "deny_by_default_authz",
+          "service_to_service_auth"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control ZERO_TRUST_CONTINUOUS_VERIFY",
+        "severity": "HIGH",
+        "evidence": [
+          "deny_by_default_authz",
+          "service_to_service_auth"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control ZERO_TRUST_CONTINUOUS_VERIFY.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control BUSINESS_LOGIC_REVIEWED",
+        "severity": "HIGH",
+        "evidence": [
+          "pentest-report.json",
+          "threat-model.json"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control BUSINESS_LOGIC_REVIEWED",
+        "severity": "HIGH",
+        "evidence": [
+          "pentest-report.json",
+          "threat-model.json"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control BUSINESS_LOGIC_REVIEWED.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "EVIDENCE_MAPPING_MISSING",
+        "title": "Evidence mapping missing for control HIPAA_PHI_CONTROLS",
+        "severity": "HIGH",
+        "evidence": [
+          "hipaa-phi-audit.json"
+        ],
+        "requiredActions": [
+          "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+          "Map each control to file globs that prove the control exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "CONTROL_EVIDENCE_MISSING",
+        "title": "Required evidence missing for control HIPAA_PHI_CONTROLS",
+        "severity": "HIGH",
+        "evidence": [
+          "hipaa-phi-audit.json"
+        ],
+        "requiredActions": [
+          "Implement or surface evidence for control HIPAA_PHI_CONTROLS.",
+          "Add or update code, tests, or config so the evidence globs resolve."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "SECRET_MANAGER_NOT_DETECTED",
+        "title": "No secret manager usage detected — secrets may be hardcoded or in env files",
+        "severity": "HIGH",
+        "requiredActions": [
+          "Integrate a cloud secret manager appropriate for your platform:",
+          "  • AWS: AWS Secrets Manager or SSM Parameter Store (SecureString)",
+          "  • GCP: Secret Manager with Workload Identity",
+          "  • Azure: Azure Key Vault with Managed Identity",
+          "  • Multi-cloud / self-hosted: HashiCorp Vault, Doppler, or 1Password Secrets Automation",
+          "Never store secrets in environment files committed to the repo, CI log output, or container images."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "INFRA_LAMBDA_URL_NO_AUTH",
+        "title": "Lambda function URL with no authentication — publicly invocable by anyone",
+        "severity": "CRITICAL",
+        "evidence": [
+          "terraform/main.tf:24:   authorization_type = \"NONE\""
+        ],
+        "requiredActions": [
+          "Set authorization_type = \"AWS_IAM\" on all aws_lambda_function_url resources.",
+          "Use a CloudFront distribution with signed URLs or an API Gateway with IAM/Cognito auth as an alternative.",
+          "If public invocation is intentional, add CORS restrictions and rate limiting."
+        ],
+        "sla": "24h",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "INFRA_VPC_NO_FLOW_LOGS",
+        "title": "No aws_flow_log resource found — VPC network traffic is unlogged, lateral movement and exfiltration undetectable",
+        "severity": "MEDIUM",
+        "requiredActions": [
+          "Add an aws_flow_log resource for each VPC and ship logs to CloudWatch Logs or S3.",
+          "Set flow log aggregation interval to 1 minute for near-real-time detection.",
+          "Create CloudWatch metric filters and alarms for rejected traffic spikes."
+        ],
+        "sla": "30d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "INFRA_NO_VPC_ENDPOINT",
+        "title": "No VPC endpoint found for AWS services — traffic routes over public internet",
+        "severity": "MEDIUM",
+        "evidence": [
+          "terraform/main.tf:1: resource \"aws_instance\" \"api\" {",
+          "terraform/main.tf:22: resource \"aws_lambda_function_url\" \"public\" {"
+        ],
+        "requiredActions": [
+          "Create aws_vpc_endpoint resources for S3, ECR (api + dkr), and other frequently used AWS services.",
+          "Use Gateway endpoints for S3/DynamoDB (free) and Interface endpoints for other services.",
+          "Set the VPC endpoint policy to restrict access to specific S3 buckets or ECR repositories."
+        ],
+        "sla": "30d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "INFRA_GUARDDUTY_MISSING",
+        "title": "No GuardDuty detector resource found — threat detection (credential misuse, crypto-mining) disabled",
+        "severity": "HIGH",
+        "requiredActions": [
+          "Add an aws_guardduty_detector resource with enable = true to your Terraform.",
+          "Enable GuardDuty in all AWS regions and aggregate findings into a delegated admin account.",
+          "Subscribe to GuardDuty findings via EventBridge and route high-severity alerts to your on-call channel."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "INFRA_SECURITY_HUB_MISSING",
+        "title": "AWS Security Hub not enabled — findings from GuardDuty/Inspector/Macie not centrally aggregated",
+        "severity": "MEDIUM",
+        "requiredActions": [
+          "Add an aws_securityhub_account resource to your Terraform.",
+          "Enable the AWS Foundational Security Best Practices and CIS AWS Foundations standards.",
+          "Aggregate Security Hub findings across regions and accounts into a central delegated admin."
+        ],
+        "sla": "30d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "SBOM_MISSING",
+        "title": "No SBOM found. Syft is available — run it to generate one.",
+        "severity": "HIGH",
+        "evidence": [
+          "Expected at: /Users/smilesparker/workplace/security-mcp/.mcp/sbom/latest.json"
+        ],
+        "requiredActions": [
+          "Run: syft . -o cyclonedx-json=.mcp/sbom/latest.json",
+          "Or set SECURITY_AUTO_SBOM=true to auto-generate on each gate run."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "PROVENANCE_MISSING",
+        "title": "No SLSA provenance attestation found",
+        "severity": "HIGH",
+        "evidence": [
+          "Attestation dir: /Users/smilesparker/workplace/security-mcp/.mcp/attestations"
+        ],
+        "requiredActions": [
+          "Generate SLSA provenance during CI/CD build.",
+          "Use slsa-github-generator or equivalent to produce .intoto.jsonl attestations.",
+          "Store provenance in .mcp/attestations/"
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "IR_PLAYBOOK_MISSING",
+        "title": "IR playbook missing: Cloud misconfiguration (security/playbooks/cloud-misconfiguration.md)",
+        "severity": "HIGH",
+        "evidence": [
+          "Expected path: security/playbooks/cloud-misconfiguration.md",
+          "Surface: infra"
+        ],
+        "requiredActions": [
+          "Create the IR playbook at security/playbooks/cloud-misconfiguration.md.",
+          "Include all required sections: detection criteria, escalation path, containment, eradication, recovery, communication, post-incident review, and MTTD/MTTR targets."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "IR_PLAYBOOK_MISSING",
+        "title": "IR playbook missing: Ransomware (security/playbooks/ransomware.md)",
+        "severity": "HIGH",
+        "evidence": [
+          "Expected path: security/playbooks/ransomware.md",
+          "Surface: infra"
+        ],
+        "requiredActions": [
+          "Create the IR playbook at security/playbooks/ransomware.md.",
+          "Include all required sections: detection criteria, escalation path, containment, eradication, recovery, communication, post-incident review, and MTTD/MTTR targets."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "IAC_TF_UNSAFE_DESTROY",
+        "title": "Destructive or validation-skipping toggle enabled (force_destroy / skip_final_snapshot / disable_rollback)",
+        "severity": "HIGH",
+        "evidence": [
+          "terraform/main.tf:10:   skip_final_snapshot = true"
+        ],
+        "requiredActions": [
+          "Set skip_final_snapshot = false on RDS so a snapshot is taken before deletion.",
+          "Remove force_destroy = true from buckets holding real data; require manual emptying instead.",
+          "Add a lifecycle { prevent_destroy = true } block to critical stateful resources.",
+          "Keep skip_provider_registration / disable_rollback at their safe defaults."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "IAC_PUBLIC_RESOURCE",
+        "title": "IaC creates a publicly exposed resource (public-read ACL or publicly_accessible database)",
+        "severity": "HIGH",
+        "evidence": [
+          "terraform/main.tf:9:   publicly_accessible = true",
+          "terraform/main.tf:15:   acl    = \"public-read\""
+        ],
+        "requiredActions": [
+          "Remove acl = \"public-read\"/\"public-read-write\"; use bucket policies with explicit principals instead.",
+          "Set publicly_accessible = false on all database instances and place them in private subnets.",
+          "Enable S3 Block Public Access at the account and bucket level to override accidental public ACLs.",
+          "Front any legitimately public asset bucket with CloudFront + Origin Access Control, not a public ACL."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "IAC_TF_S3_MISSING_HARDENING",
+        "title": "aws_s3_bucket has no server-side encryption and/or no public access block resource — data may be unencrypted or publicly exposable",
+        "severity": "HIGH",
+        "evidence": [
+          "terraform/main.tf:13: resource \"aws_s3_bucket\" \"assets\" {"
+        ],
+        "requiredActions": [
+          "Add a server-side encryption configuration:",
+          "  resource \"aws_s3_bucket_server_side_encryption_configuration\" \"this\" {",
+          "    bucket = aws_s3_bucket.this.id",
+          "    rule { apply_server_side_encryption_by_default { sse_algorithm = \"aws:kms\" } }",
+          "  }",
+          "Add a public access block:",
+          "  resource \"aws_s3_bucket_public_access_block\" \"this\" {",
+          "    bucket                  = aws_s3_bucket.this.id",
+          "    block_public_acls       = true",
+          "    block_public_policy     = true",
+          "    ignore_public_acls      = true",
+          "    restrict_public_buckets = true",
+          "  }",
+          "Verify: checkov -d . --check CKV2_AWS_6,CKV_AWS_19 ; trivy config ."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "AWS_EC2_IMDSV2_REQUIRED",
+        "title": "EC2 instance must enforce IMDSv2 with hop limit 1 — SSRF in the application reaches 169.254.169.254 and steals the instance-profile credentials when IMDSv1 is allowed.",
+        "severity": "CRITICAL",
+        "evidence": [
+          "terraform/main.tf:1: aws_instance — secure setting missing"
+        ],
+        "files": [
+          "terraform/main.tf"
+        ],
+        "requiredActions": [
+          "Add metadata_options { http_tokens = \"required\", http_put_response_hop_limit = 1 } to the aws_instance so IMDSv2 session tokens are mandatory and the metadata endpoint is unreachable from a single-hop SSRF."
+        ],
+        "sla": "24h",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "AWS_RDS_NOT_PUBLIC",
+        "title": "RDS instance must not be publicly accessible — A publicly accessible RDS instance is directly reachable from the internet for brute force and CVE exploitation.",
+        "severity": "CRITICAL",
+        "evidence": [
+          "terraform/main.tf:6: aws_db_instance — insecure value present"
+        ],
+        "files": [
+          "terraform/main.tf"
+        ],
+        "requiredActions": [
+          "Set publicly_accessible = false on the aws_db_instance and place it in private subnets behind a security group that only allows the application tier."
+        ],
+        "sla": "24h",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "AWS_RDS_STORAGE_ENCRYPTED",
+        "title": "RDS storage must be encrypted — Unencrypted RDS storage exposes the database contents if the underlying volume or a snapshot is accessed.",
+        "severity": "HIGH",
+        "evidence": [
+          "terraform/main.tf:6: aws_db_instance — secure setting missing"
+        ],
+        "files": [
+          "terraform/main.tf"
+        ],
+        "requiredActions": [
+          "Set storage_encrypted = true (and kms_key_id) on the aws_db_instance. Note: encryption can only be enabled at creation; rebuild from an encrypted snapshot if the instance already exists."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "AWS_S3_BUCKET_NO_PUBLIC_ACL",
+        "title": "S3 bucket must not use a public ACL — A public-read ACL lets anonymous users list and download every object in the bucket.",
+        "severity": "CRITICAL",
+        "evidence": [
+          "terraform/main.tf:13: aws_s3_bucket — insecure value present"
+        ],
+        "files": [
+          "terraform/main.tf"
+        ],
+        "requiredActions": [
+          "Set acl = \"private\" and attach an aws_s3_bucket_public_access_block with all four block flags = true."
+        ],
+        "sla": "24h",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "AWS_S3_BLOCK_PUBLIC_ACCESS",
+        "title": "S3 bucket must have a public access block — Without a public access block, a future bucket policy or ACL can silently expose the bucket to the internet.",
+        "severity": "HIGH",
+        "evidence": [
+          "terraform/main.tf:13: aws_s3_bucket — missing companion aws_s3_bucket_public_access_block"
+        ],
+        "files": [
+          "terraform/main.tf"
+        ],
+        "requiredActions": [
+          "Add an aws_s3_bucket_public_access_block referencing this bucket with block_public_acls, block_public_policy, ignore_public_acls, and restrict_public_buckets all set to true."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "AWS_KMS_KEY_ROTATION",
+        "title": "KMS key must have automatic rotation enabled — A customer-managed KMS key without rotation means a single key compromise exposes all historical ciphertext.",
+        "severity": "MEDIUM",
+        "evidence": [
+          "terraform/main.tf:18: aws_kms_key — secure setting missing"
+        ],
+        "files": [
+          "terraform/main.tf"
+        ],
+        "requiredActions": [
+          "Set enable_key_rotation = true on the aws_kms_key."
+        ],
+        "sla": "30d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "AWS_LAMBDA_URL_AUTH_REQUIRED",
+        "title": "Lambda function URL must require IAM auth — A Lambda function URL with authorization_type NONE is an unauthenticated internet endpoint that can reach the function's IAM role and downstream data stores.",
+        "severity": "CRITICAL",
+        "evidence": [
+          "terraform/main.tf:22: aws_lambda_function_url — insecure value present"
+        ],
+        "files": [
+          "terraform/main.tf"
+        ],
+        "requiredActions": [
+          "Set authorization_type = \"AWS_IAM\" on the aws_lambda_function_url, or front it with API Gateway / a Lambda authorizer that enforces authentication."
+        ],
+        "sla": "24h",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "AWS_S3_BUCKET_VERSIONING",
+        "title": "S3 bucket should enable versioning — Without versioning, an accidental or malicious overwrite/delete of objects is unrecoverable (no ransomware rollback).",
+        "severity": "LOW",
+        "evidence": [
+          "terraform/main.tf:13: aws_s3_bucket — missing companion aws_s3_bucket_versioning"
+        ],
+        "files": [
+          "terraform/main.tf"
+        ],
+        "requiredActions": [
+          "Add an aws_s3_bucket_versioning resource for this bucket with versioning_configuration { status = \"Enabled\" }."
+        ],
+        "sla": "90d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "AWS_RDS_DELETION_PROTECTION",
+        "title": "RDS instance must enable deletion protection — Without deletion protection, a compromised credential or accidental apply can destroy the production database.",
+        "severity": "MEDIUM",
+        "evidence": [
+          "terraform/main.tf:6: aws_db_instance — secure setting missing"
+        ],
+        "files": [
+          "terraform/main.tf"
+        ],
+        "requiredActions": [
+          "Set deletion_protection = true on the aws_db_instance."
+        ],
+        "sla": "30d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "AWS_RDS_BACKUP_RETENTION",
+        "title": "RDS instance must set a backup retention period — A zero/short backup retention window means no point-in-time recovery after a destructive or ransomware event.",
+        "severity": "LOW",
+        "evidence": [
+          "terraform/main.tf:6: aws_db_instance — secure setting missing"
+        ],
+        "files": [
+          "terraform/main.tf"
+        ],
+        "requiredActions": [
+          "Set backup_retention_period to at least 7 (days) on the aws_db_instance."
+        ],
+        "sla": "90d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "AWS_S3_DEFAULT_ENCRYPTION",
+        "title": "S3 bucket should declare server-side encryption — A bucket without an explicit server-side encryption configuration relies on account defaults that may not use a CMK.",
+        "severity": "LOW",
+        "evidence": [
+          "terraform/main.tf:13: aws_s3_bucket — missing companion aws_s3_bucket_server_side_encryption_configuration"
+        ],
+        "files": [
+          "terraform/main.tf"
+        ],
+        "requiredActions": [
+          "Add an aws_s3_bucket_server_side_encryption_configuration for this bucket using aws:kms (or AES256)."
+        ],
+        "sla": "90d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "AWS_S3_BUCKET_LOGGING",
+        "title": "S3 bucket should enable access logging — Without access logging, bulk object reads (data exfiltration) leave no forensic trail.",
+        "severity": "LOW",
+        "evidence": [
+          "terraform/main.tf:13: aws_s3_bucket — missing companion aws_s3_bucket_logging"
+        ],
+        "files": [
+          "terraform/main.tf"
+        ],
+        "requiredActions": [
+          "Add an aws_s3_bucket_logging resource for this bucket. Choose a separate, access-restricted target_bucket for the logs."
+        ],
+        "sla": "90d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "AWS_RDS_COPY_TAGS_TO_SNAPSHOT",
+        "title": "RDS instance should copy tags to snapshots — Without copy-tags-to-snapshot, access-control and ownership tags are lost on snapshots, weakening least-privilege on restores.",
+        "severity": "LOW",
+        "evidence": [
+          "terraform/main.tf:6: aws_db_instance — secure setting missing"
+        ],
+        "files": [
+          "terraform/main.tf"
+        ],
+        "requiredActions": [
+          "Set copy_tags_to_snapshot = true on the aws_db_instance."
+        ],
+        "sla": "90d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "AWS_RDS_ENHANCED_MONITORING",
+        "title": "RDS instance should enable enhanced monitoring — Without enhanced monitoring, OS-level metrics needed to detect resource-exhaustion attacks on the DB host are missing.",
+        "severity": "LOW",
+        "evidence": [
+          "terraform/main.tf:6: aws_db_instance — secure setting missing"
+        ],
+        "files": [
+          "terraform/main.tf"
+        ],
+        "requiredActions": [
+          "Enable enhanced monitoring (monitoring_interval + monitoring_role_arn) on the aws_db_instance."
+        ],
+        "sla": "90d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      },
+      {
+        "id": "AWS_RDS_LOG_EXPORTS",
+        "title": "RDS instance should export logs to CloudWatch — Without CloudWatch log exports, DB engine/audit/error logs aren't available for detection of injection or abuse.",
+        "severity": "LOW",
+        "evidence": [
+          "terraform/main.tf:6: aws_db_instance — secure setting missing"
+        ],
+        "files": [
+          "terraform/main.tf"
+        ],
+        "requiredActions": [
+          "Enable enabled_cloudwatch_logs_exports on the aws_db_instance (log types vary by engine)."
+        ],
+        "sla": "90d",
+        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+      }
+    ],
+    "suppressedFindings": [],
+    "controlCoverage": [
+      {
+        "id": "ZERO_TRUST",
+        "description": "All services enforce authentication and authorization with no implicit trust.",
+        "automation": "evidence",
+        "frameworks": [
+          "NIST 800-207",
+          "OWASP ASVS"
+        ],
+        "status": "missing",
+        "details": [
+          "deny_by_default_authz",
+          "service_to_service_auth"
+        ]
+      },
+      {
+        "id": "SECRET_MANAGER_ONLY",
+        "description": "Secrets stored only in a dedicated secret manager.",
+        "automation": "evidence",
+        "frameworks": [
+          "NIST 800-53",
+          "SOC 2"
+        ],
+        "status": "missing",
+        "details": [
+          "no_hardcoded_secrets"
+        ]
+      },
+      {
+        "id": "TLS_13",
+        "description": "TLS configuration is verified.",
+        "automation": "evidence",
+        "frameworks": [
+          "NIST 800-53",
+          "PCI DSS 4.0"
+        ],
+        "status": "missing",
+        "details": [
+          "tls_config_verified"
+        ]
+      },
+      {
+        "id": "CSP_NO_INLINE",
+        "description": "CSP is configured without unsafe inline execution.",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP ASVS",
+          "CWE-79"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "CSRF",
+        "description": "CSRF protections and tests are present.",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP Top 10",
+          "OWASP ASVS"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "SSRF",
+        "description": "SSRF guards and tests are present.",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP Top 10",
+          "CWE-918"
+        ],
+        "status": "missing",
+        "details": [
+          "ssrf_guard_present",
+          "ssrf_tests_present"
+        ]
+      },
+      {
+        "id": "MOBILE_MASVS",
+        "description": "Mobile release configuration meets MASVS baseline.",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP MASVS"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "AI_BOUNDED_OUTPUTS",
+        "description": "AI outputs are schema-validated and tools are allowlisted.",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP LLM Top 10",
+          "MITRE ATLAS"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "NIST_AC_ACCESS_CONTROL",
+        "description": "Access control policies enforce least privilege and separation of duties (NIST 800-53 AC).",
+        "automation": "evidence",
+        "frameworks": [
+          "NIST 800-53"
+        ],
+        "status": "missing",
+        "details": [
+          "deny_by_default_authz",
+          "service_to_service_auth"
+        ]
+      },
+      {
+        "id": "NIST_AU_AUDIT_LOGGING",
+        "description": "Audit events are logged, immutable, timestamped, and retained ≥1 year (NIST 800-53 AU).",
+        "automation": "evidence",
+        "frameworks": [
+          "NIST 800-53",
+          "SOC 2"
+        ],
+        "status": "missing",
+        "details": [
+          "audit_logging_configured",
+          "log_retention_policy"
+        ]
+      },
+      {
+        "id": "NIST_IA_IDENTIFICATION",
+        "description": "All users and services are uniquely identified and authenticated (NIST 800-53 IA).",
+        "automation": "evidence",
+        "frameworks": [
+          "NIST 800-53",
+          "OWASP ASVS"
+        ],
+        "status": "missing",
+        "details": [
+          "mfa_enforced",
+          "service_account_per_workload"
+        ]
+      },
+      {
+        "id": "NIST_SC_TRANSMISSION",
+        "description": "All data in transit is encrypted using approved algorithms (NIST 800-53 SC).",
+        "automation": "evidence",
+        "frameworks": [
+          "NIST 800-53",
+          "PCI DSS 4.0"
+        ],
+        "status": "missing",
+        "details": [
+          "tls_config_verified"
+        ]
+      },
+      {
+        "id": "NIST_SI_INPUT_VALIDATION",
+        "description": "All inputs are validated, sanitized, and encoded before processing (NIST 800-53 SI).",
+        "automation": "evidence",
+        "frameworks": [
+          "NIST 800-53",
+          "OWASP Top 10"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "NIST_IR_INCIDENT_RESPONSE",
+        "description": "Incident response playbooks exist, are tested, and have defined MTTD/MTTR SLAs (NIST 800-53 IR).",
+        "automation": "evidence",
+        "frameworks": [
+          "NIST 800-53",
+          "SOC 2"
+        ],
+        "status": "missing",
+        "details": [
+          "ir_playbook_present",
+          "ir_playbook_tested"
+        ]
+      },
+      {
+        "id": "PCI_REQ3_STORED_DATA",
+        "description": "Cardholder data at rest is encrypted and PAN is never stored in plaintext (PCI DSS 4.0 Req 3).",
+        "automation": "evidence",
+        "frameworks": [
+          "PCI DSS 4.0"
+        ],
+        "status": "missing",
+        "details": [
+          "pan_encryption_configured",
+          "no_plaintext_pan"
+        ]
+      },
+      {
+        "id": "PCI_REQ4_TRANSIT",
+        "description": "Cardholder data in transit uses TLS 1.2+ with approved cipher suites (PCI DSS 4.0 Req 4).",
+        "automation": "evidence",
+        "frameworks": [
+          "PCI DSS 4.0"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "SOC2_CC6_LOGICAL_ACCESS",
+        "description": "Logical access to systems is restricted and uses MFA for privileged accounts (SOC 2 CC6).",
+        "automation": "evidence",
+        "frameworks": [
+          "SOC 2 Type II"
+        ],
+        "status": "missing",
+        "details": [
+          "mfa_enforced",
+          "deny_by_default_authz"
+        ]
+      },
+      {
+        "id": "SOC2_CC7_SYSTEM_MONITORING",
+        "description": "System components are monitored for anomalous activity and security events (SOC 2 CC7).",
+        "automation": "evidence",
+        "frameworks": [
+          "SOC 2 Type II"
+        ],
+        "status": "missing",
+        "details": [
+          "audit_logging_configured",
+          "alerting_configured"
+        ]
+      },
+      {
+        "id": "MITRE_INITIAL_ACCESS",
+        "description": "Controls in place to prevent initial access vectors: phishing, supply chain, public-facing exploits (TA0001).",
+        "automation": "evidence",
+        "frameworks": [
+          "MITRE ATT&CK Enterprise"
+        ],
+        "status": "missing",
+        "details": [
+          "mfa_enforced",
+          "email_filtering",
+          "public_surface_hardened"
+        ]
+      },
+      {
+        "id": "MITRE_CREDENTIAL_ACCESS",
+        "description": "Controls prevent credential dumping, brute force, and credential theft (TA0006).",
+        "automation": "evidence",
+        "frameworks": [
+          "MITRE ATT&CK Enterprise"
+        ],
+        "status": "missing",
+        "details": [
+          "no_hardcoded_secrets",
+          "rate_limiting_present"
+        ]
+      },
+      {
+        "id": "MITRE_EXFILTRATION",
+        "description": "Controls prevent unauthorized data exfiltration over network, cloud storage, or encoding (TA0010).",
+        "automation": "evidence",
+        "frameworks": [
+          "MITRE ATT&CK Enterprise"
+        ],
+        "status": "missing",
+        "details": [
+          "egress_controls",
+          "dlp_configured"
+        ]
+      },
+      {
+        "id": "MITRE_DEFENSE_EVASION",
+        "description": "Logging is tamper-evident; code signing prevents unauthorized binary substitution (TA0005).",
+        "automation": "evidence",
+        "frameworks": [
+          "MITRE ATT&CK Enterprise"
+        ],
+        "status": "missing",
+        "details": [
+          "audit_logging_configured",
+          "artifact_signing"
+        ]
+      },
+      {
+        "id": "MITRE_LATERAL_MOVEMENT",
+        "description": "Network segmentation and mTLS prevent lateral movement between services (TA0008).",
+        "automation": "evidence",
+        "frameworks": [
+          "MITRE ATT&CK Enterprise",
+          "NIST 800-207"
+        ],
+        "status": "missing",
+        "details": [
+          "network_segmentation",
+          "zero_trust_network"
+        ]
+      },
+      {
+        "id": "MITRE_IMPACT",
+        "description": "Data backups are encrypted and tested; ransomware-resistant backup policies in place (TA0040).",
+        "automation": "evidence",
+        "frameworks": [
+          "MITRE ATT&CK Enterprise"
+        ],
+        "status": "missing",
+        "details": [
+          "backup_encryption",
+          "backup_tested"
+        ]
+      },
+      {
+        "id": "MITRE_COMMAND_CONTROL",
+        "description": "Egress filtering blocks C2 channels; DNS monitoring detects beaconing (TA0011).",
+        "automation": "evidence",
+        "frameworks": [
+          "MITRE ATT&CK Enterprise"
+        ],
+        "status": "missing",
+        "details": [
+          "egress_controls",
+          "dns_monitoring"
+        ]
+      },
+      {
+        "id": "AI_LLM02_OUTPUT_HANDLING",
+        "description": "LLM outputs are validated against a schema before use in downstream systems (OWASP LLM02).",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP LLM Top 10 2025"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "AI_LLM04_MODEL_DOS",
+        "description": "Rate limiting and input length limits prevent model resource exhaustion (OWASP LLM04).",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP LLM Top 10 2025"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "AI_LLM07_PLUGIN_DESIGN",
+        "description": "LLM plugins and tools operate on an explicit allowlist with minimal permissions (OWASP LLM07).",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP LLM Top 10 2025"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "AI_LLM08_EXCESSIVE_AGENCY",
+        "description": "LLM agents cannot take irreversible actions without human confirmation (OWASP LLM08).",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP LLM Top 10 2025",
+          "NIST AI RMF"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "AI_LLM_ALGORITHMIC_FAIRNESS",
+        "description": "ML decision systems affecting people carry fairness/bias evaluation (disparate impact, equalized odds, demographic parity) and representativeness evidence.",
+        "automation": "evidence",
+        "frameworks": [
+          "EU AI Act",
+          "NIST AI RMF",
+          "ISO 42001"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "AI_SHADOW_AI_DATA_LEAKAGE",
+        "description": "Secrets and PII are redacted/tokenized before reaching any LLM payload, preventing shadow-AI data leakage to model providers.",
+        "automation": "evidence",
+        "frameworks": [
+          "NIST AI RMF",
+          "OWASP LLM Top 10 2025"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "SLSA_L3_PROVENANCE",
+        "description": "Build artifacts have signed SLSA Level 3 provenance from a hermetic, ephemeral CI build.",
+        "automation": "evidence",
+        "frameworks": [
+          "SLSA",
+          "NIST 800-218"
+        ],
+        "status": "missing",
+        "details": [
+          "artifact_signing",
+          "hermetic_build_configured"
+        ]
+      },
+      {
+        "id": "ZERO_TRUST_MICROSEG",
+        "description": "Network microsegmentation enforces deny-by-default between all services.",
+        "automation": "evidence",
+        "frameworks": [
+          "NIST 800-207",
+          "CISA Zero Trust Maturity Model"
+        ],
+        "status": "missing",
+        "details": [
+          "network_segmentation",
+          "zero_trust_network"
+        ]
+      },
+      {
+        "id": "ZERO_TRUST_CONTINUOUS_VERIFY",
+        "description": "Every request is continuously verified — no persistent trust based on network location.",
+        "automation": "evidence",
+        "frameworks": [
+          "NIST 800-207"
+        ],
+        "status": "missing",
+        "details": [
+          "deny_by_default_authz",
+          "service_to_service_auth"
+        ]
+      },
+      {
+        "id": "BUSINESS_LOGIC_REVIEWED",
+        "description": "Business logic abuse scenarios (state skipping, negative values, race conditions) are tested before release.",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP Testing Guide OTG-BUSLOGIC",
+          "NIST SP 800-53 SA-11"
+        ],
+        "status": "missing",
+        "details": [
+          "pentest-report.json",
+          "threat-model.json"
+        ]
+      },
+      {
+        "id": "HTTP_SMUGGLING_MITIGATED",
+        "description": "Proxy and origin servers normalize CL/TE headers; H2C upgrade disabled.",
+        "automation": "evidence",
+        "frameworks": [
+          "CWE-444",
+          "OWASP Testing Guide OTG-INPVAL-016"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "SUBDOMAIN_TAKEOVER_MITIGATED",
+        "description": "DNS audit confirms no dangling CNAME records pointing to unprovisioned services.",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP Testing Guide OTG-CONFIG-010"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "AI_MULTIMODAL_INJECTION_PREVENTED",
+        "description": "Multimodal inputs (image, audio, document) are treated as untrusted and cannot inject instructions.",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP LLM01",
+          "MITRE ATLAS AML.T0054"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "AI_MEMORY_POISONING_PREVENTED",
+        "description": "Agent memory and scratchpad content is validated before use in downstream instructions.",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP LLM08",
+          "MITRE ATLAS"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "AI_MODEL_INVERSION_MITIGATED",
+        "description": "Model cannot be probed to recite training PII or memorized secrets.",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP LLM06",
+          "MITRE ATLAS AML.T0057"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "MASVS_ANTI_REVERSING",
+        "description": "Mobile release binary uses code obfuscation and anti-instrumentation controls (MASVS-RESILIENCE).",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP MASVS 2.0 RESILIENCE"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "PCI_3DS_V2_ENFORCED",
+        "description": "EMV 3DS version 2.2+ is used for all card-not-present high-risk transactions.",
+        "automation": "evidence",
+        "frameworks": [
+          "PCI DSS 4.0 Req 8",
+          "EMV 3DS 2.2"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "HIPAA_PHI_CONTROLS",
+        "description": "Protected Health Information (PHI) is encrypted at rest and in transit; access is limited and audited.",
+        "automation": "evidence",
+        "frameworks": [
+          "HIPAA §164.312",
+          "NIST SP 800-53 SC-28"
+        ],
+        "status": "missing",
+        "details": [
+          "hipaa-phi-audit.json"
+        ]
+      },
+      {
+        "id": "SECRETS_SCANNER_READY",
+        "description": "A dedicated secrets scanner is installed and runnable.",
+        "automation": "tooling",
+        "frameworks": [
+          "NIST 800-218",
+          "SLSA"
+        ],
+        "status": "missing",
+        "details": [
+          "gitleaks"
+        ]
+      },
+      {
+        "id": "IAC_SCANNER_READY",
+        "description": "Infrastructure scanners and policy-as-code tooling are installed and runnable.",
+        "automation": "tooling",
+        "frameworks": [
+          "CIS",
+          "NIST 800-53"
+        ],
+        "status": "missing",
+        "details": [
+          "checkov",
+          "conftest"
+        ]
+      },
+      {
+        "id": "CONTAINER_SCANNER_READY",
+        "description": "A container scanner is installed and runnable.",
+        "automation": "tooling",
+        "frameworks": [
+          "NIST 800-190",
+          "CIS"
+        ],
+        "status": "missing",
+        "details": [
+          "trivy"
+        ]
+      },
+      {
+        "id": "SBOM_SCANNER_READY",
+        "description": "An SBOM generator (Syft) is installed and runnable.",
+        "automation": "tooling",
+        "frameworks": [
+          "SLSA",
+          "NIST 800-218",
+          "Executive Order 14028"
+        ],
+        "status": "missing",
+        "details": [
+          "syft"
+        ]
+      },
+      {
+        "id": "NIST_CM_CONFIGURATION",
+        "description": "Baseline configurations are established and enforced for all systems (NIST 800-53 CM).",
+        "automation": "tooling",
+        "frameworks": [
+          "NIST 800-53",
+          "CIS Benchmarks"
+        ],
+        "status": "missing",
+        "details": [
+          "checkov"
+        ]
+      },
+      {
+        "id": "NIST_SA_SYSTEM_SERVICES",
+        "description": "Third-party components are assessed for security risk before adoption (NIST 800-53 SA).",
+        "automation": "tooling",
+        "frameworks": [
+          "NIST 800-53",
+          "NIST 800-218"
+        ],
+        "status": "missing",
+        "details": [
+          "osv-scanner"
+        ]
+      },
+      {
+        "id": "NIST_SR_SUPPLY_CHAIN",
+        "description": "Supply chain integrity is verified via SBOM, provenance attestation, and dependency scanning (NIST 800-53 SR).",
+        "automation": "tooling",
+        "frameworks": [
+          "NIST 800-53",
+          "SLSA",
+          "Executive Order 14028"
+        ],
+        "status": "missing",
+        "details": [
+          "syft",
+          "osv-scanner"
+        ]
+      },
+      {
+        "id": "PCI_REQ1_NETWORK",
+        "description": "Network security controls restrict inbound/outbound traffic to only what is necessary (PCI DSS 4.0 Req 1).",
+        "automation": "tooling",
+        "frameworks": [
+          "PCI DSS 4.0"
+        ],
+        "status": "missing",
+        "details": [
+          "checkov"
+        ]
+      },
+      {
+        "id": "PCI_REQ6_SECURE_SYSTEMS",
+        "description": "All software components are up-to-date and protected against known vulnerabilities (PCI DSS 4.0 Req 6).",
+        "automation": "tooling",
+        "frameworks": [
+          "PCI DSS 4.0"
+        ],
+        "status": "missing",
+        "details": [
+          "osv-scanner",
+          "trivy"
+        ]
+      },
+      {
+        "id": "MITRE_PERSISTENCE",
+        "description": "Controls detect and prevent backdoors, scheduled tasks, and unauthorized service installation (TA0003).",
+        "automation": "tooling",
+        "frameworks": [
+          "MITRE ATT&CK Enterprise"
+        ],
+        "status": "missing",
+        "details": [
+          "checkov",
+          "trivy"
+        ]
+      },
+      {
+        "id": "MITRE_PRIVILEGE_ESCALATION",
+        "description": "Containers and services cannot escalate to root; least-privilege IAM enforced (TA0004).",
+        "automation": "tooling",
+        "frameworks": [
+          "MITRE ATT&CK Enterprise",
+          "CIS Kubernetes Benchmark"
+        ],
+        "status": "missing",
+        "details": [
+          "checkov"
+        ]
+      },
+      {
+        "id": "SBOM_GENERATED",
+        "description": "A CycloneDX or SPDX SBOM is generated on every release and stored as a signed artifact.",
+        "automation": "tooling",
+        "frameworks": [
+          "Executive Order 14028",
+          "NIST 800-218",
+          "SLSA"
+        ],
+        "status": "missing",
+        "details": [
+          "syft"
+        ]
+      },
+      {
+        "id": "IR_PLAYBOOKS_CURRENT",
+        "description": "Incident response playbooks exist for all surfaces, are tested within 90 days, and have contact lists.",
+        "automation": "tooling",
+        "frameworks": [
+          "NIST 800-53",
+          "SOC 2 Type II"
+        ],
+        "status": "satisfied",
+        "details": []
+      },
+      {
+        "id": "CIS_CONTAINER_HARDENING",
+        "description": "Container images comply with CIS Docker Benchmark Level 2.",
+        "automation": "tooling",
+        "frameworks": [
+          "CIS Benchmarks",
+          "NIST 800-190"
+        ],
+        "status": "missing",
+        "details": [
+          "trivy",
+          "checkov"
+        ]
+      },
+      {
+        "id": "CIS_K8S_HARDENING",
+        "description": "Kubernetes cluster configuration complies with CIS Kubernetes Benchmark Level 2.",
+        "automation": "tooling",
+        "frameworks": [
+          "CIS Benchmarks",
+          "NIST 800-190"
+        ],
+        "status": "missing",
+        "details": [
+          "checkov"
+        ]
+      },
+      {
+        "id": "CIS_CLOUD_HARDENING",
+        "description": "Cloud account configuration complies with CIS Benchmark Level 2 for the active cloud provider.",
+        "automation": "tooling",
+        "frameworks": [
+          "CIS Benchmarks",
+          "NIST 800-53"
+        ],
+        "status": "missing",
+        "details": [
+          "checkov"
+        ]
+      },
+      {
+        "id": "K8S_POD_SECURITY",
+        "description": "Kubernetes pods enforce security contexts with least-privilege settings.",
+        "automation": "tooling",
+        "frameworks": [
+          "CIS Kubernetes Benchmark",
+          "NIST 800-190"
+        ],
+        "status": "missing",
+        "details": [
+          "checkov"
+        ]
+      },
+      {
+        "id": "K8S_NETWORK_POLICY",
+        "description": "Kubernetes NetworkPolicy resources restrict pod-to-pod traffic.",
+        "automation": "tooling",
+        "frameworks": [
+          "CIS Kubernetes Benchmark",
+          "NIST 800-190"
+        ],
+        "status": "missing",
+        "details": [
+          "checkov"
+        ]
+      },
+      {
+        "id": "DB_ENCRYPTION_TRANSIT",
+        "description": "All database connections require TLS/SSL encryption in transit.",
+        "automation": "tooling",
+        "frameworks": [
+          "PCI DSS 4.0",
+          "NIST 800-53"
+        ],
+        "status": "missing",
+        "details": [
+          "semgrep"
+        ]
+      },
+      {
+        "id": "DB_LEAST_PRIVILEGE",
+        "description": "Database credentials use least-privilege accounts, not root/admin.",
+        "automation": "tooling",
+        "frameworks": [
+          "NIST 800-53",
+          "CIS"
+        ],
+        "status": "missing",
+        "details": [
+          "semgrep"
+        ]
+      },
+      {
+        "id": "CRYPTO_APPROVED_ALGORITHMS",
+        "description": "Only NIST-approved cryptographic algorithms are used (AES-256, SHA-256+, RSA-2048+).",
+        "automation": "tooling",
+        "frameworks": [
+          "NIST SP 800-131A",
+          "FIPS 140-3"
+        ],
+        "status": "missing",
+        "details": [
+          "semgrep"
+        ]
+      },
+      {
+        "id": "DLP_NO_PII_IN_LOGS",
+        "description": "PII, PAN, SSN, and credentials are never written to application logs.",
+        "automation": "tooling",
+        "frameworks": [
+          "GDPR",
+          "HIPAA",
+          "PCI DSS 4.0"
+        ],
+        "status": "missing",
+        "details": [
+          "semgrep"
+        ]
+      },
+      {
+        "id": "IMDS_V2_ENFORCED",
+        "description": "EC2 instances enforce IMDSv2 (HttpTokens=required) — IMDSv1 disabled.",
+        "automation": "tooling",
+        "frameworks": [
+          "CIS AWS Foundations Benchmark 5.6",
+          "NIST SP 800-53 SC-7"
+        ],
+        "status": "missing",
+        "details": [
+          "checkov"
+        ]
+      },
+      {
+        "id": "CLOUD_THREAT_DETECTION_ENABLED",
+        "description": "AWS GuardDuty / GCP SCC / Azure Defender for Cloud is enabled across all accounts.",
+        "automation": "tooling",
+        "frameworks": [
+          "CIS Benchmark",
+          "NIST SP 800-53 SI-3"
+        ],
+        "status": "missing",
+        "details": [
+          "checkov"
+        ]
+      },
+      {
+        "id": "SUPPLY_CHAIN_CICD_HARDENED",
+        "description": "All CI/CD GitHub Actions are SHA-pinned; GITHUB_TOKEN has minimal permissions; no pwn-request risk.",
+        "automation": "tooling",
+        "frameworks": [
+          "SLSA Level 3",
+          "NIST SP 800-161",
+          "CIS Software Supply Chain Benchmark"
+        ],
+        "status": "missing",
+        "details": [
+          "semgrep",
+          "checkov"
+        ]
+      }
+    ],
+    "scannerReadiness": {
+      "configured": [],
+      "missing": []
+    },
+    "confidence": {
+      "score": 1,
+      "automatedCoverage": 2,
+      "missingControls": 48,
+      "riskAcceptedControls": 0,
+      "scannerReadiness": 0,
+      "summary": "Automated coverage 2%, scanner readiness 0%, missing controls 48, risk-accepted controls 0. Change type: infra."
+    },
+    "baselineDiff": {
+      "regressions": [],
+      "improvements": [],
+      "newFindings": [
+        {
+          "id": "SECRET_MANAGER_NOT_DETECTED",
+          "title": "No secret manager usage detected — secrets may be hardcoded or in env files",
+          "severity": "HIGH",
+          "requiredActions": [
+            "Integrate a cloud secret manager appropriate for your platform:",
+            "  • AWS: AWS Secrets Manager or SSM Parameter Store (SecureString)",
+            "  • GCP: Secret Manager with Workload Identity",
+            "  • Azure: Azure Key Vault with Managed Identity",
+            "  • Multi-cloud / self-hosted: HashiCorp Vault, Doppler, or 1Password Secrets Automation",
+            "Never store secrets in environment files committed to the repo, CI log output, or container images."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        },
+        {
+          "id": "INFRA_LAMBDA_URL_NO_AUTH",
+          "title": "Lambda function URL with no authentication — publicly invocable by anyone",
+          "severity": "CRITICAL",
+          "evidence": [
+            "terraform/main.tf:24:   authorization_type = \"NONE\""
+          ],
+          "requiredActions": [
+            "Set authorization_type = \"AWS_IAM\" on all aws_lambda_function_url resources.",
+            "Use a CloudFront distribution with signed URLs or an API Gateway with IAM/Cognito auth as an alternative.",
+            "If public invocation is intentional, add CORS restrictions and rate limiting."
+          ],
+          "sla": "24h",
+          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        },
+        {
+          "id": "INFRA_VPC_NO_FLOW_LOGS",
+          "title": "No aws_flow_log resource found — VPC network traffic is unlogged, lateral movement and exfiltration undetectable",
+          "severity": "MEDIUM",
+          "requiredActions": [
+            "Add an aws_flow_log resource for each VPC and ship logs to CloudWatch Logs or S3.",
+            "Set flow log aggregation interval to 1 minute for near-real-time detection.",
+            "Create CloudWatch metric filters and alarms for rejected traffic spikes."
+          ],
+          "sla": "30d",
+          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        },
+        {
+          "id": "INFRA_NO_VPC_ENDPOINT",
+          "title": "No VPC endpoint found for AWS services — traffic routes over public internet",
+          "severity": "MEDIUM",
+          "evidence": [
+            "terraform/main.tf:1: resource \"aws_instance\" \"api\" {",
+            "terraform/main.tf:22: resource \"aws_lambda_function_url\" \"public\" {"
+          ],
+          "requiredActions": [
+            "Create aws_vpc_endpoint resources for S3, ECR (api + dkr), and other frequently used AWS services.",
+            "Use Gateway endpoints for S3/DynamoDB (free) and Interface endpoints for other services.",
+            "Set the VPC endpoint policy to restrict access to specific S3 buckets or ECR repositories."
+          ],
+          "sla": "30d",
+          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        },
+        {
+          "id": "INFRA_GUARDDUTY_MISSING",
+          "title": "No GuardDuty detector resource found — threat detection (credential misuse, crypto-mining) disabled",
+          "severity": "HIGH",
+          "requiredActions": [
+            "Add an aws_guardduty_detector resource with enable = true to your Terraform.",
+            "Enable GuardDuty in all AWS regions and aggregate findings into a delegated admin account.",
+            "Subscribe to GuardDuty findings via EventBridge and route high-severity alerts to your on-call channel."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        },
+        {
+          "id": "INFRA_SECURITY_HUB_MISSING",
+          "title": "AWS Security Hub not enabled — findings from GuardDuty/Inspector/Macie not centrally aggregated",
+          "severity": "MEDIUM",
+          "requiredActions": [
+            "Add an aws_securityhub_account resource to your Terraform.",
+            "Enable the AWS Foundational Security Best Practices and CIS AWS Foundations standards.",
+            "Aggregate Security Hub findings across regions and accounts into a central delegated admin."
+          ],
+          "sla": "30d",
+          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        },
+        {
+          "id": "IAC_TF_UNSAFE_DESTROY",
+          "title": "Destructive or validation-skipping toggle enabled (force_destroy / skip_final_snapshot / disable_rollback)",
+          "severity": "HIGH",
+          "evidence": [
+            "terraform/main.tf:10:   skip_final_snapshot = true"
+          ],
+          "requiredActions": [
+            "Set skip_final_snapshot = false on RDS so a snapshot is taken before deletion.",
+            "Remove force_destroy = true from buckets holding real data; require manual emptying instead.",
+            "Add a lifecycle { prevent_destroy = true } block to critical stateful resources.",
+            "Keep skip_provider_registration / disable_rollback at their safe defaults."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        },
+        {
+          "id": "IAC_PUBLIC_RESOURCE",
+          "title": "IaC creates a publicly exposed resource (public-read ACL or publicly_accessible database)",
+          "severity": "HIGH",
+          "evidence": [
+            "terraform/main.tf:9:   publicly_accessible = true",
+            "terraform/main.tf:15:   acl    = \"public-read\""
+          ],
+          "requiredActions": [
+            "Remove acl = \"public-read\"/\"public-read-write\"; use bucket policies with explicit principals instead.",
+            "Set publicly_accessible = false on all database instances and place them in private subnets.",
+            "Enable S3 Block Public Access at the account and bucket level to override accidental public ACLs.",
+            "Front any legitimately public asset bucket with CloudFront + Origin Access Control, not a public ACL."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        },
+        {
+          "id": "IAC_TF_S3_MISSING_HARDENING",
+          "title": "aws_s3_bucket has no server-side encryption and/or no public access block resource — data may be unencrypted or publicly exposable",
+          "severity": "HIGH",
+          "evidence": [
+            "terraform/main.tf:13: resource \"aws_s3_bucket\" \"assets\" {"
+          ],
+          "requiredActions": [
+            "Add a server-side encryption configuration:",
+            "  resource \"aws_s3_bucket_server_side_encryption_configuration\" \"this\" {",
+            "    bucket = aws_s3_bucket.this.id",
+            "    rule { apply_server_side_encryption_by_default { sse_algorithm = \"aws:kms\" } }",
+            "  }",
+            "Add a public access block:",
+            "  resource \"aws_s3_bucket_public_access_block\" \"this\" {",
+            "    bucket                  = aws_s3_bucket.this.id",
+            "    block_public_acls       = true",
+            "    block_public_policy     = true",
+            "    ignore_public_acls      = true",
+            "    restrict_public_buckets = true",
+            "  }",
+            "Verify: checkov -d . --check CKV2_AWS_6,CKV_AWS_19 ; trivy config ."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        },
+        {
+          "id": "AWS_EC2_IMDSV2_REQUIRED",
+          "title": "EC2 instance must enforce IMDSv2 with hop limit 1 — SSRF in the application reaches 169.254.169.254 and steals the instance-profile credentials when IMDSv1 is allowed.",
+          "severity": "CRITICAL",
+          "evidence": [
+            "terraform/main.tf:1: aws_instance — secure setting missing"
+          ],
+          "files": [
+            "terraform/main.tf"
+          ],
+          "requiredActions": [
+            "Add metadata_options { http_tokens = \"required\", http_put_response_hop_limit = 1 } to the aws_instance so IMDSv2 session tokens are mandatory and the metadata endpoint is unreachable from a single-hop SSRF."
+          ],
+          "sla": "24h",
+          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        },
+        {
+          "id": "AWS_RDS_NOT_PUBLIC",
+          "title": "RDS instance must not be publicly accessible — A publicly accessible RDS instance is directly reachable from the internet for brute force and CVE exploitation.",
+          "severity": "CRITICAL",
+          "evidence": [
+            "terraform/main.tf:6: aws_db_instance — insecure value present"
+          ],
+          "files": [
+            "terraform/main.tf"
+          ],
+          "requiredActions": [
+            "Set publicly_accessible = false on the aws_db_instance and place it in private subnets behind a security group that only allows the application tier."
+          ],
+          "sla": "24h",
+          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        },
+        {
+          "id": "AWS_RDS_STORAGE_ENCRYPTED",
+          "title": "RDS storage must be encrypted — Unencrypted RDS storage exposes the database contents if the underlying volume or a snapshot is accessed.",
+          "severity": "HIGH",
+          "evidence": [
+            "terraform/main.tf:6: aws_db_instance — secure setting missing"
+          ],
+          "files": [
+            "terraform/main.tf"
+          ],
+          "requiredActions": [
+            "Set storage_encrypted = true (and kms_key_id) on the aws_db_instance. Note: encryption can only be enabled at creation; rebuild from an encrypted snapshot if the instance already exists."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        },
+        {
+          "id": "AWS_S3_BUCKET_NO_PUBLIC_ACL",
+          "title": "S3 bucket must not use a public ACL — A public-read ACL lets anonymous users list and download every object in the bucket.",
+          "severity": "CRITICAL",
+          "evidence": [
+            "terraform/main.tf:13: aws_s3_bucket — insecure value present"
+          ],
+          "files": [
+            "terraform/main.tf"
+          ],
+          "requiredActions": [
+            "Set acl = \"private\" and attach an aws_s3_bucket_public_access_block with all four block flags = true."
+          ],
+          "sla": "24h",
+          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        },
+        {
+          "id": "AWS_S3_BLOCK_PUBLIC_ACCESS",
+          "title": "S3 bucket must have a public access block — Without a public access block, a future bucket policy or ACL can silently expose the bucket to the internet.",
+          "severity": "HIGH",
+          "evidence": [
+            "terraform/main.tf:13: aws_s3_bucket — missing companion aws_s3_bucket_public_access_block"
+          ],
+          "files": [
+            "terraform/main.tf"
+          ],
+          "requiredActions": [
+            "Add an aws_s3_bucket_public_access_block referencing this bucket with block_public_acls, block_public_policy, ignore_public_acls, and restrict_public_buckets all set to true."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        },
+        {
+          "id": "AWS_KMS_KEY_ROTATION",
+          "title": "KMS key must have automatic rotation enabled — A customer-managed KMS key without rotation means a single key compromise exposes all historical ciphertext.",
+          "severity": "MEDIUM",
+          "evidence": [
+            "terraform/main.tf:18: aws_kms_key — secure setting missing"
+          ],
+          "files": [
+            "terraform/main.tf"
+          ],
+          "requiredActions": [
+            "Set enable_key_rotation = true on the aws_kms_key."
+          ],
+          "sla": "30d",
+          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        },
+        {
+          "id": "AWS_LAMBDA_URL_AUTH_REQUIRED",
+          "title": "Lambda function URL must require IAM auth — A Lambda function URL with authorization_type NONE is an unauthenticated internet endpoint that can reach the function's IAM role and downstream data stores.",
+          "severity": "CRITICAL",
+          "evidence": [
+            "terraform/main.tf:22: aws_lambda_function_url — insecure value present"
+          ],
+          "files": [
+            "terraform/main.tf"
+          ],
+          "requiredActions": [
+            "Set authorization_type = \"AWS_IAM\" on the aws_lambda_function_url, or front it with API Gateway / a Lambda authorizer that enforces authentication."
+          ],
+          "sla": "24h",
+          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        },
+        {
+          "id": "AWS_S3_BUCKET_VERSIONING",
+          "title": "S3 bucket should enable versioning — Without versioning, an accidental or malicious overwrite/delete of objects is unrecoverable (no ransomware rollback).",
+          "severity": "LOW",
+          "evidence": [
+            "terraform/main.tf:13: aws_s3_bucket — missing companion aws_s3_bucket_versioning"
+          ],
+          "files": [
+            "terraform/main.tf"
+          ],
+          "requiredActions": [
+            "Add an aws_s3_bucket_versioning resource for this bucket with versioning_configuration { status = \"Enabled\" }."
+          ],
+          "sla": "90d",
+          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        },
+        {
+          "id": "AWS_RDS_DELETION_PROTECTION",
+          "title": "RDS instance must enable deletion protection — Without deletion protection, a compromised credential or accidental apply can destroy the production database.",
+          "severity": "MEDIUM",
+          "evidence": [
+            "terraform/main.tf:6: aws_db_instance — secure setting missing"
+          ],
+          "files": [
+            "terraform/main.tf"
+          ],
+          "requiredActions": [
+            "Set deletion_protection = true on the aws_db_instance."
+          ],
+          "sla": "30d",
+          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        },
+        {
+          "id": "AWS_RDS_BACKUP_RETENTION",
+          "title": "RDS instance must set a backup retention period — A zero/short backup retention window means no point-in-time recovery after a destructive or ransomware event.",
+          "severity": "LOW",
+          "evidence": [
+            "terraform/main.tf:6: aws_db_instance — secure setting missing"
+          ],
+          "files": [
+            "terraform/main.tf"
+          ],
+          "requiredActions": [
+            "Set backup_retention_period to at least 7 (days) on the aws_db_instance."
+          ],
+          "sla": "90d",
+          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        },
+        {
+          "id": "AWS_S3_DEFAULT_ENCRYPTION",
+          "title": "S3 bucket should declare server-side encryption — A bucket without an explicit server-side encryption configuration relies on account defaults that may not use a CMK.",
+          "severity": "LOW",
+          "evidence": [
+            "terraform/main.tf:13: aws_s3_bucket — missing companion aws_s3_bucket_server_side_encryption_configuration"
+          ],
+          "files": [
+            "terraform/main.tf"
+          ],
+          "requiredActions": [
+            "Add an aws_s3_bucket_server_side_encryption_configuration for this bucket using aws:kms (or AES256)."
+          ],
+          "sla": "90d",
+          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        },
+        {
+          "id": "AWS_S3_BUCKET_LOGGING",
+          "title": "S3 bucket should enable access logging — Without access logging, bulk object reads (data exfiltration) leave no forensic trail.",
+          "severity": "LOW",
+          "evidence": [
+            "terraform/main.tf:13: aws_s3_bucket — missing companion aws_s3_bucket_logging"
+          ],
+          "files": [
+            "terraform/main.tf"
+          ],
+          "requiredActions": [
+            "Add an aws_s3_bucket_logging resource for this bucket. Choose a separate, access-restricted target_bucket for the logs."
+          ],
+          "sla": "90d",
+          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        },
+        {
+          "id": "AWS_RDS_COPY_TAGS_TO_SNAPSHOT",
+          "title": "RDS instance should copy tags to snapshots — Without copy-tags-to-snapshot, access-control and ownership tags are lost on snapshots, weakening least-privilege on restores.",
+          "severity": "LOW",
+          "evidence": [
+            "terraform/main.tf:6: aws_db_instance — secure setting missing"
+          ],
+          "files": [
+            "terraform/main.tf"
+          ],
+          "requiredActions": [
+            "Set copy_tags_to_snapshot = true on the aws_db_instance."
+          ],
+          "sla": "90d",
+          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        },
+        {
+          "id": "AWS_RDS_ENHANCED_MONITORING",
+          "title": "RDS instance should enable enhanced monitoring — Without enhanced monitoring, OS-level metrics needed to detect resource-exhaustion attacks on the DB host are missing.",
+          "severity": "LOW",
+          "evidence": [
+            "terraform/main.tf:6: aws_db_instance — secure setting missing"
+          ],
+          "files": [
+            "terraform/main.tf"
+          ],
+          "requiredActions": [
+            "Enable enhanced monitoring (monitoring_interval + monitoring_role_arn) on the aws_db_instance."
+          ],
+          "sla": "90d",
+          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        },
+        {
+          "id": "AWS_RDS_LOG_EXPORTS",
+          "title": "RDS instance should export logs to CloudWatch — Without CloudWatch log exports, DB engine/audit/error logs aren't available for detection of injection or abuse.",
+          "severity": "LOW",
+          "evidence": [
+            "terraform/main.tf:6: aws_db_instance — secure setting missing"
+          ],
+          "files": [
+            "terraform/main.tf"
+          ],
+          "requiredActions": [
+            "Enable enabled_cloudwatch_logs_exports on the aws_db_instance (log types vary by engine)."
+          ],
+          "sla": "90d",
+          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        }
+      ],
+      "resolvedFindings": [
+        {
+          "id": "PACKAGE_JSON_EMPTY",
+          "title": "package.json has no dependencies/devDependencies",
+          "severity": "LOW",
+          "requiredActions": [
+            "Verify this is intentional. If not, add dependencies with pinned ranges."
+          ],
+          "sla": "90d",
+          "slaAssignedAt": "2026-06-17T14:20:41.159Z"
+        },
+        {
+          "id": "AI_OUTPUT_BOUNDS_MISSING",
+          "title": "AI/tooling present but bounded output (schema validation) not detected",
+          "severity": "HIGH",
+          "evidence": [
+            "ai/agent.ts"
+          ],
+          "requiredActions": [
+            "Enforce bounded outputs via JSON schema validation for every AI response used by code.",
+            "Add prompt-injection defenses: input sanitization, tool allowlists, deny-by-default tool router, and sensitive data redaction."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-17T14:20:41.159Z"
+        },
+        {
+          "id": "AI_INJECTION_CUES",
+          "title": "Potential prompt injection cues detected. Requires explicit mitigations and tests.",
+          "severity": "MEDIUM",
+          "evidence": [
+            "ai/agent.ts"
+          ],
+          "requiredActions": [
+            "Add multi-layer prompt-injection protection: instruction hierarchy enforcement, content isolation, tool gating, and output validation.",
+            "Add a red-team test harness with injection payloads and exfil attempts."
+          ],
+          "sla": "30d",
+          "slaAssignedAt": "2026-06-17T14:20:41.159Z"
+        },
+        {
+          "id": "AI_EXCESSIVE_AGENCY",
+          "title": "AI tool definitions detected without apparent allowlist enforcement",
+          "severity": "HIGH",
+          "files": [
+            "ai/agent.ts"
+          ],
+          "requiredActions": [
+            "Implement a tool allowlist: only expose tools the model is permitted to call.",
+            "Require human approval for high-impact tool calls (delete, execute, send).",
+            "Apply principle of least privilege to all agentic capabilities."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-17T14:20:41.159Z"
+        },
+        {
+          "id": "AI_BIAS_TESTING_ABSENT",
+          "title": "ML decision system detected with no fairness / bias-testing artifact",
+          "severity": "MEDIUM",
+          "requiredActions": [
+            "Add fairness evaluation (e.g. Fairlearn, AIF360, Aequitas) measuring disparate impact, equalized odds, and demographic parity across protected attributes for any model that affects people (EU AI Act high-risk obligations; NIST AI RMF MEASURE 2.11 / MANAGE).",
+            "Document the training-data representativeness assessment and bias-mitigation steps as model-card evidence (ISO 42001).",
+            "Gate model promotion on fairness thresholds in CI and re-evaluate on every retrain to catch drift-induced bias."
+          ],
+          "sla": "30d",
+          "slaAssignedAt": "2026-06-17T14:20:41.159Z"
+        }
+      ],
+      "coverageChange": -3
+    }
+  }
+}

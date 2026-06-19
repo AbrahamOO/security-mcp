@@ -1,0 +1,1582 @@
+{
+  "runId": "5858dbd0-3b43-40ef-a697-30ccab22521b",
+  "commitHash": "6abc94bb2077edde5907976bdb9f280a931c5027",
+  "savedAt": "2026-06-08T21:10:16.948Z",
+  "result": {
+    "status": "PASS",
+    "policyVersion": "1.0.0",
+    "evaluatedAt": "2026-06-08T21:10:16.947Z",
+    "scope": {
+      "mode": "recent_changes",
+      "targets": [],
+      "changedFiles": [],
+      "surfaces": {
+        "web": false,
+        "api": false,
+        "infra": false,
+        "mobileIos": false,
+        "mobileAndroid": false,
+        "ai": false
+      }
+    },
+    "findings": [],
+    "suppressedFindings": [
+      {
+        "finding": {
+          "id": "ARTIFACTS_NO_SBOM",
+          "title": "No SBOM (Software Bill of Materials) found in repository",
+          "severity": "HIGH",
+          "evidence": [
+            "Searched for CycloneDX (.cdx.json, bom.json, bom.xml) and SPDX (.spdx, .spdx.json) files.",
+            "No match found."
+          ],
+          "requiredActions": [
+            "Generate an SBOM in CycloneDX or SPDX format and commit it to the repository.",
+            "For Node.js: `npx @cyclonedx/cyclonedx-npm --output-file sbom.json`.",
+            "For Python: `cyclonedx-bom -o sbom.json`.",
+            "Automate SBOM generation in CI so it stays current with every dependency change.",
+            "Ensure the SBOM is included in any artifact upload to your registry (SLSA Level 2+)."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-cli-and-repo-search",
+        "expiresOn": "2027-06-07"
+      },
+      {
+        "finding": {
+          "id": "DEP_LOW_SCORECARD",
+          "title": "Dependency \"execa\" has a low OpenSSF Scorecard score (4.0/10)",
+          "severity": "MEDIUM",
+          "evidence": [
+            "execa: score 4.0/10 (threshold: 5.0)"
+          ],
+          "requiredActions": [
+            "Review the OpenSSF Scorecard for execa at https://scorecard.dev.",
+            "Consider replacing low-scored dependencies or accepting documented risk."
+          ],
+          "sla": "30d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-dep-scorecard",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "DEP_LOW_SCORECARD",
+          "title": "Dependency \"fast-glob\" has a low OpenSSF Scorecard score (3.2/10)",
+          "severity": "MEDIUM",
+          "evidence": [
+            "fast-glob: score 3.2/10 (threshold: 5.0)"
+          ],
+          "requiredActions": [
+            "Review the OpenSSF Scorecard for fast-glob at https://scorecard.dev.",
+            "Consider replacing low-scored dependencies or accepting documented risk."
+          ],
+          "sla": "30d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-dep-scorecard",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "EVIDENCE_MAPPING_MISSING",
+          "title": "Evidence mapping missing for control SECRET_MANAGER_ONLY",
+          "severity": "HIGH",
+          "evidence": [
+            "no_hardcoded_secrets"
+          ],
+          "requiredActions": [
+            "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+            "Map each control to file globs that prove the control exists."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-control-evidence",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "CONTROL_EVIDENCE_MISSING",
+          "title": "Required evidence missing for control SECRET_MANAGER_ONLY",
+          "severity": "HIGH",
+          "evidence": [
+            "no_hardcoded_secrets",
+            "secret_manager_refs"
+          ],
+          "requiredActions": [
+            "Implement or surface evidence for control SECRET_MANAGER_ONLY.",
+            "Add or update code, tests, or config so the evidence globs resolve."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-control-evidence",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "EVIDENCE_MAPPING_MISSING",
+          "title": "Evidence mapping missing for control NIST_AC_ACCESS_CONTROL",
+          "severity": "HIGH",
+          "evidence": [
+            "service_to_service_auth"
+          ],
+          "requiredActions": [
+            "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+            "Map each control to file globs that prove the control exists."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-control-evidence",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "CONTROL_EVIDENCE_MISSING",
+          "title": "Required evidence missing for control NIST_AC_ACCESS_CONTROL",
+          "severity": "HIGH",
+          "evidence": [
+            "service_to_service_auth"
+          ],
+          "requiredActions": [
+            "Implement or surface evidence for control NIST_AC_ACCESS_CONTROL.",
+            "Add or update code, tests, or config so the evidence globs resolve."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-control-evidence",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "EVIDENCE_MAPPING_MISSING",
+          "title": "Evidence mapping missing for control NIST_AU_AUDIT_LOGGING",
+          "severity": "HIGH",
+          "evidence": [
+            "audit_logging_configured",
+            "log_retention_policy"
+          ],
+          "requiredActions": [
+            "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+            "Map each control to file globs that prove the control exists."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-control-evidence",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "CONTROL_EVIDENCE_MISSING",
+          "title": "Required evidence missing for control NIST_AU_AUDIT_LOGGING",
+          "severity": "HIGH",
+          "evidence": [
+            "audit_logging_configured",
+            "log_retention_policy"
+          ],
+          "requiredActions": [
+            "Implement or surface evidence for control NIST_AU_AUDIT_LOGGING.",
+            "Add or update code, tests, or config so the evidence globs resolve."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-control-evidence",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "CONTROL_EVIDENCE_MISSING",
+          "title": "Required evidence missing for control NIST_SC_TRANSMISSION",
+          "severity": "HIGH",
+          "evidence": [
+            "tls_config_verified"
+          ],
+          "requiredActions": [
+            "Implement or surface evidence for control NIST_SC_TRANSMISSION.",
+            "Add or update code, tests, or config so the evidence globs resolve."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-control-evidence",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "EVIDENCE_MAPPING_MISSING",
+          "title": "Evidence mapping missing for control NIST_IR_INCIDENT_RESPONSE",
+          "severity": "HIGH",
+          "evidence": [
+            "ir_playbook_present",
+            "ir_playbook_tested"
+          ],
+          "requiredActions": [
+            "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+            "Map each control to file globs that prove the control exists."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-control-evidence",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "CONTROL_EVIDENCE_MISSING",
+          "title": "Required evidence missing for control NIST_IR_INCIDENT_RESPONSE",
+          "severity": "HIGH",
+          "evidence": [
+            "ir_playbook_present",
+            "ir_playbook_tested"
+          ],
+          "requiredActions": [
+            "Implement or surface evidence for control NIST_IR_INCIDENT_RESPONSE.",
+            "Add or update code, tests, or config so the evidence globs resolve."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-control-evidence",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "EVIDENCE_MAPPING_MISSING",
+          "title": "Evidence mapping missing for control SOC2_CC6_LOGICAL_ACCESS",
+          "severity": "HIGH",
+          "evidence": [
+            "mfa_enforced"
+          ],
+          "requiredActions": [
+            "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+            "Map each control to file globs that prove the control exists."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-control-evidence",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "CONTROL_EVIDENCE_MISSING",
+          "title": "Required evidence missing for control SOC2_CC6_LOGICAL_ACCESS",
+          "severity": "HIGH",
+          "evidence": [
+            "mfa_enforced"
+          ],
+          "requiredActions": [
+            "Implement or surface evidence for control SOC2_CC6_LOGICAL_ACCESS.",
+            "Add or update code, tests, or config so the evidence globs resolve."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-control-evidence",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "EVIDENCE_MAPPING_MISSING",
+          "title": "Evidence mapping missing for control SOC2_CC7_SYSTEM_MONITORING",
+          "severity": "HIGH",
+          "evidence": [
+            "audit_logging_configured",
+            "alerting_configured"
+          ],
+          "requiredActions": [
+            "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+            "Map each control to file globs that prove the control exists."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-control-evidence",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "CONTROL_EVIDENCE_MISSING",
+          "title": "Required evidence missing for control SOC2_CC7_SYSTEM_MONITORING",
+          "severity": "HIGH",
+          "evidence": [
+            "audit_logging_configured",
+            "alerting_configured"
+          ],
+          "requiredActions": [
+            "Implement or surface evidence for control SOC2_CC7_SYSTEM_MONITORING.",
+            "Add or update code, tests, or config so the evidence globs resolve."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-control-evidence",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "EVIDENCE_MAPPING_MISSING",
+          "title": "Evidence mapping missing for control MITRE_INITIAL_ACCESS",
+          "severity": "HIGH",
+          "evidence": [
+            "mfa_enforced",
+            "email_filtering",
+            "public_surface_hardened"
+          ],
+          "requiredActions": [
+            "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+            "Map each control to file globs that prove the control exists."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-control-evidence",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "CONTROL_EVIDENCE_MISSING",
+          "title": "Required evidence missing for control MITRE_INITIAL_ACCESS",
+          "severity": "HIGH",
+          "evidence": [
+            "mfa_enforced",
+            "email_filtering",
+            "public_surface_hardened"
+          ],
+          "requiredActions": [
+            "Implement or surface evidence for control MITRE_INITIAL_ACCESS.",
+            "Add or update code, tests, or config so the evidence globs resolve."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-control-evidence",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "EVIDENCE_MAPPING_MISSING",
+          "title": "Evidence mapping missing for control MITRE_CREDENTIAL_ACCESS",
+          "severity": "HIGH",
+          "evidence": [
+            "no_hardcoded_secrets",
+            "rate_limiting_present"
+          ],
+          "requiredActions": [
+            "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+            "Map each control to file globs that prove the control exists."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-control-evidence",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "CONTROL_EVIDENCE_MISSING",
+          "title": "Required evidence missing for control MITRE_CREDENTIAL_ACCESS",
+          "severity": "HIGH",
+          "evidence": [
+            "no_hardcoded_secrets",
+            "secret_manager_refs",
+            "rate_limiting_present"
+          ],
+          "requiredActions": [
+            "Implement or surface evidence for control MITRE_CREDENTIAL_ACCESS.",
+            "Add or update code, tests, or config so the evidence globs resolve."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-control-evidence",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "EVIDENCE_MAPPING_MISSING",
+          "title": "Evidence mapping missing for control MITRE_EXFILTRATION",
+          "severity": "HIGH",
+          "evidence": [
+            "egress_controls",
+            "dlp_configured"
+          ],
+          "requiredActions": [
+            "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+            "Map each control to file globs that prove the control exists."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-control-evidence",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "CONTROL_EVIDENCE_MISSING",
+          "title": "Required evidence missing for control MITRE_EXFILTRATION",
+          "severity": "HIGH",
+          "evidence": [
+            "egress_controls",
+            "dlp_configured"
+          ],
+          "requiredActions": [
+            "Implement or surface evidence for control MITRE_EXFILTRATION.",
+            "Add or update code, tests, or config so the evidence globs resolve."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-control-evidence",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "EVIDENCE_MAPPING_MISSING",
+          "title": "Evidence mapping missing for control MITRE_DEFENSE_EVASION",
+          "severity": "HIGH",
+          "evidence": [
+            "audit_logging_configured",
+            "artifact_signing"
+          ],
+          "requiredActions": [
+            "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+            "Map each control to file globs that prove the control exists."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-control-evidence",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "CONTROL_EVIDENCE_MISSING",
+          "title": "Required evidence missing for control MITRE_DEFENSE_EVASION",
+          "severity": "HIGH",
+          "evidence": [
+            "audit_logging_configured",
+            "artifact_signing"
+          ],
+          "requiredActions": [
+            "Implement or surface evidence for control MITRE_DEFENSE_EVASION.",
+            "Add or update code, tests, or config so the evidence globs resolve."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-control-evidence",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "EVIDENCE_MAPPING_MISSING",
+          "title": "Evidence mapping missing for control SLSA_L3_PROVENANCE",
+          "severity": "HIGH",
+          "evidence": [
+            "artifact_signing",
+            "hermetic_build_configured"
+          ],
+          "requiredActions": [
+            "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+            "Map each control to file globs that prove the control exists."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-control-evidence",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "CONTROL_EVIDENCE_MISSING",
+          "title": "Required evidence missing for control SLSA_L3_PROVENANCE",
+          "severity": "HIGH",
+          "evidence": [
+            "artifact_signing",
+            "hermetic_build_configured"
+          ],
+          "requiredActions": [
+            "Implement or surface evidence for control SLSA_L3_PROVENANCE.",
+            "Add or update code, tests, or config so the evidence globs resolve."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-control-evidence",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "EVIDENCE_MAPPING_MISSING",
+          "title": "Evidence mapping missing for control ZERO_TRUST_CONTINUOUS_VERIFY",
+          "severity": "HIGH",
+          "evidence": [
+            "service_to_service_auth"
+          ],
+          "requiredActions": [
+            "Add the missing evidence IDs to .mcp/mappings/evidence-map.json.",
+            "Map each control to file globs that prove the control exists."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-control-evidence",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "CONTROL_EVIDENCE_MISSING",
+          "title": "Required evidence missing for control ZERO_TRUST_CONTINUOUS_VERIFY",
+          "severity": "HIGH",
+          "evidence": [
+            "service_to_service_auth"
+          ],
+          "requiredActions": [
+            "Implement or surface evidence for control ZERO_TRUST_CONTINUOUS_VERIFY.",
+            "Add or update code, tests, or config so the evidence globs resolve."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-control-evidence",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "GRAPHQL_INTROSPECTION_ENABLED",
+          "title": "GraphQL introspection is enabled — exposes full schema to attackers",
+          "severity": "HIGH",
+          "evidence": [
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:580:            \".mcp/exceptions/security-exceptions.json:22:      \\\"justification\\\": \\\"False positives from src/mcp/server.ts REMEDIATION_MAP — intentional 'before' code examples (sslmode=disable, SQL concatenation, introspection:true, md5, Ma",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:581:            \"defaults/checklists/api.json:26:    { \\\"id\\\": \\\"api_graphql_introspection\\\", \\\"description\\\": \\\"GraphQL introspection disabled in production; query depth limit ≤ 10 and complexity budget enforced to prevent resource exhaustion\\",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:582:            \"src/mcp/server.ts:1918:    pattern: \\\"new ApolloServer({ introspection: true })\\\",\"",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:621:            \".mcp/exceptions/security-exceptions.json:22:      \\\"justification\\\": \\\"False positives from src/mcp/server.ts REMEDIATION_MAP — intentional 'before' code examples (sslmode=disable, SQL concatenation, introspection:true, md5, Ma",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:797:            \".mcp/exceptions/security-exceptions.json:22:      \\\"justification\\\": \\\"False positives from src/mcp/server.ts REMEDIATION_MAP — intentional 'before' code examples (sslmode=disable, SQL concatenation, introspection:true, md5, Ma",
+            ".mcp/baselines/latest.json:580:            \".mcp/exceptions/security-exceptions.json:22:      \\\"justification\\\": \\\"False positives from src/mcp/server.ts REMEDIATION_MAP — intentional 'before' code examples (sslmode=disable, SQL concatenation, introspection:true, md5, Ma",
+            ".mcp/baselines/latest.json:581:            \"defaults/checklists/api.json:26:    { \\\"id\\\": \\\"api_graphql_introspection\\\", \\\"description\\\": \\\"GraphQL introspection disabled in production; query depth limit ≤ 10 and complexity budget enforced to prevent resource exhaustion\\",
+            ".mcp/baselines/latest.json:582:            \"src/mcp/server.ts:1918:    pattern: \\\"new ApolloServer({ introspection: true })\\\",\"",
+            ".mcp/baselines/latest.json:621:            \".mcp/exceptions/security-exceptions.json:22:      \\\"justification\\\": \\\"False positives from src/mcp/server.ts REMEDIATION_MAP — intentional 'before' code examples (sslmode=disable, SQL concatenation, introspection:true, md5, Ma",
+            ".mcp/baselines/latest.json:797:            \".mcp/exceptions/security-exceptions.json:22:      \\\"justification\\\": \\\"False positives from src/mcp/server.ts REMEDIATION_MAP — intentional 'before' code examples (sslmode=disable, SQL concatenation, introspection:true, md5, Ma"
+          ],
+          "files": [
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json",
+            ".mcp/baselines/latest.json"
+          ],
+          "requiredActions": [
+            "Disable introspection in non-dev environments.",
+            "Use persisted queries instead of ad-hoc introspection in production."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-remediation-map",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "GRAPHQL_NO_BATCH_LIMIT",
+          "title": "No GraphQL query batching limits detected",
+          "severity": "MEDIUM",
+          "requiredActions": [
+            "Configure batching limits to prevent batch-based DoS attacks.",
+            "Limit the number of operations per batch request."
+          ],
+          "sla": "30d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-remediation-map",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "DB_TLS_DISABLED",
+          "title": "Database connection with TLS/SSL disabled detected",
+          "severity": "CRITICAL",
+          "evidence": [
+            ".github/security-exceptions-ci.json:66:      \"justification\": \"These findings come from the REMEDIATION_MAP in src/mcp/server.ts, which contains intentional 'before' example code patterns (e.g., sslmode=disable, md5 hashing, console.log(req.body), postgresql://user:pass@host) us",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:580:            \".mcp/exceptions/security-exceptions.json:22:      \\\"justification\\\": \\\"False positives from src/mcp/server.ts REMEDIATION_MAP — intentional 'before' code examples (sslmode=disable, SQL concatenation, introspection:true, md5, Ma",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:620:            \".github/security-exceptions-ci.json:66:      \\\"justification\\\": \\\"These findings come from the REMEDIATION_MAP in src/mcp/server.ts, which contains intentional 'before' example code patterns (e.g., sslmode=disable, md5 hashing,",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:621:            \".mcp/exceptions/security-exceptions.json:22:      \\\"justification\\\": \\\"False positives from src/mcp/server.ts REMEDIATION_MAP — intentional 'before' code examples (sslmode=disable, SQL concatenation, introspection:true, md5, Ma",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:622:            \"src/mcp/server.ts:1906:    pattern: \\\"postgresql://user:pass@host/db?sslmode=disable\\\",\",",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:623:            \"skills/tls-certificate-auditor/SKILL.md:68:   - Check `.npmrc`, `.yarnrc` for `strict-ssl=false` (disables cert validation for npm registry)\"",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:795:            \".github/security-exceptions-ci.json:66:      \\\"justification\\\": \\\"These findings come from the REMEDIATION_MAP in src/mcp/server.ts, which contains intentional 'before' example code patterns (e.g., sslmode=disable, md5 hashing,",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:797:            \".mcp/exceptions/security-exceptions.json:22:      \\\"justification\\\": \\\"False positives from src/mcp/server.ts REMEDIATION_MAP — intentional 'before' code examples (sslmode=disable, SQL concatenation, introspection:true, md5, Ma",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:986:            \"src/mcp/server.ts:1906:    pattern: \\\"postgresql://user:pass@host/db?sslmode=disable\\\",\",",
+            ".mcp/baselines/latest.json:580:            \".mcp/exceptions/security-exceptions.json:22:      \\\"justification\\\": \\\"False positives from src/mcp/server.ts REMEDIATION_MAP — intentional 'before' code examples (sslmode=disable, SQL concatenation, introspection:true, md5, Ma"
+          ],
+          "files": [
+            ".github/security-exceptions-ci.json",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json",
+            ".mcp/baselines/latest.json"
+          ],
+          "requiredActions": [
+            "Always use sslmode=require or sslmode=verify-full for PostgreSQL.",
+            "Never disable TLS for database connections — transmits credentials and data in plaintext."
+          ],
+          "sla": "24h",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-remediation-map",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "DB_NO_POOL_LIMITS",
+          "title": "Database connection pool initialized without explicit limits",
+          "severity": "MEDIUM",
+          "evidence": [
+            "README.md:52:| **Reverse shells** | T1059 | `net.createConnection` + `spawn('/bin/bash')`, `nc -e`, `bash -i` patterns |",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:647:            \"README.md:52:| **Reverse shells** | T1059 | `net.createConnection` + `spawn('/bin/bash')`, `nc -e`, `bash -i` patterns |\",",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:648:            \"skills/dos-resilience-tester/SKILL.md:266:| No DB connection pool limit | `PrismaClient\\\\|createPool\\\\|knex\\\\|mongoose\\\\.connect` | DB client init files |\",",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:649:            \"skills/ssrf-detection-validator/SKILL.md:68:import { createConnection } from \\\"node:net\\\";\"",
+            ".mcp/baselines/latest.json:647:            \"README.md:52:| **Reverse shells** | T1059 | `net.createConnection` + `spawn('/bin/bash')`, `nc -e`, `bash -i` patterns |\",",
+            ".mcp/baselines/latest.json:648:            \"skills/dos-resilience-tester/SKILL.md:266:| No DB connection pool limit | `PrismaClient\\\\|createPool\\\\|knex\\\\|mongoose\\\\.connect` | DB client init files |\",",
+            ".mcp/baselines/latest.json:649:            \"skills/ssrf-detection-validator/SKILL.md:68:import { createConnection } from \\\"node:net\\\";\"",
+            "skills/dos-resilience-tester/SKILL.md:266:| No DB connection pool limit | `PrismaClient\\|createPool\\|knex\\|mongoose\\.connect` | DB client init files |",
+            "skills/ssrf-detection-validator/SKILL.md:68:import { createConnection } from \"node:net\";"
+          ],
+          "files": [
+            "README.md",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json",
+            ".mcp/baselines/latest.json",
+            "skills/dos-resilience-tester/SKILL.md",
+            "skills/ssrf-detection-validator/SKILL.md"
+          ],
+          "requiredActions": [
+            "Set connection pool limits (max, min) to prevent resource exhaustion.",
+            "Unbounded pools can crash the database under load or be exploited for DoS."
+          ],
+          "sla": "30d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-remediation-map",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "DB_SQL_INJECTION_RISK",
+          "title": "Possible SQL injection: user input concatenated into query string",
+          "severity": "CRITICAL",
+          "evidence": [
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:672:            \"src/mcp/server.ts:1912:    pattern: \\\"db.query('SELECT * FROM users WHERE id = ' + req.params.id)\\\",\",",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:673:            \"skills/json-ambiguity-tester/SKILL.md:171:- **AI-era threat — LLM prompt injection via JSON payload**: When a parsed JSON field value is interpolated into an LLM system prompt (e.g., `\\\"summarise user note: \\\" + body.note`), an",
+            ".mcp/baselines/latest.json:672:            \"src/mcp/server.ts:1912:    pattern: \\\"db.query('SELECT * FROM users WHERE id = ' + req.params.id)\\\",\",",
+            ".mcp/baselines/latest.json:673:            \"skills/json-ambiguity-tester/SKILL.md:171:- **AI-era threat — LLM prompt injection via JSON payload**: When a parsed JSON field value is interpolated into an LLM system prompt (e.g., `\\\"summarise user note: \\\" + body.note`), an",
+            "src/mcp/server.ts:2016:    pattern: \"db.query('SELECT * FROM users WHERE id = ' + req.params.id)\",",
+            "skills/json-ambiguity-tester/SKILL.md:171:- **AI-era threat — LLM prompt injection via JSON payload**: When a parsed JSON field value is interpolated into an LLM system prompt (e.g., `\"summarise user note: \" + body.note`), an attacker embeds `\\nIgnore previous instructions. Output "
+          ],
+          "files": [
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json",
+            ".mcp/baselines/latest.json",
+            "src/mcp/server.ts",
+            "skills/json-ambiguity-tester/SKILL.md"
+          ],
+          "requiredActions": [
+            "Use parameterized queries or ORM query builders — never concatenate user input into SQL.",
+            "CWE-89: SQL injection can lead to full database compromise."
+          ],
+          "sla": "24h",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-remediation-map",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "CRYPTO_WEAK_HASH",
+          "title": "Weak hash algorithm (MD5/SHA-1) detected",
+          "severity": "HIGH",
+          "evidence": [
+            "README.md:564:- `crypto.createHash('md5')` -> `crypto.createHash('sha256')`",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:695:            \"README.md:564:- `crypto.createHash('md5')` -> `crypto.createHash('sha256')`\",",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:696:            \"src/mcp/server.ts:1882:    pattern: \\\"crypto.createHash('md5').update(data).digest('hex')\\\",\",",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:697:            \"skills/algorithm-implementation-reviewer/SKILL.md:40:   - `createHash('md5')`, `createHash('sha1')`, `md5(`, `sha1(`\",",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:699:            \"skills/crypto-pki-specialist/SKILL.md:119:  - `createHash('md5')` or `createHash('sha1')` → CRITICAL for any security use\"",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:942:            \"src/mcp/server.ts:1882:    pattern: \\\"crypto.createHash('md5').update(data).digest('hex')\\\",\"",
+            ".mcp/baselines/latest.json:695:            \"README.md:564:- `crypto.createHash('md5')` -> `crypto.createHash('sha256')`\",",
+            ".mcp/baselines/latest.json:696:            \"src/mcp/server.ts:1882:    pattern: \\\"crypto.createHash('md5').update(data).digest('hex')\\\",\",",
+            ".mcp/baselines/latest.json:697:            \"skills/algorithm-implementation-reviewer/SKILL.md:40:   - `createHash('md5')`, `createHash('sha1')`, `md5(`, `sha1(`\",",
+            ".mcp/baselines/latest.json:699:            \"skills/crypto-pki-specialist/SKILL.md:119:  - `createHash('md5')` or `createHash('sha1')` → CRITICAL for any security use\""
+          ],
+          "files": [
+            "README.md",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json",
+            ".mcp/baselines/latest.json"
+          ],
+          "requiredActions": [
+            "Use SHA-256 minimum (SHA-3 recommended for new code).",
+            "MD5/SHA-1 are broken for security purposes (NIST SP 800-131A Rev 2)."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-remediation-map",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "CRYPTO_INSECURE_RANDOM",
+          "title": "Non-cryptographic random used in security-sensitive context",
+          "severity": "HIGH",
+          "evidence": [
+            "README.md:431:| **Cryptography** | MD5, SHA-1, DES, RC4, ECB mode, `Math.random()` for tokens, short JWT secrets |",
+            "README.md:565:- `Math.random()` for tokens -> `crypto.randomBytes(32).toString('hex')`",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:724:            \"README.md:431:| **Cryptography** | MD5, SHA-1, DES, RC4, ECB mode, `Math.random()` for tokens, short JWT secrets |\",",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:725:            \"README.md:565:- `Math.random()` for tokens -> `crypto.randomBytes(32).toString('hex')`\",",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:726:            \"src/mcp/server.ts:1894:    pattern: \\\"const token = Math.random().toString(36).slice(2)\\\",\",",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:727:            \"src/mcp/server.ts:1896:    explanation: \\\"Math.random() is not cryptographically secure. Use crypto.randomBytes() for tokens, keys, and nonces.\\\",\",",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:728:            \"skills/algorithm-implementation-reviewer/SKILL.md:17:`Math.random()` seeding session tokens at a bank. You know that the gap between \\\"using AES\\\"\"",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:737:            \"Math.random() is not cryptographically secure and must never be used for tokens, keys, or nonces.\"",
+            ".mcp/baselines/latest.json:724:            \"README.md:431:| **Cryptography** | MD5, SHA-1, DES, RC4, ECB mode, `Math.random()` for tokens, short JWT secrets |\",",
+            ".mcp/baselines/latest.json:725:            \"README.md:565:- `Math.random()` for tokens -> `crypto.randomBytes(32).toString('hex')`\","
+          ],
+          "files": [
+            "README.md",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json",
+            ".mcp/baselines/latest.json"
+          ],
+          "requiredActions": [
+            "Use crypto.randomBytes() (Node.js) for security-sensitive randomness.",
+            "Math.random() is not cryptographically secure and must never be used for tokens, keys, or nonces."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-remediation-map",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "CRYPTO_WEAK_JWT_ALGO",
+          "title": "HS256/HS384/HS512 JWT algorithm detected — symmetric key shared with all verifiers",
+          "severity": "HIGH",
+          "evidence": [
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:751:            \"src/mcp/server.ts:1900:    pattern: \\\"jwt.sign(payload, secret, { algorithm: 'HS256' })\\\",\"",
+            ".mcp/baselines/latest.json:751:            \"src/mcp/server.ts:1900:    pattern: \\\"jwt.sign(payload, secret, { algorithm: 'HS256' })\\\",\"",
+            "src/mcp/server.ts:2004:    pattern: \"jwt.sign(payload, secret, { algorithm: 'HS256' })\","
+          ],
+          "files": [
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json",
+            ".mcp/baselines/latest.json",
+            "src/mcp/server.ts"
+          ],
+          "requiredActions": [
+            "Use RS256 or ES256 for stateless JWTs.",
+            "HS256 requires sharing the secret with every verifier — use asymmetric algorithms instead."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-remediation-map",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "CRYPTO_ECDSA_P256_PQC",
+          "title": "ECDSA P-256 detected — quantum-vulnerable in the long term",
+          "severity": "LOW",
+          "evidence": [
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:779:            \"P-256 (secp256r1) is secure today but vulnerable to Shor's algorithm on a sufficiently large quantum computer.\",",
+            ".mcp/baselines/latest.json:779:            \"P-256 (secp256r1) is secure today but vulnerable to Shor's algorithm on a sufficiently large quantum computer.\",",
+            "skills/quantum-migration-planner/SKILL.md:202:- **Harvest-Now-Decrypt-Later via Nation-State TLS Interception (ATT&CK T1040 — Network Sniffing / NIST SP 800-208 §3.1):** Adversaries (e.g., documented in NSA/GCHQ Bullrun program disclosures) are archiving TLS sessions encrypted with ECD",
+            "skills/quantum-migration-planner/SKILL.md:206:- **AI-Assisted Cryptographic Algorithm Discovery for Harvest Targeting (ATT&CK T1590.002 — Gather Victim Network Information):** LLM-powered reconnaissance tools (e.g., Nuclei AI templates, Burp AI extensions) now auto-detect cipher suite "
+          ],
+          "files": [
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json",
+            ".mcp/baselines/latest.json",
+            "skills/quantum-migration-planner/SKILL.md"
+          ],
+          "requiredActions": [
+            "P-256 (secp256r1) is secure today but vulnerable to Shor's algorithm on a sufficiently large quantum computer.",
+            "NIST post-quantum signature standards: ML-DSA (FIPS 204) and SLH-DSA (FIPS 205) are the recommended replacements.",
+            "For new systems handling sensitive long-lived data, evaluate hybrid ECDSA+ML-DSA or pure ML-DSA."
+          ],
+          "sla": "90d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-remediation-map",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "DLP_REQUEST_BODY_LOGGED",
+          "title": "Full request body logged — may expose PII/credentials",
+          "severity": "HIGH",
+          "evidence": [
+            ".github/security-exceptions-ci.json:66:      \"justification\": \"These findings come from the REMEDIATION_MAP in src/mcp/server.ts, which contains intentional 'before' example code patterns (e.g., sslmode=disable, md5 hashing, console.log(req.body), postgresql://user:pass@host) us",
+            ".mcp/exceptions/security-exceptions.json:22:      \"justification\": \"False positives from src/mcp/server.ts REMEDIATION_MAP — intentional 'before' code examples (sslmode=disable, SQL concatenation, introspection:true, md5, Math.random, HS256, console.log(req.body), err.stack, postgres",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:580:            \".mcp/exceptions/security-exceptions.json:22:      \\\"justification\\\": \\\"False positives from src/mcp/server.ts REMEDIATION_MAP — intentional 'before' code examples (sslmode=disable, SQL concatenation, introspection:true, md5, Ma",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:620:            \".github/security-exceptions-ci.json:66:      \\\"justification\\\": \\\"These findings come from the REMEDIATION_MAP in src/mcp/server.ts, which contains intentional 'before' example code patterns (e.g., sslmode=disable, md5 hashing,",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:621:            \".mcp/exceptions/security-exceptions.json:22:      \\\"justification\\\": \\\"False positives from src/mcp/server.ts REMEDIATION_MAP — intentional 'before' code examples (sslmode=disable, SQL concatenation, introspection:true, md5, Ma",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:795:            \".github/security-exceptions-ci.json:66:      \\\"justification\\\": \\\"These findings come from the REMEDIATION_MAP in src/mcp/server.ts, which contains intentional 'before' example code patterns (e.g., sslmode=disable, md5 hashing,",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:796:            \"src/mcp/server.ts:1942:    pattern: \\\"console.log(req.body)\\\",\",",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:797:            \".mcp/exceptions/security-exceptions.json:22:      \\\"justification\\\": \\\"False positives from src/mcp/server.ts REMEDIATION_MAP — intentional 'before' code examples (sslmode=disable, SQL concatenation, introspection:true, md5, Ma",
+            ".mcp/baselines/latest.json:580:            \".mcp/exceptions/security-exceptions.json:22:      \\\"justification\\\": \\\"False positives from src/mcp/server.ts REMEDIATION_MAP — intentional 'before' code examples (sslmode=disable, SQL concatenation, introspection:true, md5, Ma",
+            ".mcp/baselines/latest.json:620:            \".github/security-exceptions-ci.json:66:      \\\"justification\\\": \\\"These findings come from the REMEDIATION_MAP in src/mcp/server.ts, which contains intentional 'before' example code patterns (e.g., sslmode=disable, md5 hashing,"
+          ],
+          "files": [
+            ".github/security-exceptions-ci.json",
+            ".mcp/exceptions/security-exceptions.json",
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json",
+            ".mcp/baselines/latest.json"
+          ],
+          "requiredActions": [
+            "Never log full request bodies — use field allowlists to log only non-sensitive fields.",
+            "GDPR Article 5: data minimization applies to logs. HIPAA prohibits logging PHI."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-remediation-map",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "DLP_STACK_TRACE_IN_RESPONSE",
+          "title": "Stack trace exposed in API response — CWE-209 information leakage",
+          "severity": "HIGH",
+          "evidence": [
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json:820:            \"src/mcp/server.ts:1948:    pattern: \\\"res.json({ error: err.message, stack: err.stack })\\\",\"",
+            ".mcp/baselines/latest.json:820:            \"src/mcp/server.ts:1948:    pattern: \\\"res.json({ error: err.message, stack: err.stack })\\\",\"",
+            "src/mcp/server.ts:2052:    pattern: \"res.json({ error: err.message, stack: err.stack })\","
+          ],
+          "files": [
+            ".mcp/baselines/6abc94bb2077edde5907976bdb9f280a931c5027.json",
+            ".mcp/baselines/latest.json",
+            "src/mcp/server.ts"
+          ],
+          "requiredActions": [
+            "Never expose stack traces in API responses (CWE-209).",
+            "Log errors internally with a correlation ID; return only a safe error message to clients."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-remediation-map",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "SBOM_MISSING",
+          "title": "No SBOM found. Syft is available — run it to generate one.",
+          "severity": "HIGH",
+          "evidence": [
+            "Expected at: /Users/smilesparker/workplace/security-mcp/.mcp/sbom/latest.json"
+          ],
+          "requiredActions": [
+            "Run: syft . -o cyclonedx-json=.mcp/sbom/latest.json",
+            "Or set SECURITY_AUTO_SBOM=true to auto-generate on each gate run."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-provenance",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "PROVENANCE_MISSING",
+          "title": "No SLSA provenance attestation found",
+          "severity": "HIGH",
+          "evidence": [
+            "Attestation dir: /Users/smilesparker/workplace/security-mcp/.mcp/attestations"
+          ],
+          "requiredActions": [
+            "Generate SLSA provenance during CI/CD build.",
+            "Use slsa-github-generator or equivalent to produce .intoto.jsonl attestations.",
+            "Store provenance in .mcp/attestations/"
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-provenance",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "CI_NO_PERMISSIONS",
+          "title": "GitHub Actions workflows without explicit permissions block",
+          "severity": "MEDIUM",
+          "files": [
+            ".github/workflows/publish.yml"
+          ],
+          "requiredActions": [
+            "Add an explicit `permissions:` block at the top of each workflow (or at the job level) to grant only the minimum required scopes.",
+            "Without explicit permissions, the default is determined by org/repo settings — often write-all.",
+            "Example minimal read-only: `permissions: { contents: read }`."
+          ],
+          "sla": "30d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-control-evidence",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "REQUIRE_NON_LITERAL",
+          "title": "require() called with a non-literal specifier — dynamic module loading (CWE-95 / CWE-706)",
+          "severity": "HIGH",
+          "evidence": [
+            "src/cli/index.ts:27:    const pkg = require(resolve(__dirname, \"../../package.json\")) as { version: string };"
+          ],
+          "files": [
+            "src/cli/index.ts"
+          ],
+          "requiredActions": [
+            "Replace dynamic require() with a static allowlist: const mods = { a: require('./a'), b: require('./b') }; use mods[key].",
+            "CWE-95 / ATT&CK T1059.007 — an attacker controlling the specifier can load ../../.env or any file on disk.",
+            "Enable --experimental-require-module tree shaking at build time to make dynamic require detectable at the bundler level."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-cli-and-repo-search",
+        "expiresOn": "2027-06-07"
+      },
+      {
+        "finding": {
+          "id": "WEAK_CRYPTO_HASH",
+          "title": "MD5 or SHA-1 used in crypto.createHash/createCipher — broken hash algorithm (CWE-327)",
+          "severity": "HIGH",
+          "evidence": [
+            "src/mcp/server.ts:1986:    pattern: \"crypto.createHash('md5').update(data).digest('hex')\","
+          ],
+          "files": [
+            "src/mcp/server.ts"
+          ],
+          "requiredActions": [
+            "MD5 and SHA-1 are cryptographically broken — collision attacks are practical and documented (Shattered, SLOTH).",
+            "CWE-327 / ATT&CK T1600 — weak hashes used for password storage, HMAC, or digital signature allow forgery.",
+            "Replace with crypto.createHash('sha256') for integrity, scrypt/argon2 for passwords, and AES-256-GCM for symmetric encryption."
+          ],
+          "sla": "7d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-remediation-map",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "HARDCODED_IP_ADDRESS",
+          "title": "Hardcoded IP address in production code — infrastructure coupling and reconnaissance aid (CWE-1188)",
+          "severity": "MEDIUM",
+          "evidence": [
+            "src/mcp/server.ts:271:      host === \"169.254.169.254\" || host.endsWith(\".internal\")) {"
+          ],
+          "files": [
+            "src/mcp/server.ts"
+          ],
+          "requiredActions": [
+            "Hardcoded IPs expose internal topology, break across environments, and become stale without code changes.",
+            "CWE-1188 / ATT&CK T1592.002 — exposed IPs aid attacker reconnaissance and pivot targeting.",
+            "Replace with environment variables (process.env.SERVICE_HOST) or DNS names resolved at runtime. Use 0.0.0.0 for bind addresses."
+          ],
+          "sla": "30d",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-remediation-map",
+        "expiresOn": "2027-01-01"
+      },
+      {
+        "finding": {
+          "id": "HARDCODED_DB_URL_OR_API_KEY",
+          "title": "Database URL with embedded password or API key literal in config object — credential exposure (CWE-798)",
+          "severity": "CRITICAL",
+          "evidence": [
+            "src/mcp/server.ts:2010:    pattern: \"postgresql://user:pass@host/db?sslmode=disable\",",
+            "src/mcp/server.ts:2011:    fix: \"postgresql://user:pass@host/db?sslmode=verify-full\","
+          ],
+          "files": [
+            "src/mcp/server.ts"
+          ],
+          "requiredActions": [
+            "Remove all database URLs with embedded passwords and API key literals from source code. Rotate any exposed credentials immediately.",
+            "CWE-798 / ATT&CK T1552.001 — credentials in config files are captured in git history even after deletion and are frequently scraped by automated tools.",
+            "Fix: const dbUrl = process.env.DATABASE_URL; // store in .env, inject via secrets manager at runtime"
+          ],
+          "sla": "24h",
+          "slaAssignedAt": "2026-06-08T21:10:16.945Z"
+        },
+        "exceptionId": "self-scan-remediation-map",
+        "expiresOn": "2027-01-01"
+      }
+    ],
+    "controlCoverage": [
+      {
+        "id": "ZERO_TRUST",
+        "description": "All services enforce authentication and authorization with no implicit trust.",
+        "automation": "evidence",
+        "frameworks": [
+          "NIST 800-207",
+          "OWASP ASVS"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "SECRET_MANAGER_ONLY",
+        "description": "Secrets stored only in a dedicated secret manager.",
+        "automation": "evidence",
+        "frameworks": [
+          "NIST 800-53",
+          "SOC 2"
+        ],
+        "status": "risk_accepted",
+        "details": [
+          "no_hardcoded_secrets",
+          "secret_manager_refs",
+          "Covered by an active approved control exception."
+        ]
+      },
+      {
+        "id": "TLS_13",
+        "description": "TLS configuration is verified.",
+        "automation": "evidence",
+        "frameworks": [
+          "NIST 800-53",
+          "PCI DSS 4.0"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "CSP_NO_INLINE",
+        "description": "CSP is configured without unsafe inline execution.",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP ASVS",
+          "CWE-79"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "CSRF",
+        "description": "CSRF protections and tests are present.",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP Top 10",
+          "OWASP ASVS"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "SSRF",
+        "description": "SSRF guards and tests are present.",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP Top 10",
+          "CWE-918"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "MOBILE_MASVS",
+        "description": "Mobile release configuration meets MASVS baseline.",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP MASVS"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "AI_BOUNDED_OUTPUTS",
+        "description": "AI outputs are schema-validated and tools are allowlisted.",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP LLM Top 10",
+          "MITRE ATLAS"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "NIST_AC_ACCESS_CONTROL",
+        "description": "Access control policies enforce least privilege and separation of duties (NIST 800-53 AC).",
+        "automation": "evidence",
+        "frameworks": [
+          "NIST 800-53"
+        ],
+        "status": "risk_accepted",
+        "details": [
+          "service_to_service_auth",
+          "Covered by an active approved control exception."
+        ]
+      },
+      {
+        "id": "NIST_AU_AUDIT_LOGGING",
+        "description": "Audit events are logged, immutable, timestamped, and retained ≥1 year (NIST 800-53 AU).",
+        "automation": "evidence",
+        "frameworks": [
+          "NIST 800-53",
+          "SOC 2"
+        ],
+        "status": "risk_accepted",
+        "details": [
+          "audit_logging_configured",
+          "log_retention_policy",
+          "Covered by an active approved control exception."
+        ]
+      },
+      {
+        "id": "NIST_IA_IDENTIFICATION",
+        "description": "All users and services are uniquely identified and authenticated (NIST 800-53 IA).",
+        "automation": "evidence",
+        "frameworks": [
+          "NIST 800-53",
+          "OWASP ASVS"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "NIST_SC_TRANSMISSION",
+        "description": "All data in transit is encrypted using approved algorithms (NIST 800-53 SC).",
+        "automation": "evidence",
+        "frameworks": [
+          "NIST 800-53",
+          "PCI DSS 4.0"
+        ],
+        "status": "risk_accepted",
+        "details": [
+          "tls_config_verified",
+          "Covered by an active approved control exception."
+        ]
+      },
+      {
+        "id": "NIST_SI_INPUT_VALIDATION",
+        "description": "All inputs are validated, sanitized, and encoded before processing (NIST 800-53 SI).",
+        "automation": "evidence",
+        "frameworks": [
+          "NIST 800-53",
+          "OWASP Top 10"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "NIST_IR_INCIDENT_RESPONSE",
+        "description": "Incident response playbooks exist, are tested, and have defined MTTD/MTTR SLAs (NIST 800-53 IR).",
+        "automation": "evidence",
+        "frameworks": [
+          "NIST 800-53",
+          "SOC 2"
+        ],
+        "status": "risk_accepted",
+        "details": [
+          "ir_playbook_present",
+          "ir_playbook_tested",
+          "Covered by an active approved control exception."
+        ]
+      },
+      {
+        "id": "PCI_REQ3_STORED_DATA",
+        "description": "Cardholder data at rest is encrypted and PAN is never stored in plaintext (PCI DSS 4.0 Req 3).",
+        "automation": "evidence",
+        "frameworks": [
+          "PCI DSS 4.0"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "PCI_REQ4_TRANSIT",
+        "description": "Cardholder data in transit uses TLS 1.2+ with approved cipher suites (PCI DSS 4.0 Req 4).",
+        "automation": "evidence",
+        "frameworks": [
+          "PCI DSS 4.0"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "SOC2_CC6_LOGICAL_ACCESS",
+        "description": "Logical access to systems is restricted and uses MFA for privileged accounts (SOC 2 CC6).",
+        "automation": "evidence",
+        "frameworks": [
+          "SOC 2 Type II"
+        ],
+        "status": "risk_accepted",
+        "details": [
+          "mfa_enforced",
+          "Covered by an active approved control exception."
+        ]
+      },
+      {
+        "id": "SOC2_CC7_SYSTEM_MONITORING",
+        "description": "System components are monitored for anomalous activity and security events (SOC 2 CC7).",
+        "automation": "evidence",
+        "frameworks": [
+          "SOC 2 Type II"
+        ],
+        "status": "risk_accepted",
+        "details": [
+          "audit_logging_configured",
+          "alerting_configured",
+          "Covered by an active approved control exception."
+        ]
+      },
+      {
+        "id": "MITRE_INITIAL_ACCESS",
+        "description": "Controls in place to prevent initial access vectors: phishing, supply chain, public-facing exploits (TA0001).",
+        "automation": "evidence",
+        "frameworks": [
+          "MITRE ATT&CK Enterprise"
+        ],
+        "status": "risk_accepted",
+        "details": [
+          "mfa_enforced",
+          "email_filtering",
+          "public_surface_hardened",
+          "Covered by an active approved control exception."
+        ]
+      },
+      {
+        "id": "MITRE_CREDENTIAL_ACCESS",
+        "description": "Controls prevent credential dumping, brute force, and credential theft (TA0006).",
+        "automation": "evidence",
+        "frameworks": [
+          "MITRE ATT&CK Enterprise"
+        ],
+        "status": "risk_accepted",
+        "details": [
+          "no_hardcoded_secrets",
+          "secret_manager_refs",
+          "rate_limiting_present",
+          "Covered by an active approved control exception."
+        ]
+      },
+      {
+        "id": "MITRE_EXFILTRATION",
+        "description": "Controls prevent unauthorized data exfiltration over network, cloud storage, or encoding (TA0010).",
+        "automation": "evidence",
+        "frameworks": [
+          "MITRE ATT&CK Enterprise"
+        ],
+        "status": "risk_accepted",
+        "details": [
+          "egress_controls",
+          "dlp_configured",
+          "Covered by an active approved control exception."
+        ]
+      },
+      {
+        "id": "MITRE_DEFENSE_EVASION",
+        "description": "Logging is tamper-evident; code signing prevents unauthorized binary substitution (TA0005).",
+        "automation": "evidence",
+        "frameworks": [
+          "MITRE ATT&CK Enterprise"
+        ],
+        "status": "risk_accepted",
+        "details": [
+          "audit_logging_configured",
+          "artifact_signing",
+          "Covered by an active approved control exception."
+        ]
+      },
+      {
+        "id": "MITRE_LATERAL_MOVEMENT",
+        "description": "Network segmentation and mTLS prevent lateral movement between services (TA0008).",
+        "automation": "evidence",
+        "frameworks": [
+          "MITRE ATT&CK Enterprise",
+          "NIST 800-207"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "MITRE_IMPACT",
+        "description": "Data backups are encrypted and tested; ransomware-resistant backup policies in place (TA0040).",
+        "automation": "evidence",
+        "frameworks": [
+          "MITRE ATT&CK Enterprise"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "MITRE_COMMAND_CONTROL",
+        "description": "Egress filtering blocks C2 channels; DNS monitoring detects beaconing (TA0011).",
+        "automation": "evidence",
+        "frameworks": [
+          "MITRE ATT&CK Enterprise"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "AI_LLM02_OUTPUT_HANDLING",
+        "description": "LLM outputs are validated against a schema before use in downstream systems (OWASP LLM02).",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP LLM Top 10 2025"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "AI_LLM04_MODEL_DOS",
+        "description": "Rate limiting and input length limits prevent model resource exhaustion (OWASP LLM04).",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP LLM Top 10 2025"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "AI_LLM07_PLUGIN_DESIGN",
+        "description": "LLM plugins and tools operate on an explicit allowlist with minimal permissions (OWASP LLM07).",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP LLM Top 10 2025"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "AI_LLM08_EXCESSIVE_AGENCY",
+        "description": "LLM agents cannot take irreversible actions without human confirmation (OWASP LLM08).",
+        "automation": "evidence",
+        "frameworks": [
+          "OWASP LLM Top 10 2025",
+          "NIST AI RMF"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "SLSA_L3_PROVENANCE",
+        "description": "Build artifacts have signed SLSA Level 3 provenance from a hermetic, ephemeral CI build.",
+        "automation": "evidence",
+        "frameworks": [
+          "SLSA",
+          "NIST 800-218"
+        ],
+        "status": "risk_accepted",
+        "details": [
+          "artifact_signing",
+          "hermetic_build_configured",
+          "Covered by an active approved control exception."
+        ]
+      },
+      {
+        "id": "ZERO_TRUST_MICROSEG",
+        "description": "Network microsegmentation enforces deny-by-default between all services.",
+        "automation": "evidence",
+        "frameworks": [
+          "NIST 800-207",
+          "CISA Zero Trust Maturity Model"
+        ],
+        "status": "not_applicable",
+        "details": [
+          "Surface not in scope for this review."
+        ]
+      },
+      {
+        "id": "ZERO_TRUST_CONTINUOUS_VERIFY",
+        "description": "Every request is continuously verified — no persistent trust based on network location.",
+        "automation": "evidence",
+        "frameworks": [
+          "NIST 800-207"
+        ],
+        "status": "risk_accepted",
+        "details": [
+          "service_to_service_auth",
+          "Covered by an active approved control exception."
+        ]
+      },
+      {
+        "id": "SECRETS_SCANNER_READY",
+        "description": "A dedicated secrets scanner is installed and runnable.",
+        "automation": "tooling",
+        "frameworks": [
+          "NIST 800-218",
+          "SLSA"
+        ],
+        "status": "satisfied",
+        "details": [
+          "gitleaks"
+        ]
+      },
+      {
+        "id": "SBOM_SCANNER_READY",
+        "description": "An SBOM generator (Syft) is installed and runnable.",
+        "automation": "tooling",
+        "frameworks": [
+          "SLSA",
+          "NIST 800-218",
+          "Executive Order 14028"
+        ],
+        "status": "missing",
+        "details": [
+          "syft"
+        ]
+      },
+      {
+        "id": "NIST_SA_SYSTEM_SERVICES",
+        "description": "Third-party components are assessed for security risk before adoption (NIST 800-53 SA).",
+        "automation": "tooling",
+        "frameworks": [
+          "NIST 800-53",
+          "NIST 800-218"
+        ],
+        "status": "missing",
+        "details": [
+          "osv-scanner"
+        ]
+      },
+      {
+        "id": "NIST_SR_SUPPLY_CHAIN",
+        "description": "Supply chain integrity is verified via SBOM, provenance attestation, and dependency scanning (NIST 800-53 SR).",
+        "automation": "tooling",
+        "frameworks": [
+          "NIST 800-53",
+          "SLSA",
+          "Executive Order 14028"
+        ],
+        "status": "risk_accepted",
+        "details": [
+          "syft",
+          "osv-scanner",
+          "Covered by an active approved control exception."
+        ]
+      },
+      {
+        "id": "PCI_REQ6_SECURE_SYSTEMS",
+        "description": "All software components are up-to-date and protected against known vulnerabilities (PCI DSS 4.0 Req 6).",
+        "automation": "tooling",
+        "frameworks": [
+          "PCI DSS 4.0"
+        ],
+        "status": "missing",
+        "details": [
+          "osv-scanner",
+          "trivy"
+        ]
+      },
+      {
+        "id": "SBOM_GENERATED",
+        "description": "A CycloneDX or SPDX SBOM is generated on every release and stored as a signed artifact.",
+        "automation": "tooling",
+        "frameworks": [
+          "Executive Order 14028",
+          "NIST 800-218",
+          "SLSA"
+        ],
+        "status": "risk_accepted",
+        "details": [
+          "syft",
+          "Covered by an active approved control exception."
+        ]
+      },
+      {
+        "id": "IR_PLAYBOOKS_CURRENT",
+        "description": "Incident response playbooks exist for all surfaces, are tested within 90 days, and have contact lists.",
+        "automation": "tooling",
+        "frameworks": [
+          "NIST 800-53",
+          "SOC 2 Type II"
+        ],
+        "status": "satisfied",
+        "details": []
+      },
+      {
+        "id": "CRYPTO_APPROVED_ALGORITHMS",
+        "description": "Only NIST-approved cryptographic algorithms are used (AES-256, SHA-256+, RSA-2048+).",
+        "automation": "tooling",
+        "frameworks": [
+          "NIST SP 800-131A",
+          "FIPS 140-3"
+        ],
+        "status": "missing",
+        "details": [
+          "semgrep"
+        ]
+      },
+      {
+        "id": "DLP_NO_PII_IN_LOGS",
+        "description": "PII, PAN, SSN, and credentials are never written to application logs.",
+        "automation": "tooling",
+        "frameworks": [
+          "GDPR",
+          "HIPAA",
+          "PCI DSS 4.0"
+        ],
+        "status": "missing",
+        "details": [
+          "semgrep"
+        ]
+      }
+    ],
+    "scannerReadiness": {
+      "configured": [
+        "gitleaks"
+      ],
+      "missing": []
+    },
+    "confidence": {
+      "score": 60,
+      "automatedCoverage": 43,
+      "missingControls": 5,
+      "riskAcceptedControls": 15,
+      "scannerReadiness": 100,
+      "summary": "Automated coverage 43%, scanner readiness 100%, missing controls 5, risk-accepted controls 15. Change type: general."
+    },
+    "baselineDiff": {
+      "regressions": [],
+      "improvements": [],
+      "newFindings": [],
+      "resolvedFindings": [],
+      "coverageChange": 0
+    }
+  }
+}

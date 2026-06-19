@@ -18,7 +18,7 @@ jobs:
 
     steps:
       - name: Checkout (full history for diff)
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # actions/checkout@v4.2.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # actions/checkout@v6.0.3
         with:
           fetch-depth: 0
 
@@ -38,7 +38,7 @@ jobs:
 
       # 1) Secret scanning
       - name: Gitleaks
-        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7  # gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e  # gitleaks/gitleaks-action@v3.0.0
         with:
           args: "--redact --verbose"
 
@@ -53,7 +53,7 @@ jobs:
           severity: "CRITICAL,HIGH"
 
       - name: Upload Trivy SARIF
-        uses: github/codeql-action/upload-sarif@03e4368ac7daa2bd82b3e85262f3bf87ee112f57  # codeql-action@v3.36.0
+        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e  # codeql-action@v4.36.2
         if: always()
         with:
           sarif_file: "trivy-results.sarif"
@@ -71,7 +71,7 @@ jobs:
       #    so this condition correctly fires only when real IaC is added to the repo.
       - name: Checkov
         if: hashFiles('**/*.tf', 'k8s/**') != ''
-        uses: bridgecrewio/checkov-action@4048c972aae68d0b983a48bb3479aab2d877b898  # bridgecrewio/checkov-action@v12
+        uses: bridgecrewio/checkov-action@fa9edf8f0a491c59a924ea6accd5bdcf07752cff  # bridgecrewio/checkov-action@v12
         with:
           directory: .
           framework: terraform,kubernetes,cloudformation
