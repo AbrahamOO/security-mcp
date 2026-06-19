@@ -25,3 +25,8 @@ HANDOFF.md
 
 # Generated baseline outputs inside fixtures
 fixtures/**/.mcp/baselines/
+
+# Keep the intentional malicious-agent test fixtures (consumed by src/tests/run.ts).
+# These live under .claude/ but must be tracked so CI's npm test can detect them.
+!fixtures/agentic-malicious/.claude/
+!fixtures/agentic-malicious/.claude/**
