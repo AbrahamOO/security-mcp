@@ -60,6 +60,22 @@ jobs:
           SECURITY_GATE_SCANNERS: ".github/security-tools-ci.json"
         run: node dist/ci/pr-gate.js
 
+      - name: Verify npm token
+        # NPM_TOKEN must be an npm Automation token (not a Classic/Legacy token).
+        # Automation tokens bypass 2FA (EOTP) requirements in CI/CD pipelines.
+        # Create one at: https://www.npmjs.com/settings/<username>/tokens
+        # → Generate New Token → Automation
+        # Then store it as the NPM_TOKEN secret in:
+        #   GitHub → Settings → Environments → npm-publish → Environment secrets
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::error::NPM_TOKEN secret is not set. Add an npm Automation token as NPM_TOKEN in the npm-publish environment secrets."
+            exit 1
+          fi
+          npm whoami
+
       - name: Publish
         run: npm publish --access public --provenance
         env:
