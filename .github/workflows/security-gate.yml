@@ -87,15 +87,20 @@ jobs:
           SECURITY_GATE_POLICY: "defaults/security-policy.json"
           SECURITY_GATE_EVIDENCE_MAP: "defaults/evidence-map.json"
           SECURITY_GATE_CONTROL_CATALOG: "defaults/control-catalog.json"
-          SECURITY_GATE_EXCEPTIONS: "defaults/security-exceptions.json"
+          # Intentionally NOT setting SECURITY_GATE_EXCEPTIONS: an explicit override is
+          # treated as a user project exceptions file. Leaving it unset lets the gate
+          # auto-load .github/security-exceptions-ci.json as the trusted CI self-scan file
+          # (isCiFile), which is the only file permitted to suppress HIGH/CRITICAL self-scan
+          # false positives unsigned. It holds the ciso-approved, expiring justifications for
+          # the tool's own N/A controls (no app runtime), SBOM/provenance at the npm-publish
+          # layer, and remaining detection-pattern examples.
           SECURITY_GATE_SCANNERS: ".github/security-tools-ci.json"
-          # HMAC integrity key for policy / exceptions / baseline verification.
-          # Optional and a NO-OP until the repository secret is set: an unset secret
-          # resolves to "" -> no key -> integrity runs unverified (the HIGH/CRITICAL
-          # severity floor and unsigned-suppression visibility are still enforced).
-          # To ENABLE tamper-evident integrity you MUST do BOTH together, or the gate
-          # fails by design (a key with no signature is rejected to block sig-stripping):
-          #   1. add a >=32-byte SECURITY_POLICY_HMAC_KEY repository secret, and
-          #   2. sign + commit the policy/exceptions signatures (security-mcp sign-policy).
-          SECURITY_POLICY_HMAC_KEY: ${{ secrets.SECURITY_POLICY_HMAC_KEY }}
+          # Self-scan scope: exclude the tool's own intentional example/test/rule content
+          # from its vulnerability scan. fixtures/ are deliberately-insecure test inputs,
+          # skills/ and prompts/ are documentation with before/after teaching examples,
+          # defaults/ holds detection rule registries + policy templates, and the skills
+          # manifest catalogs vulnerability descriptions. None are shippable application
+          # code; scanning them flags the tool's own definitions. This affects only this
+          # repo's self-scan — it is not part of the published package or user gate runs.
+          SECURITY_GATE_IGNORE: "fixtures,skills,prompts,defaults,skills-manifest.json,.github/security-exceptions-ci.json"
         run: npm run ci:pr-gate

@@ -3,7 +3,7 @@
  * Covers supply chain attack vectors specific to GitHub Actions workflows.
  */
 import { Finding, sanitizeErrorMessage } from "../result.js";
-import fg from "fast-glob";
+import { scopedFg as fg } from "../scan-scope.js";
 import { readFileSafe } from "../../repo/fs.js";
 
 // Pattern that identifies an active (non-commented) security gate invocation line.

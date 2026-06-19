@@ -1,6 +1,7 @@
 import { Finding } from "../result.js";
-import fg from "fast-glob";
+import { scopedFg as fg, scanIgnoreGlobs } from "../scan-scope.js";
 import { readFileSafe } from "../../repo/fs.js";
+import picomatch from "picomatch";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { existsSync, readFileSync } from "fs";
@@ -99,6 +100,28 @@ const SECRET_PATTERNS: Array<{ name: string; regex: RegExp; description: string 
   { name: "bearer_token_literal",    regex: /Authorization['"]?\s*[:=]\s*['"]Bearer [A-Za-z0-9\-_=.]{20,}['"]/, description: "Hardcoded Bearer token" },
 ];
 
+// Lower-confidence generic patterns whose captured literal is frequently a file
+// path or config default (e.g. `process.env.X || ".mcp/policies/policy.json"`)
+// rather than a real secret. For these, a literal that is an obvious source/config
+// path is treated as a non-secret to suppress the false positive.
+const PATH_PRONE_PATTERNS = new Set([
+  "env_fallback_hardcoded",
+  "secret_key_assignment",
+  "password_assignment",
+  "private_key_assignment"
+]);
+
+const NON_SECRET_LITERAL_RE =
+  /\.(?:json|jsonc|js|mjs|cjs|ts|tsx|jsx|yaml|yml|md|markdown|txt|html|xml|toml|ini|cfg|conf|lock|sh|py|go|rb|java|csv|svg|png)$/i;
+
+/** True when the trailing quoted literal of a match looks like a file path, not a secret. */
+function literalLooksLikeNonSecret(matchText: string): boolean {
+  const q = /["']([^"']+)["']\s*$/.exec(matchText);
+  if (!q) return false;
+  const value = q[1];
+  return NON_SECRET_LITERAL_RE.test(value) || value.startsWith("./") || value.startsWith("../");
+}
+
 function previewLine(text: string, index: number): string {
   const lineStart = text.lastIndexOf("\n", index);
   const lineEnd = text.indexOf("\n", index);
@@ -109,7 +132,9 @@ function previewLine(text: string, index: number): string {
 function matchSecretPatterns(decoded: string): { name: string; match: string } | null {
   for (const pattern of SECRET_PATTERNS) {
     const m = pattern.regex.exec(decoded);
-    if (m) return { name: pattern.name, match: m[0] };
+    if (!m) continue;
+    if (PATH_PRONE_PATTERNS.has(pattern.name) && literalLooksLikeNonSecret(m[0])) continue;
+    return { name: pattern.name, match: m[0] };
   }
   return null;
 }
@@ -177,6 +202,7 @@ export async function checkSecrets(_: { changedFiles: string[] }): Promise<Findi
     for (const pattern of SECRET_PATTERNS) {
       const match = pattern.regex.exec(text);
       if (!match || match.index === undefined) continue;
+      if (PATH_PRONE_PATTERNS.has(pattern.name) && literalLooksLikeNonSecret(match[0])) continue;
 
       const preview = previewLine(text, match.index);
       // Redact the matched value itself — only expose location and pattern name
@@ -365,7 +391,7 @@ export async function checkSecrets(_: { changedFiles: string[] }): Promise<Findi
     try {
       if (existsSync(tmpReport)) {
         const raw = readFileSync(tmpReport, "utf8");
-        const leaksData = JSON.parse(raw) as Array<{
+        const rawLeaks = JSON.parse(raw) as Array<{
           RuleID?: string;
           File?: string;
           Commit?: string;
@@ -373,7 +399,17 @@ export async function checkSecrets(_: { changedFiles: string[] }): Promise<Findi
           Description?: string;
         }>;
 
-        if (Array.isArray(leaksData) && leaksData.length > 0) {
+        // Apply the same scan-scope ignores to git-history results that file scans
+        // use. gitleaks walks every commit and cannot honor the file globs directly,
+        // so a leak in an ignored path (e.g. an intentional fixtures/ test secret, or
+        // SECURITY_GATE_IGNORE project paths) is filtered out here for consistency.
+        const ignoreMatchers = scanIgnoreGlobs().map((g) => picomatch(g));
+        const leaksData = (Array.isArray(rawLeaks) ? rawLeaks : []).filter((leak) => {
+          const file = leak.File ?? "";
+          return !file || !ignoreMatchers.some((m) => m(file));
+        });
+
+        if (leaksData.length > 0) {
           const evidence = leaksData.slice(0, 20).map((leak) => {
             const commit = leak.Commit ? leak.Commit.slice(0, 8) : "unknown";
             const file = leak.File ?? "unknown";

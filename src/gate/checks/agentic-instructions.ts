@@ -1,5 +1,5 @@
 import { Finding } from "../result.js";
-import fg from "fast-glob";
+import { scopedFg as fg } from "../scan-scope.js";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { readFileSafe } from "../../repo/fs.js";

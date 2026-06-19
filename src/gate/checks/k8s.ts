@@ -2,7 +2,7 @@
  * Kubernetes manifest security checks.
  */
 import { Finding, sanitizeErrorMessage } from "../result.js";
-import fg from "fast-glob";
+import { scopedFg as fg } from "../scan-scope.js";
 import { readFileSafe } from "../../repo/fs.js";
 
 type K8sContext = {

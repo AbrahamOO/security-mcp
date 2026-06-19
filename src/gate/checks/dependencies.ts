@@ -1,5 +1,5 @@
 import { Finding, sanitizeErrorMessage } from "../result.js";
-import fg from "fast-glob";
+import { scopedFg as fg } from "../scan-scope.js";
 import { readFileSafe } from "../../repo/fs.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";

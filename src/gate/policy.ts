@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { createHmac, timingSafeEqual, randomUUID } from "node:crypto";
-import fg from "fast-glob";
+import { scopedFg as fg } from "./scan-scope.js";
 import { GateResult, Finding, FindingSeverity, ControlCoverage, sanitizeErrorMessage } from "./result.js";
 import { getChangedFiles } from "./diff.js";
 import { detectSurfaces } from "./findings.js";

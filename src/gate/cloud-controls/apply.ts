@@ -1,5 +1,5 @@
 import { writeFile } from "node:fs/promises";
-import fg from "fast-glob";
+import { scopedFg as fg } from "../scan-scope.js";
 import { readFileSafe } from "../../repo/fs.js";
 import { applyEnsures } from "./hcl.js";
 import { detectTerraform, Violation } from "./detect.js";

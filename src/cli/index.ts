@@ -10,7 +10,6 @@
  *   --help
  */
 
-import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -23,11 +22,12 @@ import { runGateFromEnv } from "../ci/pr-gate.js";
 import { signPolicyFile } from "../gate/policy.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const require = createRequire(import.meta.url);
 
 function getVersion(): string {
   try {
-    const pkg = require(resolve(__dirname, "../../package.json")) as { version: string };
+    const pkg = JSON.parse(
+      readFileSync(resolve(__dirname, "../../package.json"), "utf8")
+    ) as { version: string };
     return pkg.version;
   } catch {
     return "unknown";

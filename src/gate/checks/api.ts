@@ -1,6 +1,6 @@
 import { Finding, sanitizeErrorMessage } from "../result.js";
 import { searchRepo } from "../../repo/search.js";
-import fg from "fast-glob";
+import { scopedFg as fg } from "../scan-scope.js";
 import { readFileSafe } from "../../repo/fs.js";
 
 export async function checkApi(_: { changedFiles: string[] }): Promise<Finding[]> {

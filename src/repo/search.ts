@@ -1,5 +1,6 @@
 import fg from "fast-glob";
 import { readFileSafe } from "./fs.js";
+import { scanIgnoreGlobs } from "../gate/scan-scope.js";
 
 export type RepoMatch = { file: string; line: number; preview: string };
 
@@ -89,17 +90,15 @@ export async function searchRepo(opts: SearchOptions): Promise<RepoMatch[]> {
 	const files = await fg(["**/*.*"], {
 		dot: true,
 		followSymbolicLinks: false,  // Prevent glob-based symlink traversal outside workspace root.
-		ignore: [
-			"**/node_modules/**",
-			"**/.git/**",
-			"**/dist/**",
-			"**/.claude/**",
-			// Exclude detection-engine source — these files define the regex patterns that
-			// the checks search for, so they would trigger their own scanners. When deployed
-			// as an npm package the compiled dist/ is what runs; src/ lives in node_modules
-			// which is excluded above. This ignore only affects the tool's self-scan.
-			"src/gate/**"
-		]
+		// scanIgnoreGlobs adds the always-ignore set (node_modules, .git, dist, .mcp)
+		// and any SECURITY_GATE_IGNORE project paths (e.g. fixtures/) on top of the
+		// search-specific exclusions below.
+		//   - .claude/: agent-instruction files are scanned by a dedicated check.
+		//   - src/gate/**: the detection-engine source defines the regex patterns the
+		//     checks search for, so it would trigger its own scanners. When deployed as
+		//     an npm package the compiled dist/ runs and src/ lives in node_modules
+		//     (already excluded); this ignore only affects the tool's self-scan.
+		ignore: scanIgnoreGlobs(["**/.claude/**", "src/gate/**"])
 	});
 
 	const re = opts.isRegex ? compileUserRegex(opts.query) : null;

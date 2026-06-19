@@ -15,7 +15,7 @@
  * to avoid redundant I/O across checks.
  */
 import { Finding, sanitizeErrorMessage } from "../result.js";
-import fg from "fast-glob";
+import { scopedFg as fg } from "../scan-scope.js";
 import { readFileSafe } from "../../repo/fs.js";
 import { searchRepo } from "../../repo/search.js";
 

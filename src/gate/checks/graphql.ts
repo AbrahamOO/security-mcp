@@ -4,7 +4,7 @@
  */
 import { Finding, sanitizeErrorMessage } from "../result.js";
 import { searchRepo } from "../../repo/search.js";
-import fg from "fast-glob";
+import { scopedFg as fg } from "../scan-scope.js";
 import { readFileSafe } from "../../repo/fs.js";
 
 async function checkGraphqlIntrospection(): Promise<Finding[]> {
@@ -226,9 +226,12 @@ export async function checkGraphQL(_opts: { changedFiles: string[] }): Promise<F
 	const findings: Finding[] = [];
 
 	try {
-		// 1. Detect if GraphQL is in use
+		// 1. Detect if GraphQL is in use. Require an actual server/schema construct or a
+		// graphql package import — not the bare word "graphql", which appears in prose,
+		// READMEs, and feature lists without any GraphQL server being present.
 		const graphqlHits = await searchRepo({
-			query: "graphql|typeDefs|makeExecutableSchema|gql`|@graphql|graphene|strawberry",
+			query:
+				String.raw`(?:ApolloServer|makeExecutableSchema|buildSchema|graphqlHTTP|GraphQLSchema|createYoga|mercurius)\s*\(|typeDefs\s*[:=]|from ['"](?:graphql|@apollo/server|apollo-server|graphql-yoga|type-graphql|@graphql-tools)|import\s+(?:graphene|strawberry)`,
 			isRegex: true,
 			maxMatches: 200
 		});

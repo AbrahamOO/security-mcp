@@ -8,7 +8,7 @@ import * as net from "node:net";
 import * as https from "node:https";
 import * as tls from "node:tls";
 import { Finding } from "../result.js";
-import fg from "fast-glob";
+import { scopedFg as fg } from "../scan-scope.js";
 import { readFileSafe } from "../../repo/fs.js";
 
 // CWE-918: SSRF guard — block private/link-local/metadata IP ranges

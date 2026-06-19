@@ -4,7 +4,7 @@
  */
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
-import fg from "fast-glob";
+import { scopedFg as fg } from "../scan-scope.js";
 import { readFileSafe } from "../../repo/fs.js";
 import { Finding } from "../result.js";
 import { SurfaceScope } from "../catalog.js";
