@@ -1,0 +1,15 @@
+# Intentionally-vulnerable test fixtures consumed by security-mcp's own scanning
+# engine (Terraform/K8s/CloudFormation/web inputs under fixtures/*-insecure/).
+# They are test data, not shippable code, and are excluded from Semgrep exactly
+# as they already are from Checkov (.checkov.yaml skip-path) and the policy-gate
+# baseline. Without this, `semgrep ci` reports the fixtures' deliberate flaws as
+# blocking findings and fails the gate.
+fixtures/
+
+# Build and dependency output.
+node_modules/
+dist/
+build/
+
+# VCS metadata.
+.git/
