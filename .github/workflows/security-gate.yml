@@ -1,6 +1,8 @@
 name: Security Gate
 
 on:
+  push:
+    branches: ["main"]
   pull_request:
     branches: ["main"]
 

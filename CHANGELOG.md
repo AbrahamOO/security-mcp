@@ -3,6 +3,27 @@
 All notable changes to `security-mcp` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.4] - 2026-06-19
+
+### Changed
+
+- **README architecture diagrams render on npm.** The five Mermaid diagrams were
+  pre-rendered to static SVGs under `assets/diagrams/` and embedded via absolute
+  `raw.githubusercontent.com` image URLs. npm does not render Mermaid code fences,
+  so they previously showed as raw code blocks on the package page; they now
+  display as images on both npm and GitHub.
+- **Security gate runs on push to `main`.** `security-gate.yml` previously triggered
+  only on `pull_request`, so the CI status badge never reflected the default branch
+  and could stay red after a fix merged. It now also runs on push to `main`.
+
+### Added
+
+- **Odometer versioning tooling.** `npm run version:bump` / `version:check` and the
+  shared `scripts/version-rule.mjs`. The publish workflow runs `version:check` on
+  every release tag and refuses to publish a version whose `minor`/`patch` segment
+  is `>= 10` or whose `vX.Y.Z` tag does not match `package.json`. Documented in
+  `CONTRIBUTING.md`.
+
 ## [1.3.3] - 2026-06-18
 
 ### Added — agentic threat-model hardening

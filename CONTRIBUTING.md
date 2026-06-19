@@ -49,6 +49,32 @@ All PRs must pass the security gate before merging.
 4. No em dashes (`--`) in documentation files.
 5. No personal information, employer names, or project-specific stack references in prompt files or the skill.
 
+## Versioning (odometer rule)
+
+Versions follow a strict odometer scheme, not standard semver overflow:
+
+- A bump increases the version by `0.0.1` (patch + 1).
+- The `minor` and `patch` segments are single digits `0-9`. Reaching `10`
+  carries into the next-higher segment and resets to `0`. `major` is the top of
+  the odometer and is never capped.
+
+```text
+1.0.9  -> bump -> 1.1.0
+1.9.9  -> bump -> 2.0.0
+```
+
+Bump the version with the tool, never by hand:
+
+```bash
+npm run version:bump            # applies +0.0.1 with carry, writes package.json
+npm run version:bump -- --dry-run   # preview only
+npm run version:check           # fails if any version segment is >= 10
+```
+
+The publish workflow runs `version:check` on every release tag and refuses to
+publish a version that violates the rule or whose `vX.Y.Z` tag does not match
+`package.json`.
+
 ## Updating the Security Prompt
 
 The generalized security prompt lives at `prompts/SECURITY_PROMPT.md`. When updating it:

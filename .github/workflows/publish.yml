@@ -35,6 +35,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Enforce odometer version rule
+        # Each of minor/patch must be a single digit 0-9 (carry at 10:
+        # 1.0.9 -> 1.1.0). Also asserts the release tag matches package.json.
+        env:
+          TAG_REF: ${{ github.ref }}
+        run: npm run version:check
+
       - name: Lint
         run: npm run lint
 

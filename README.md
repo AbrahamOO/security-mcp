@@ -22,7 +22,7 @@ npx -y security-mcp@latest install
 ## Table of Contents
 
 - [Why this exists](#why-this-exists)
-- [What's new in 1.3.2](#whats-new-in-132)
+- [What's new in 1.3.3](#whats-new-in-133)
 - [System overview](#system-overview)
 - [The two entry points](#the-two-entry-points)
   - [/senior-security-engineer](#senior-security-engineer)
@@ -58,13 +58,15 @@ You get three things from one install:
 
 ---
 
-## What's new in 1.3.2
+## What's new in 1.3.3
 
-**Cloud security controls engine.** A registry-driven engine that scans infrastructure-as-code against 998 rules mapped to AWS FSBP, CIS Benchmarks (AWS / GCP / Azure), and the Microsoft Cloud Security Benchmark, across Terraform, CloudFormation, and Bicep. Terraform violations can be auto-remediated with `security-mcp autoharden`. See [the dedicated section](#cloud-security-controls-engine).
+**Inter-agent payload integrity.** `orchestration.merge_agent_findings` is the single trust sink for a whole agent run, so it now validates every agent's findings against a strict schema and verifies each file's hash against that agent's signed attestation before the findings reach the gate. With an attestation chain present it runs **enforced**: unattested or tampered agent files are rejected, and a hash mismatch or failed chain forces the gate to FAIL even with zero findings. Set `SECURITY_REQUIRE_AGENT_ATTESTATION` to fail closed unless the run is HMAC-signed, enforced, and chain-valid.
 
-**Two new CLI commands.** `security-mcp ci:pr-gate` runs the gate directly from `npx` and exits non-zero on HIGH/CRITICAL. `security-mcp sign-policy` HMAC-signs the active policy so tampering is detected at gate startup.
+**Per-tool-call audit log.** Every MCP tool invocation emits one structured JSONL record with the eight mandatory fields — timestamp, agent id, tool, input parameters (secrets redacted), output (outcome + size + truncated preview), credentials used (session id, never the secret), user context, and outcome status — to `.mcp/audit/tool-calls.jsonl` (`0o600`). Point `SECURITY_TOOL_AUDIT_LOG` at an append-only sink for tamper-proof retention. Logging never interrupts tool execution.
 
-**The tool hardened itself.** An unsigned policy can no longer relax the gate to PASS (severity_block is floored to HIGH/CRITICAL). An unsigned exceptions file can no longer suppress HIGH/CRITICAL by default. Attestation refuses to sign anything that is not a clean PASS. There is a fully offline mode, a checksum-verified installer with no `curl | sh` path, and data at rest is written with `0o600` permissions. Details in [self-protection and supply-chain posture](#self-protection-and-supply-chain-posture).
+Both close gaps from an agentic-AI threat model of security-mcp's own multi-agent system and were hardened through a three-agent adversarial review (highest-severity-wins dedupe, secret/PII value scrubbing in the audit preview, honest unsigned-chain reporting). See the [CHANGELOG](CHANGELOG.md) for the full list and accepted residual risk.
+
+**1.3.2 — cloud security controls engine.** A registry-driven engine that scans infrastructure-as-code against 998 rules mapped to AWS FSBP, CIS Benchmarks (AWS / GCP / Azure), and the Microsoft Cloud Security Benchmark, across Terraform, CloudFormation, and Bicep. Terraform violations can be auto-remediated with `security-mcp autoharden` ([dedicated section](#cloud-security-controls-engine)). It also added the `security-mcp ci:pr-gate` and `sign-policy` CLI commands, and hardened the tool against itself (unsigned policies and exceptions can no longer relax the gate; data at rest is written `0o600`) — see [self-protection and supply-chain posture](#self-protection-and-supply-chain-posture).
 
 Earlier releases expanded the deep-analysis pattern libraries (injection, authentication, supply chain, business logic), brought OWASP Top 10 to full coverage, and wired the industry scanners into the gate.
 
@@ -72,27 +74,9 @@ Earlier releases expanded the deep-analysis pattern libraries (injection, authen
 
 ## System overview
 
-```mermaid
-graph TD
-  subgraph Editor["Your editor (Claude Code, Cursor, VS Code, ...)"]
-    A["/senior-security-engineer"]
-    B["/ciso-orchestrator"]
-  end
-
-  A -->|MCP stdio| S["MCP server"]
-  B -->|MCP stdio| S
-
-  S --> G["Gate engine (35 checks)"]
-  S --> O["Orchestration (39+ agents)"]
-  S --> C["Cloud controls (998 rules)"]
-  S --> P["Platform subsystems"]
-
-  G --> AT["SHA-256 attestation"]
-  O --> AT
-  P --> R["Model router / learning / hash chain / auth"]
-
-  CI["CI: security-mcp ci:pr-gate"] --> G
-```
+<p align="center">
+  <img src="https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/assets/diagrams/system-overview.svg" alt="System overview: editor skills and CI both call the same MCP server, which drives the gate engine, orchestration, cloud controls, and platform subsystems into a shared attestation." width="820">
+</p>
 
 The MCP server is the trust root. Both entry-point skills, the standalone CI gate, and every supporting subsystem call into the same engine, so an interactive fix and a CI verdict are produced by identical logic.
 
@@ -119,21 +103,9 @@ A single elite security-engineer agent. It operates 90% fixing, 10% advisory: it
 
 This is the daily driver. Use it on every PR.
 
-```mermaid
-graph TD
-  U["Invoke /senior-security-engineer"] --> SC{"Pick scope"}
-  SC -->|A| D["Recent changes / git diff"]
-  SC -->|B| F["Full codebase"]
-  SC -->|C| P["Specific files / folders"]
-  D --> ST["Build strategy"]
-  F --> ST
-  P --> ST
-  ST --> GT["Run gate"]
-  GT --> FX["Write inline fixes"]
-  FX --> RV["Re-run check, confirm clean"]
-  RV -->|remaining| FX
-  RV -->|clean| AT["SHA-256 attested report"]
-```
+<p align="center">
+  <img src="https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/assets/diagrams/senior-security-engineer.svg" alt="senior-security-engineer flow: pick scope, build strategy, run gate, write inline fixes, re-run until clean, then emit a SHA-256 attested report." width="720">
+</p>
 
 ### /ciso-orchestrator
 
@@ -145,31 +117,9 @@ It runs in three phases:
 2. **Adversarial and compliance (parallel).** A penetration-test team reads Phase 1's threat model as its attack brief, while a compliance/GRC synthesizer maps findings to controls.
 3. **Synthesis.** Each agent's findings file is schema-validated and verified against that agent's signed attestation before it is trusted, then findings are merged and deduplicated, SKILL.md section coverage (§0 through §24) is verified, and a signed attestation is written. A tampered attestation chain or a findings-hash mismatch forces the gate to FAIL.
 
-```mermaid
-graph TD
-  ORCH["CISO orchestrator"] --> P1
-  ORCH --> P2
-  ORCH --> P3
-
-  subgraph P1["Phase 1: discovery (parallel)"]
-    TM["threat-modeler"] --> TM1["stride-pasta-analyst"] & TM2["attack-navigator"] & TM3["business-logic-attacker"] & TM4["privacy-flow-analyst"]
-    AC["appsec-code-auditor"] --> AC1["injection-specialist"] & AC2["auth-session-hacker"] & AC3["logic-race-fuzzer"] & AC4["serialization-memory-attacker"]
-    CI["cloud-infra-specialist"] --> CI1["aws/gcp/azure-pentester"] & CI2["k8s-container-escaper"]
-    SD["supply-chain-devsecops"] --> SD1["dependency-confusion-attacker"] & SD2["cicd-pipeline-hijacker"] & SD3["artifact-integrity-analyst"]
-    AI["ai-llm-redteam"] --> AI1["prompt-injection-specialist"] & AI2["model-extraction-attacker"] & AI3["rag-poisoning-specialist"] & AI4["agentic-loop-exploiter"]
-    MB["mobile-security-specialist"] --> MB1["ios-security-auditor"] & MB2["android-penetration-tester"] & MB3["mobile-api-network-attacker"]
-    CR["crypto-pki-specialist"] --> CR1["tls-certificate-auditor"] & CR2["algorithm-implementation-reviewer"] & CR3["key-management-lifecycle-analyst"]
-  end
-
-  subgraph P2["Phase 2: adversarial + compliance (parallel)"]
-    PT["pentest-team"] --> PT1["pentest-web-api"] & PT2["pentest-infra"] & PT3["pentest-social"]
-    GRC["compliance-grc"] --> GRC1["evidence-collector"] & GRC2["compliance-gap-analyst"]
-  end
-
-  subgraph P3["Phase 3: synthesis"]
-    M["Verify attestations + merge + dedupe"] --> V["Verify §0-§24 coverage"] --> A["Signed attestation"]
-  end
-```
+<p align="center">
+  <img src="https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/assets/diagrams/ciso-orchestrator.svg" alt="ciso-orchestrator spawn tree: Phase 1 discovery leads and sub-agents in parallel, Phase 2 pentest and compliance teams, Phase 3 attestation verification, merge, coverage check, and signed attestation." width="940">
+</p>
 
 Cloud, AI/LLM, and mobile sub-agents are conditional: they activate only when the relevant stack is detected, and report N/A otherwise.
 
@@ -179,23 +129,9 @@ Cloud, AI/LLM, and mobile sub-agents are conditional: they activate only when th
 
 The gate is the deterministic core. On every run it executes 35 security checks in parallel (33 distinct check modules plus 2 precomputed coverage feeds). It is surface-aware: it first detects which surfaces a change touches (web, API, infrastructure, iOS, Android, AI/LLM, agentic) and runs the relevant checks against them.
 
-```mermaid
-graph TD
-  PL["Load policy (HMAC-verified)"] --> SC["Resolve scope"]
-  SC --> CT["Classify change type"]
-  CT -->|docs-only| SS["Secrets scan only"]
-  CT -->|code| DS["Detect surfaces"]
-  DS --> CAT["Load catalog + scanner readiness + evidence coverage"]
-  CAT --> RUN["Run 35 checks in parallel"]
-  RUN --> SLA["Assign risk SLAs"]
-  SLA --> CM["Build coverage manifest"]
-  CM --> EX["Apply exceptions"]
-  EX --> CONF["Confidence score (70% coverage + 30% scanner)"]
-  CONF --> BL["Diff against baseline"]
-  BL --> VR{"Verdict by severity_block"}
-  VR --> PB["Persist new baseline"]
-  SS --> VR
-```
+<p align="center">
+  <img src="https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/assets/diagrams/gate-engine.svg" alt="Gate engine pipeline: load HMAC-verified policy, resolve scope, classify change, detect surfaces, run 35 checks in parallel, assign SLAs, build coverage manifest, apply exceptions, score confidence, diff against baseline, and produce a verdict." width="760">
+</p>
 
 A crashed check module never disappears quietly. It becomes a HIGH coverage-gap finding, so the absence of a result is itself a result. A control that regresses from satisfied to missing against the saved baseline also becomes a HIGH finding.
 
@@ -236,17 +172,9 @@ A registry-driven engine scans infrastructure-as-code against 998 rules mapped t
 | CloudFormation | 128 |
 | Bicep | 96 |
 
-```mermaid
-graph TD
-  IAC["IaC files (TF / CFN / Bicep)"] --> DET["Detect against 998-rule registry"]
-  DET --> V["Violations"]
-  V --> AF{"Safe to auto-fix?"}
-  AF -->|yes, Terraform| FIX["Apply fix"]
-  FIX --> RD["Re-detect"]
-  RD -->|cleared| KEEP["Keep change"]
-  RD -->|not cleared| REV["Revert, report manual"]
-  AF -->|no| MAN["Manual action + snippet"]
-```
+<p align="center">
+  <img src="https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/assets/diagrams/cloud-controls.svg" alt="Cloud controls flow: detect IaC against the 998-rule registry, surface violations, auto-fix safe Terraform cases then re-detect to confirm, revert if not cleared, and report anything unsafe as a manual action with a snippet." width="720">
+</p>
 
 Terraform supports auto-remediation through `security-mcp autoharden` (use `--dry-run` to preview). The engine applies a fix, re-detects to confirm the violation actually cleared, and only then keeps the change. Anything it cannot safely auto-fix is reported as a manual action with a code snippet.
 
