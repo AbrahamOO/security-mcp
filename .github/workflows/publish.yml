@@ -51,7 +51,12 @@ jobs:
           SECURITY_GATE_POLICY: "defaults/security-policy.json"
           SECURITY_GATE_EVIDENCE_MAP: "defaults/evidence-map.json"
           SECURITY_GATE_CONTROL_CATALOG: "defaults/control-catalog.json"
-          SECURITY_GATE_EXCEPTIONS: ".github/security-exceptions-ci.json"
+          # Do NOT set SECURITY_GATE_EXCEPTIONS to the CI file: passing it via the env
+          # override marks it isOverride, and unsigned override files are barred from
+          # suppressing HIGH/CRITICAL. Leaving it unset lets the gate auto-load
+          # .github/security-exceptions-ci.json as the isCiFile, which IS allowed to
+          # suppress the self-scan false positives. (Verified: with the override the
+          # self-check FAILs on 554 self-scan CRIT/HIGH; without it, PASS.)
           SECURITY_GATE_SCANNERS: ".github/security-tools-ci.json"
         run: node dist/ci/pr-gate.js
 
