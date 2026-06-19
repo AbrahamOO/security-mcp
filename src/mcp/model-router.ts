@@ -395,7 +395,7 @@ type SecurityPolicy = {
 // ---------------------------------------------------------------------------
 
 async function ensureMemoryDir(): Promise<void> {
-  await mkdir(MEMORY_DIR, { recursive: true });
+  await mkdir(MEMORY_DIR, { recursive: true, mode: 0o700 });
 }
 
 async function loadUsageStore(): Promise<UsageStore> {
@@ -410,7 +410,7 @@ async function loadUsageStore(): Promise<UsageStore> {
 async function saveUsageStore(store: UsageStore): Promise<void> {
   await ensureMemoryDir();
   store.updatedAt = new Date().toISOString();
-  await writeFile(USAGE_FILE, JSON.stringify(store, null, 2) + "\n", "utf-8");
+  await writeFile(USAGE_FILE, JSON.stringify(store, null, 2) + "\n", { encoding: "utf-8", mode: 0o600 });
 }
 
 async function loadHealthStore(): Promise<ProviderHealthStore> {
@@ -425,7 +425,7 @@ async function loadHealthStore(): Promise<ProviderHealthStore> {
 async function saveHealthStore(store: ProviderHealthStore): Promise<void> {
   await ensureMemoryDir();
   store.updatedAt = new Date().toISOString();
-  await writeFile(HEALTH_FILE, JSON.stringify(store, null, 2) + "\n", "utf-8");
+  await writeFile(HEALTH_FILE, JSON.stringify(store, null, 2) + "\n", { encoding: "utf-8", mode: 0o600 });
 }
 
 async function loadMaxBudget(): Promise<number> {

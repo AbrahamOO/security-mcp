@@ -23,7 +23,8 @@ import {
 } from "node:fs/promises";
 import { existsSync, readFileSync, writeFileSync, renameSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { updateReviewStep } from "../review/store.js";
 import type {
@@ -48,6 +49,12 @@ const SKILL_VERSIONS_PATH = join(homedir(), ".security-mcp", "skill-versions.jso
 const SKILLS_MANIFEST_URL =
   "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills-manifest.json";
 const CLAUDE_SKILLS_DIR = join(homedir(), ".claude", "skills");
+// Skills ship INSIDE the npm package (package.json `files` includes "skills/").
+// The installed package is the consumer's trust root, so ensure_skill prefers the
+// bundled copy over any network download — this closes the trust-on-first-use gap
+// where a skill's integrity hash and its content both came from the same unsigned
+// remote manifest over the same channel (a MITM/compromised host could serve both).
+const BUNDLED_SKILLS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../skills");
 // CWE-494: Pin the registry URL to the canonical npm registry. Never allow
 // this to be overridden by env vars — a compromised env could redirect to a
 // malicious registry.
@@ -85,7 +92,7 @@ const SKILL_MD_SECTIONS = [
 // ---------------------------------------------------------------------------
 
 async function ensureDir(p: string): Promise<void> {
-  await mkdir(p, { recursive: true });
+  await mkdir(p, { recursive: true, mode: 0o700 });
 }
 
 function agentRunDir(agentRunId: string): string {
@@ -107,7 +114,7 @@ async function readManifest(agentRunId: string): Promise<AgentRunManifest> {
 
 async function writeManifest(manifest: AgentRunManifest): Promise<void> {
   manifest.updatedAt = new Date().toISOString();
-  await writeFile(manifestPath(manifest.agentRunId), JSON.stringify(manifest, null, 2) + "\n", "utf-8");
+  await writeFile(manifestPath(manifest.agentRunId), JSON.stringify(manifest, null, 2) + "\n", { encoding: "utf-8", mode: 0o600 });
 }
 
 function defaultAgentRecord(): AgentRecord {
@@ -417,7 +424,7 @@ export async function mergeAgentFindings(args: z.infer<typeof MergeAgentFindings
 
   // Write merged-findings.json
   const mergedPath = join(dir, "merged-findings.json");
-  await writeFile(mergedPath, JSON.stringify(merged, null, 2) + "\n", "utf-8");
+  await writeFile(mergedPath, JSON.stringify(merged, null, 2) + "\n", { encoding: "utf-8", mode: 0o600 });
 
   // Hook into existing attestation flow
   const hasCritical = merged.critical > 0;
@@ -546,7 +553,23 @@ export async function ensureSkill(args: z.infer<typeof EnsureSkillSchema>): Prom
     return { downloaded: false, version: installed.version, path: skillPath };
   }
 
-  // Fetch manifest
+  // TRUST ROOT: prefer the skill bundled inside the installed package over the network.
+  // No download, no manifest, no TOFU — the consumer already trusts the installed package.
+  const bundledPath = join(BUNDLED_SKILLS_DIR, skillName, "SKILL.md");
+  if (existsSync(bundledPath)) {
+    const sanitized = sanitizeSkillContent(readFileSync(bundledPath, "utf-8"), skillName);
+    mkdirSync(dirname(skillPath), { recursive: true, mode: 0o700 });
+    const tmp = `${skillPath}.tmp.${process.pid}`;
+    writeFileSync(tmp, sanitized, { encoding: "utf-8", mode: 0o600 });
+    renameSync(tmp, skillPath);
+    const bundledVersion = requiredVersion ?? "bundled";
+    versions[skillName] = { version: bundledVersion, installedAt: new Date().toISOString(), path: skillPath };
+    mkdirSync(dirname(SKILL_VERSIONS_PATH), { recursive: true, mode: 0o700 });
+    writeFileSync(SKILL_VERSIONS_PATH, JSON.stringify(versions, null, 2) + "\n", { encoding: "utf-8", mode: 0o600 });
+    return { downloaded: false, version: bundledVersion, path: skillPath };
+  }
+
+  // Fallback (skill not bundled): fetch from the manifest with mandatory integrity check.
   const manifestRaw = await httpsGet(SKILLS_MANIFEST_URL, MAX_MANIFEST_BYTES);
   if (!manifestRaw) {
     throw new Error(`Cannot fetch skills manifest — check internet connection or run with internet permitted.`);
@@ -593,15 +616,15 @@ export async function ensureSkill(args: z.infer<typeof EnsureSkillSchema>): Prom
   const sanitized = sanitizeSkillContent(content, skillName);
 
   // Write skill atomically (write to temp, then rename) to prevent partial-write corruption
-  mkdirSync(dirname(skillPath), { recursive: true });
+  mkdirSync(dirname(skillPath), { recursive: true, mode: 0o700 });
   const tmpSkillPath = `${skillPath}.tmp.${process.pid}`;
-  writeFileSync(tmpSkillPath, sanitized, "utf-8");
+  writeFileSync(tmpSkillPath, sanitized, { encoding: "utf-8", mode: 0o600 });
   renameSync(tmpSkillPath, skillPath);
 
   // Update version cache
   versions[skillName] = { version: entry.version, installedAt: new Date().toISOString(), path: skillPath };
-  mkdirSync(dirname(SKILL_VERSIONS_PATH), { recursive: true });
-  writeFileSync(SKILL_VERSIONS_PATH, JSON.stringify(versions, null, 2) + "\n", "utf-8");
+  mkdirSync(dirname(SKILL_VERSIONS_PATH), { recursive: true, mode: 0o700 });
+  writeFileSync(SKILL_VERSIONS_PATH, JSON.stringify(versions, null, 2) + "\n", { encoding: "utf-8", mode: 0o600 });
 
   return { downloaded: true, version: entry.version, path: skillPath };
 }
@@ -670,7 +693,7 @@ export async function writeAgentMemory(args: z.infer<typeof WriteAgentMemorySche
     throw new Error(`Invalid agent name "${agentName}"`);
   }
   const dir = join(MEMORY_DIR, agentName);
-  mkdirSync(dir, { recursive: true });
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
 
   const written: string[] = [];
   const append = (file: string, newItems: unknown[] | undefined, existing: unknown[]) => {
@@ -682,7 +705,7 @@ export async function writeAgentMemory(args: z.infer<typeof WriteAgentMemorySche
       throw new Error(`Memory file "${file}" would exceed 64 KB size cap after write — trim existing entries first.`);
     }
     const p = join(dir, file);
-    writeFileSync(p, serialized, "utf-8");
+    writeFileSync(p, serialized, { encoding: "utf-8", mode: 0o600 });
     written.push(p);
   };
 
@@ -705,7 +728,7 @@ export async function writeAgentMemory(args: z.infer<typeof WriteAgentMemorySche
     if (Buffer.byteLength(intelPayload, "utf-8") > MAX_INTEL_BYTES) {
       throw new Error(`Intel payload exceeds 64 KB size cap (${Buffer.byteLength(intelPayload, "utf-8")} bytes).`);
     }
-    writeFileSync(p, intelPayload, "utf-8");
+    writeFileSync(p, intelPayload, { encoding: "utf-8", mode: 0o600 });
     written.push(p);
   }
 

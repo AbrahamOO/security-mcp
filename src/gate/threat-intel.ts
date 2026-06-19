@@ -158,6 +158,13 @@ export async function checkActiveExploitation(
     return { kevMatches: [], highEpss: [], failed: false };
   }
 
+  // CWE-200: the EPSS lookup places this repo's CVE IDs in a cleartext query to
+  // a third party (api.first.org). Operators of private repos can disable all
+  // threat-intel egress with SECURITY_OFFLINE so the unpatched-CVE set never leaves.
+  if (process.env["SECURITY_OFFLINE"] === "1" || process.env["SECURITY_OFFLINE"] === "true") {
+    return { kevMatches: [], highEpss: [], failed: false };
+  }
+
   try {
     const [kevSet, epssMap] = await Promise.all([
       fetchCisaKev(cacheDir),

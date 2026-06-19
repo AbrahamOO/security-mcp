@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 import { runPrGate, type GateMode } from "../gate/policy.js";
 
 // Allow safe git revision operators (~ and ^) plus ref/path characters. CWE-88.
@@ -27,7 +29,13 @@ function safeEnvTargets(envVar: string): string[] | undefined {
   });
 }
 
-async function main() {
+/**
+ * Run the policy gate using configuration from environment variables.
+ * Exported so the `security-mcp ci:pr-gate` CLI subcommand can invoke it,
+ * while `node dist/ci/pr-gate.js` (and `npm run ci:pr-gate`) still run it directly.
+ * Exits the process: code 2 when the gate fails, 0 when it passes.
+ */
+export async function runGateFromEnv(): Promise<void> {
   const baseRef = safeEnvRef("SECURITY_GATE_BASE_REF", "origin/main");
   const headRef = safeEnvRef("SECURITY_GATE_HEAD_REF", "HEAD");
   const policyPath = process.env.SECURITY_GATE_POLICY || ".mcp/policies/security-policy.json";
@@ -44,7 +52,17 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error("security gate crashed:", err);
-  process.exit(3);
-});
+// Auto-run only when executed directly (node dist/ci/pr-gate.js / npm run ci:pr-gate),
+// not when imported by the CLI dispatcher.
+const invokedDirectly =
+  process.argv[1] !== undefined &&
+  fileURLToPath(import.meta.url) === resolve(process.argv[1]);
+
+if (invokedDirectly) {
+  try {
+    await runGateFromEnv();
+  } catch (err) {
+    console.error("security gate crashed:", err);
+    process.exit(3);
+  }
+}

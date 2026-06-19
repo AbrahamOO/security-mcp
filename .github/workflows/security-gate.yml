@@ -87,4 +87,13 @@ jobs:
           SECURITY_GATE_CONTROL_CATALOG: "defaults/control-catalog.json"
           SECURITY_GATE_EXCEPTIONS: "defaults/security-exceptions.json"
           SECURITY_GATE_SCANNERS: ".github/security-tools-ci.json"
+          # HMAC integrity key for policy / exceptions / baseline verification.
+          # Optional and a NO-OP until the repository secret is set: an unset secret
+          # resolves to "" -> no key -> integrity runs unverified (the HIGH/CRITICAL
+          # severity floor and unsigned-suppression visibility are still enforced).
+          # To ENABLE tamper-evident integrity you MUST do BOTH together, or the gate
+          # fails by design (a key with no signature is rejected to block sig-stripping):
+          #   1. add a >=32-byte SECURITY_POLICY_HMAC_KEY repository secret, and
+          #   2. sign + commit the policy/exceptions signatures (security-mcp sign-policy).
+          SECURITY_POLICY_HMAC_KEY: ${{ secrets.SECURITY_POLICY_HMAC_KEY }}
         run: npm run ci:pr-gate

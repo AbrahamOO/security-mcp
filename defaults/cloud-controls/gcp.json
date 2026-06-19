@@ -969,6 +969,3093 @@
       "requiredActions": [
         "Set metadata serial-port-enable = \"false\" (or remove it) on the google_compute_instance."
       ]
+    },
+    {
+      "ruleId": "GCP_GKE_PRIVATE_ENDPOINT",
+      "threat": "A GKE cluster with a public control-plane endpoint exposes the Kubernetes API server to internet-wide credential stuffing and CVE exploitation.",
+      "frameworks": ["CIS GCP Foundations Benchmark 7.15"],
+      "severity": "MEDIUM",
+      "title": "GKE cluster should enable a private control-plane endpoint",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_container_cluster",
+        "require": "enable_private_endpoint\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set private_cluster_config { enable_private_endpoint = true } and configure master_authorized_networks on the google_container_cluster. Networking choices require review."
+      },
+      "requiredActions": [
+        "Enable a private control-plane endpoint (private_cluster_config.enable_private_endpoint) on the google_container_cluster."
+      ]
+    },
+    {
+      "ruleId": "GCP_COMPUTE_ENABLE_VTPM",
+      "threat": "Without a virtual TPM, the instance cannot attest boot integrity, so a rootkit altering the boot chain goes undetected.",
+      "frameworks": ["CIS GCP Foundations Benchmark 4.8"],
+      "severity": "LOW",
+      "title": "Compute instance should enable vTPM",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_instance",
+        "require": "enable_vtpm\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add shielded_instance_config { enable_vtpm = true } to the google_compute_instance."
+      },
+      "requiredActions": [
+        "Add shielded_instance_config { enable_vtpm = true } to the google_compute_instance."
+      ]
+    },
+    {
+      "ruleId": "GCP_SQL_CMEK",
+      "threat": "A Cloud SQL instance without a customer-managed encryption key is encrypted only with Google-managed keys, leaving no customer-controlled revocation if the data must be cryptographically shredded.",
+      "frameworks": ["CIS GCP Foundations Benchmark 6.3.x"],
+      "severity": "MEDIUM",
+      "title": "Cloud SQL instance should use a customer-managed encryption key",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_sql_database_instance",
+        "require": "encryption_key_name"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set encryption_key_name to a Cloud KMS CryptoKey on the google_sql_database_instance (CMEK can only be set at creation)."
+      },
+      "requiredActions": [
+        "Set encryption_key_name (a Cloud KMS key) on the google_sql_database_instance."
+      ]
+    },
+    {
+      "ruleId": "GCP_DNS_NO_RSASHA1",
+      "threat": "DNSSEC signing with the broken RSASHA1 algorithm lets an attacker who can forge signatures spoof DNS responses for the zone.",
+      "frameworks": ["CIS GCP Foundations Benchmark 3.4", "CIS GCP Foundations Benchmark 3.5"],
+      "severity": "MEDIUM",
+      "title": "DNS zone must not sign DNSSEC with RSASHA1",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_dns_managed_zone",
+        "forbid": "algorithm\\s*=\\s*\"rsasha1\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Use a stronger DNSSEC algorithm (e.g. rsasha256 or ecdsap256sha256) in default_key_specs on the google_dns_managed_zone."
+      },
+      "requiredActions": [
+        "Replace rsasha1 with rsasha256/ecdsap256sha256 in the DNSSEC key specs of the google_dns_managed_zone."
+      ]
+    },
+    {
+      "ruleId": "GCP_CLOUD_RUN_INGRESS_INTERNAL",
+      "threat": "A Cloud Run service that accepts all ingress is directly reachable from the internet, widening the attack surface beyond a load balancer or internal callers.",
+      "frameworks": ["CIS GCP Foundations Benchmark"],
+      "severity": "MEDIUM",
+      "title": "Cloud Run service should restrict ingress to internal/load-balancer",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_cloud_run_v2_service",
+        "require": "ingress\\s*=\\s*\"INGRESS_TRAFFIC_(INTERNAL_ONLY|INTERNAL_LOAD_BALANCER)\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set ingress = \"INGRESS_TRAFFIC_INTERNAL_ONLY\" (or INTERNAL_LOAD_BALANCER) on the google_cloud_run_v2_service unless it must be public."
+      },
+      "requiredActions": [
+        "Restrict ingress on the google_cloud_run_v2_service to internal or load-balancer traffic."
+      ]
+    },
+    {
+      "ruleId": "GCP_GKE_WORKLOAD_IDENTITY",
+      "threat": "Without Workload Identity, pods authenticate using the node service account or exported keys, so a compromised pod inherits broad node-level GCP permissions.",
+      "frameworks": ["CIS GCP Foundations Benchmark 7.12"],
+      "severity": "MEDIUM",
+      "title": "GKE cluster should enable Workload Identity",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_container_cluster",
+        "require": "workload_identity_config"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add workload_identity_config { workload_pool = \"<project>.svc.id.goog\" } to the google_container_cluster and bind KSAs to GSAs."
+      },
+      "requiredActions": [
+        "Enable workload_identity_config on the google_container_cluster so pods use scoped identities, not the node SA."
+      ]
+    },
+    {
+      "ruleId": "GCP_STORAGE_PUBLIC_ACCESS_PREVENTION",
+      "threat": "Without enforced public access prevention, a future IAM binding or ACL can grant allUsers/allAuthenticatedUsers and silently expose the bucket.",
+      "frameworks": ["CIS GCP Foundations Benchmark 5.1"],
+      "severity": "MEDIUM",
+      "title": "Storage bucket must enforce public access prevention",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_storage_bucket",
+        "require": "public_access_prevention\\s*=\\s*\"enforced\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "public_access_prevention": "\"enforced\""
+        }
+      },
+      "requiredActions": [
+        "Set public_access_prevention = \"enforced\" on the google_storage_bucket."
+      ]
+    },
+    {
+      "ruleId": "GCP_FUNCTION_NO_PUBLIC_INVOKER",
+      "threat": "A Cloud Function IAM binding granting roles/cloudfunctions.invoker to allUsers makes the function an unauthenticated internet endpoint reaching its service account.",
+      "frameworks": ["CIS GCP Foundations Benchmark"],
+      "severity": "HIGH",
+      "title": "Cloud Function must not grant invoker to allUsers",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_cloudfunctions2_function_iam_member",
+        "forbid": "member\\s*=\\s*\"all(Users|AuthenticatedUsers)\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Replace member = \"allUsers\"/\"allAuthenticatedUsers\" with specific user/service-account principals on the google_cloudfunctions2_function_iam_member."
+      },
+      "requiredActions": [
+        "Remove allUsers/allAuthenticatedUsers from the Cloud Function invoker binding; grant specific principals."
+      ]
+    },
+    {
+      "ruleId": "GCP_COMPUTE_NO_DEFAULT_SA_FULL_SCOPE",
+      "threat": "An instance running as the default Compute Engine service account with the cloud-platform scope grants any code on the VM full API access to the project. A single RCE becomes total project compromise.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.1"
+      ],
+      "severity": "HIGH",
+      "title": "Do not grant the cloud-platform scope to Compute instances",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_instance",
+        "forbid": "scopes\\s*=\\s*\\[[^\\]]*cloud-platform"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Attach a dedicated least-privilege service account and replace the broad cloud-platform scope with narrowly scoped OAuth scopes (or rely on IAM roles)."
+      },
+      "requiredActions": [
+        "Replace the cloud-platform scope on the instance service_account block with the minimal scopes the workload needs."
+      ]
+    },
+    {
+      "ruleId": "GCP_COMPUTE_INTEGRITY_MONITORING",
+      "threat": "Without integrity monitoring a rootkit or bootkit altering the VM boot sequence goes undetected, letting an attacker persist beneath the OS.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.8"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable Shielded VM integrity monitoring",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_instance",
+        "require": "enable_integrity_monitoring\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "shielded_instance_config.enable_integrity_monitoring": "true"
+        }
+      },
+      "requiredActions": [
+        "Set shielded_instance_config.enable_integrity_monitoring = true on the instance."
+      ]
+    },
+    {
+      "ruleId": "GCP_COMPUTE_NO_PROJECT_SSH_KEYS_METADATA",
+      "threat": "Adding SSH keys directly in instance metadata bypasses OS Login's IAM-based access control and audit logging, letting stale or shared keys grant lingering shell access.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.3"
+      ],
+      "severity": "MEDIUM",
+      "title": "Manage SSH access via OS Login, not metadata ssh-keys",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_instance",
+        "forbid": "ssh-keys\\s*="
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Remove the ssh-keys metadata entry and enable OS Login (enable-oslogin = TRUE) so access is governed by IAM."
+      },
+      "requiredActions": [
+        "Remove ssh-keys from instance metadata and rely on OS Login for SSH access."
+      ]
+    },
+    {
+      "ruleId": "GCP_COMPUTE_DELETION_PROTECTION",
+      "threat": "Without deletion protection an attacker or accidental Terraform run can destroy a production instance, causing data loss and outage.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.x"
+      ],
+      "severity": "LOW",
+      "title": "Enable deletion protection on Compute instances",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_instance",
+        "require": "deletion_protection\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "deletion_protection": "true"
+        }
+      },
+      "requiredActions": [
+        "Set deletion_protection = true on the instance."
+      ]
+    },
+    {
+      "ruleId": "GCP_FIREWALL_NO_OPEN_RDP",
+      "threat": "A firewall rule allowing 3389/tcp from 0.0.0.0/0 exposes RDP to the internet, inviting brute-force and BlueKeep-style exploitation.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 3.7"
+      ],
+      "severity": "HIGH",
+      "title": "Do not expose RDP (3389) to the internet",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_firewall",
+        "forbid": "\"3389\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Restrict source_ranges to trusted CIDRs or use IAP TCP forwarding instead of opening 3389 to 0.0.0.0/0."
+      },
+      "requiredActions": [
+        "Restrict the RDP firewall rule source_ranges to known administrative IPs or remove port 3389."
+      ]
+    },
+    {
+      "ruleId": "GCP_FIREWALL_LOGGING_ENABLED",
+      "threat": "Firewall rules without logging leave no record of allowed or denied connections, blinding incident responders to lateral movement and exfiltration attempts.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 3.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable logging on firewall rules",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_firewall",
+        "require": "log_config\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a log_config block with metadata = \"INCLUDE_ALL_METADATA\" to the firewall rule."
+      },
+      "requiredActions": [
+        "Add a log_config block to the firewall rule to enable connection logging."
+      ]
+    },
+    {
+      "ruleId": "GCP_FIREWALL_NO_BROAD_EGRESS",
+      "threat": "An egress allow rule to 0.0.0.0/0 lets a compromised instance exfiltrate data and reach command-and-control servers anywhere on the internet.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 3.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "Restrict unrestricted egress firewall rules",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_firewall",
+        "forbid": "direction\\s*=\\s*\"EGRESS\"[\\s\\S]*0\\.0\\.0\\.0/0"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Scope egress destination_ranges to required destinations rather than 0.0.0.0/0."
+      },
+      "requiredActions": [
+        "Limit the egress firewall rule destination_ranges to required CIDRs."
+      ]
+    },
+    {
+      "ruleId": "GCP_SUBNETWORK_PRIVATE_GOOGLE_ACCESS",
+      "threat": "Without Private Google Access, VMs without external IPs cannot reach Google APIs privately, pushing operators to attach public IPs and widening the attack surface.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 3.x"
+      ],
+      "severity": "LOW",
+      "title": "Enable Private Google Access on subnets",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_subnetwork",
+        "require": "private_ip_google_access\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "private_ip_google_access": "true"
+        }
+      },
+      "requiredActions": [
+        "Set private_ip_google_access = true on the subnetwork."
+      ]
+    },
+    {
+      "ruleId": "GCP_SSL_POLICY_MODERN_OR_RESTRICTED",
+      "threat": "A COMPATIBLE or custom SSL policy permits weak ciphers and old TLS, enabling downgrade and decryption attacks against traffic to load balancers.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 3.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "Use a MODERN or RESTRICTED SSL policy profile",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_ssl_policy",
+        "forbid": "profile\\s*=\\s*\"COMPATIBLE\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "profile": "\"RESTRICTED\""
+        }
+      },
+      "requiredActions": [
+        "Set the SSL policy profile to MODERN or RESTRICTED."
+      ]
+    },
+    {
+      "ruleId": "GCP_SSL_POLICY_MIN_TLS_12",
+      "threat": "An SSL policy allowing TLS 1.0/1.1 leaves load-balanced services open to POODLE, BEAST, and protocol-downgrade attacks.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 3.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "Require a minimum TLS version of 1.2 on SSL policies",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_ssl_policy",
+        "forbid": "min_tls_version\\s*=\\s*\"TLS_1_0\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "min_tls_version": "\"TLS_1_2\""
+        }
+      },
+      "requiredActions": [
+        "Set min_tls_version = \"TLS_1_2\" on the SSL policy."
+      ]
+    },
+    {
+      "ruleId": "GCP_TARGET_HTTPS_PROXY_SSL_POLICY",
+      "threat": "A target HTTPS proxy without an attached SSL policy falls back to permissive defaults, allowing weak TLS negotiation with clients.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 3.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "Attach an SSL policy to target HTTPS proxies",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_target_https_proxy",
+        "require": "ssl_policy\\s*="
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Reference a hardened google_compute_ssl_policy via the ssl_policy argument."
+      },
+      "requiredActions": [
+        "Set ssl_policy on the target HTTPS proxy to a MODERN/RESTRICTED policy."
+      ]
+    },
+    {
+      "ruleId": "GCP_BACKEND_SERVICE_CLOUD_ARMOR",
+      "threat": "A backend service without a Cloud Armor security policy has no WAF or DDoS layer, leaving applications exposed to L7 floods and injection attacks.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 3.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "Attach a Cloud Armor security policy to backend services",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_backend_service",
+        "require": "security_policy\\s*="
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Reference a google_compute_security_policy via the security_policy argument."
+      },
+      "requiredActions": [
+        "Set security_policy on the backend service to a Cloud Armor policy."
+      ]
+    },
+    {
+      "ruleId": "GCP_BACKEND_SERVICE_LOGGING",
+      "threat": "Backend services without logging provide no visibility into request patterns, hampering detection of scraping, abuse, and exploitation.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 3.x"
+      ],
+      "severity": "LOW",
+      "title": "Enable logging on backend services",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_backend_service",
+        "require": "log_config\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a log_config block with enable = true and an appropriate sample_rate."
+      },
+      "requiredActions": [
+        "Add a log_config block with enable = true to the backend service."
+      ]
+    },
+    {
+      "ruleId": "GCP_ROUTER_NAT_LOGGING",
+      "threat": "Cloud NAT without logging hides outbound connections from compromised instances, eliminating a key exfiltration and C2 detection signal.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 3.x"
+      ],
+      "severity": "LOW",
+      "title": "Enable Cloud NAT logging",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_router_nat",
+        "require": "log_config\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a log_config block with enable = true and filter = \"ALL\"."
+      },
+      "requiredActions": [
+        "Add a log_config block to the Cloud NAT with enable = true."
+      ]
+    },
+    {
+      "ruleId": "GCP_DNS_POLICY_LOGGING",
+      "threat": "DNS policies without query logging miss the DNS-based exfiltration and tunneling signals that often reveal compromised workloads.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 2.12"
+      ],
+      "severity": "LOW",
+      "title": "Enable DNS query logging on DNS policies",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_dns_policy",
+        "require": "enable_logging\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "enable_logging": "true"
+        }
+      },
+      "requiredActions": [
+        "Set enable_logging = true on the DNS policy."
+      ]
+    },
+    {
+      "ruleId": "GCP_GKE_LOGGING_SERVICE",
+      "threat": "A GKE cluster with logging disabled loses audit and container logs, blinding responders to in-cluster attacks and lateral movement.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable Cloud Logging on GKE clusters",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_container_cluster",
+        "forbid": "logging_service\\s*=\\s*\"none\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "logging_service": "\"logging.googleapis.com/kubernetes\""
+        }
+      },
+      "requiredActions": [
+        "Set logging_service to logging.googleapis.com/kubernetes (or configure logging_config)."
+      ]
+    },
+    {
+      "ruleId": "GCP_GKE_MONITORING_SERVICE",
+      "threat": "Disabling GKE monitoring removes metric-based anomaly detection, letting cryptominers and runaway compromised pods go unnoticed.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.x"
+      ],
+      "severity": "LOW",
+      "title": "Enable Cloud Monitoring on GKE clusters",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_container_cluster",
+        "forbid": "monitoring_service\\s*=\\s*\"none\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "monitoring_service": "\"monitoring.googleapis.com/kubernetes\""
+        }
+      },
+      "requiredActions": [
+        "Set monitoring_service to monitoring.googleapis.com/kubernetes (or configure monitoring_config)."
+      ]
+    },
+    {
+      "ruleId": "GCP_GKE_CONFIDENTIAL_NODES",
+      "threat": "Without Confidential GKE nodes, in-memory data is unencrypted and readable by a host-level attacker or malicious insider with hypervisor access.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable Confidential Nodes on GKE clusters",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_container_cluster",
+        "require": "confidential_nodes\\s*\\{[^}]*enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a confidential_nodes block with enabled = true (requires N2D/C2D machine types)."
+      },
+      "requiredActions": [
+        "Add confidential_nodes { enabled = true } to the cluster."
+      ]
+    },
+    {
+      "ruleId": "GCP_GKE_SECURITY_POSTURE",
+      "threat": "Without security posture scanning, GKE workload misconfigurations and known-vulnerable images deploy unflagged, expanding the cluster attack surface.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.x"
+      ],
+      "severity": "LOW",
+      "title": "Enable GKE security posture config",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_container_cluster",
+        "require": "security_posture_config\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a security_posture_config block with mode = \"BASIC\" and vulnerability_mode set."
+      },
+      "requiredActions": [
+        "Add a security_posture_config block to the cluster."
+      ]
+    },
+    {
+      "ruleId": "GCP_GKE_NODE_WORKLOAD_METADATA_GKE",
+      "threat": "Node pools exposing the legacy metadata endpoints let a compromised pod read the node's service-account token and bootstrap credentials, escalating to cluster takeover.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.x"
+      ],
+      "severity": "HIGH",
+      "title": "Use GKE_METADATA workload metadata mode on node pools",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_container_node_pool",
+        "require": "mode\\s*=\\s*\"GKE_METADATA\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set workload_metadata_config { mode = \"GKE_METADATA\" } so Workload Identity shields the node metadata server."
+      },
+      "requiredActions": [
+        "Set workload_metadata_config mode to GKE_METADATA on the node pool."
+      ]
+    },
+    {
+      "ruleId": "GCP_GKE_NODE_GVISOR_SANDBOX",
+      "threat": "Untrusted workloads on a node pool without gVisor share the host kernel, so a container-escape exploit reaches the node and other tenants.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.x"
+      ],
+      "severity": "LOW",
+      "title": "Enable gVisor sandboxing for untrusted node pools",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_container_node_pool",
+        "require": "sandbox_config\\s*\\{[^}]*sandbox_type\\s*=\\s*\"gvisor\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add sandbox_config { sandbox_type = \"gvisor\" } for node pools running untrusted code."
+      },
+      "requiredActions": [
+        "Add sandbox_config { sandbox_type = \"gvisor\" } to node pools running untrusted workloads."
+      ]
+    },
+    {
+      "ruleId": "GCP_GKE_NODE_INTEGRITY_MONITORING",
+      "threat": "GKE nodes without integrity monitoring cannot detect boot-level tampering, allowing a node rootkit to persist and harvest secrets.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable integrity monitoring on GKE node pools",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_container_node_pool",
+        "require": "enable_integrity_monitoring\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "shielded_instance_config.enable_integrity_monitoring": "true"
+        }
+      },
+      "requiredActions": [
+        "Set shielded_instance_config.enable_integrity_monitoring = true on the node pool."
+      ]
+    },
+    {
+      "ruleId": "GCP_GKE_NODE_NO_DEFAULT_SA",
+      "threat": "Node pools using the default Compute service account inherit broad project permissions, so a single pod compromise can pivot across the project.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.17"
+      ],
+      "severity": "HIGH",
+      "title": "Assign a dedicated least-privilege service account to node pools",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_container_node_pool",
+        "require": "service_account\\s*="
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set node_config.service_account to a custom least-privilege service account instead of the default."
+      },
+      "requiredActions": [
+        "Set a dedicated minimal service_account in the node pool node_config."
+      ]
+    },
+    {
+      "ruleId": "GCP_SQL_LOG_CONNECTIONS",
+      "threat": "Without log_connections, successful and failed Postgres logins are unrecorded, removing the audit trail needed to spot credential-stuffing and unauthorized access.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 6.2.x"
+      ],
+      "severity": "LOW",
+      "title": "Enable Postgres log_connections on Cloud SQL",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_sql_database_instance",
+        "require": "name\\s*=\\s*\"log_connections\"[\\s\\S]*value\\s*=\\s*\"on\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a database_flags block { name = \"log_connections\" value = \"on\" }."
+      },
+      "requiredActions": [
+        "Add the log_connections=on database flag to the Cloud SQL instance."
+      ]
+    },
+    {
+      "ruleId": "GCP_SQL_LOG_DISCONNECTIONS",
+      "threat": "Without log_disconnections, session end times are missing, making it hard to reconstruct an attacker's session duration during incident response.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 6.2.x"
+      ],
+      "severity": "LOW",
+      "title": "Enable Postgres log_disconnections on Cloud SQL",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_sql_database_instance",
+        "require": "name\\s*=\\s*\"log_disconnections\"[\\s\\S]*value\\s*=\\s*\"on\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a database_flags block { name = \"log_disconnections\" value = \"on\" }."
+      },
+      "requiredActions": [
+        "Add the log_disconnections=on database flag to the Cloud SQL instance."
+      ]
+    },
+    {
+      "ruleId": "GCP_SQL_LOG_CHECKPOINTS",
+      "threat": "Disabled log_checkpoints reduces operational forensic data, weakening the ability to correlate database activity during an investigation.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 6.2.x"
+      ],
+      "severity": "LOW",
+      "title": "Enable Postgres log_checkpoints on Cloud SQL",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_sql_database_instance",
+        "require": "name\\s*=\\s*\"log_checkpoints\"[\\s\\S]*value\\s*=\\s*\"on\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a database_flags block { name = \"log_checkpoints\" value = \"on\" }."
+      },
+      "requiredActions": [
+        "Add the log_checkpoints=on database flag to the Cloud SQL instance."
+      ]
+    },
+    {
+      "ruleId": "GCP_SQL_LOG_LOCK_WAITS",
+      "threat": "Without log_lock_waits, lock contention from injection-driven or abusive queries goes unlogged, masking denial-of-service patterns.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 6.2.x"
+      ],
+      "severity": "LOW",
+      "title": "Enable Postgres log_lock_waits on Cloud SQL",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_sql_database_instance",
+        "require": "name\\s*=\\s*\"log_lock_waits\"[\\s\\S]*value\\s*=\\s*\"on\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a database_flags block { name = \"log_lock_waits\" value = \"on\" }."
+      },
+      "requiredActions": [
+        "Add the log_lock_waits=on database flag to the Cloud SQL instance."
+      ]
+    },
+    {
+      "ruleId": "GCP_SQL_LOG_MIN_MESSAGES",
+      "threat": "An overly permissive log_min_messages setting can suppress warning-level events that reveal probing or misuse of the database.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 6.2.x"
+      ],
+      "severity": "LOW",
+      "title": "Set Postgres log_min_messages appropriately on Cloud SQL",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_sql_database_instance",
+        "require": "name\\s*=\\s*\"log_min_messages\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a database_flags block { name = \"log_min_messages\" value = \"warning\" } or stricter."
+      },
+      "requiredActions": [
+        "Add the log_min_messages database flag set to warning or stricter."
+      ]
+    },
+    {
+      "ruleId": "GCP_SQL_CONTAINED_DB_AUTH_OFF",
+      "threat": "Contained database authentication on SQL Server lets users authenticate without a server login, enabling lateral movement between databases and bypassing central control.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 6.3.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable contained database authentication on Cloud SQL Server",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_sql_database_instance",
+        "forbid": "name\\s*=\\s*\"contained database authentication\"[\\s\\S]*value\\s*=\\s*\"on\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set the 'contained database authentication' database flag to off."
+      },
+      "requiredActions": [
+        "Set the 'contained database authentication' flag to off on the SQL Server instance."
+      ]
+    },
+    {
+      "ruleId": "GCP_SQL_CROSS_DB_OWNERSHIP_OFF",
+      "threat": "Cross db ownership chaining lets an attacker who controls one database escalate privileges into others sharing an owner, breaking database isolation.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 6.3.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable cross db ownership chaining on Cloud SQL Server",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_sql_database_instance",
+        "forbid": "name\\s*=\\s*\"cross db ownership chaining\"[\\s\\S]*value\\s*=\\s*\"on\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set the 'cross db ownership chaining' database flag to off."
+      },
+      "requiredActions": [
+        "Set the 'cross db ownership chaining' flag to off on the SQL Server instance."
+      ]
+    },
+    {
+      "ruleId": "GCP_SQL_LOCAL_INFILE_OFF",
+      "threat": "MySQL local_infile lets clients read server-side files, which an attacker exploiting SQL injection can abuse to exfiltrate arbitrary files from the host.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 6.1.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable local_infile on Cloud SQL MySQL",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_sql_database_instance",
+        "forbid": "name\\s*=\\s*\"local_infile\"[\\s\\S]*value\\s*=\\s*\"on\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set the local_infile database flag to off."
+      },
+      "requiredActions": [
+        "Set the local_infile flag to off on the MySQL instance."
+      ]
+    },
+    {
+      "ruleId": "GCP_SQL_SKIP_SHOW_DATABASE_ON",
+      "threat": "Without skip_show_database, any MySQL user can enumerate all database names, giving an attacker a map of targets for further compromise.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 6.1.x"
+      ],
+      "severity": "LOW",
+      "title": "Enable skip_show_database on Cloud SQL MySQL",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_sql_database_instance",
+        "require": "name\\s*=\\s*\"skip_show_database\"[\\s\\S]*value\\s*=\\s*\"on\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a database_flags block { name = \"skip_show_database\" value = \"on\" }."
+      },
+      "requiredActions": [
+        "Add the skip_show_database=on database flag to the MySQL instance."
+      ]
+    },
+    {
+      "ruleId": "GCP_SQL_NO_DELETE_PROTECTION_DISABLED",
+      "threat": "With deletion protection off, an attacker with API access or an errant Terraform apply can permanently destroy the production database.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 6.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable deletion protection on Cloud SQL instances",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_sql_database_instance",
+        "require": "deletion_protection\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "deletion_protection": "true"
+        }
+      },
+      "requiredActions": [
+        "Set deletion_protection = true on the Cloud SQL instance."
+      ]
+    },
+    {
+      "ruleId": "GCP_STORAGE_RETENTION_POLICY",
+      "threat": "Buckets without a retention policy allow an attacker who gains write access to overwrite or delete objects, defeating ransomware recovery and tamper-evidence.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 5.x"
+      ],
+      "severity": "LOW",
+      "title": "Configure a retention policy on storage buckets",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_storage_bucket",
+        "require": "retention_policy\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a retention_policy block with an appropriate retention_period for immutable data."
+      },
+      "requiredActions": [
+        "Add a retention_policy block to the bucket where immutability is required."
+      ]
+    },
+    {
+      "ruleId": "GCP_KMS_CRYPTO_KEY_HSM",
+      "threat": "Software-protected KMS keys are more exposed than HSM-backed keys; an attacker with sufficient access has a larger window to extract or misuse high-value keys.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 1.x"
+      ],
+      "severity": "LOW",
+      "title": "Use HSM protection level for sensitive KMS keys",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_kms_crypto_key",
+        "require": "protection_level\\s*=\\s*\"HSM\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set version_template { protection_level = \"HSM\" } for high-value keys."
+      },
+      "requiredActions": [
+        "Set protection_level = \"HSM\" in the key's version_template for sensitive keys."
+      ]
+    },
+    {
+      "ruleId": "GCP_KMS_CRYPTO_KEY_DESTROY_DURATION",
+      "threat": "A short destroy_scheduled_duration shrinks the recovery window, so an attacker who initiates key destruction can render data unrecoverable before defenders react.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 1.x"
+      ],
+      "severity": "LOW",
+      "title": "Set an adequate destroy scheduled duration on KMS keys",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_kms_crypto_key",
+        "require": "destroy_scheduled_duration\\s*="
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set destroy_scheduled_duration to at least 86400s (24h) to retain a recovery window."
+      },
+      "requiredActions": [
+        "Set destroy_scheduled_duration to an adequate value (e.g. 86400s) on the crypto key."
+      ]
+    },
+    {
+      "ruleId": "GCP_SECRET_MANAGER_ROTATION",
+      "threat": "Secrets without automatic rotation stay valid indefinitely, so a leaked credential remains usable to an attacker long after exposure.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 1.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "Configure rotation on Secret Manager secrets",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_secret_manager_secret",
+        "require": "rotation\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a rotation block with rotation_period and a topics notification target."
+      },
+      "requiredActions": [
+        "Add a rotation block to the Secret Manager secret."
+      ]
+    },
+    {
+      "ruleId": "GCP_SECRET_MANAGER_EXPIRE_TIME",
+      "threat": "Secrets without an expiry persist forever, increasing the chance an old, leaked secret is still accepted by services.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 1.x"
+      ],
+      "severity": "LOW",
+      "title": "Set an expiry on ephemeral Secret Manager secrets",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_secret_manager_secret",
+        "require": "expire_time\\s*=|ttl\\s*="
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set expire_time or ttl on short-lived secrets so they auto-expire."
+      },
+      "requiredActions": [
+        "Set expire_time or ttl on ephemeral Secret Manager secrets."
+      ]
+    },
+    {
+      "ruleId": "GCP_PROJECT_AUDIT_DATA_ACCESS_LOGS",
+      "threat": "Without DATA_READ/DATA_WRITE audit logging, reads and writes to sensitive resources go unrecorded, so data exfiltration leaves no trace.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 2.1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable Data Access audit logging",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_project_iam_audit_config",
+        "require": "DATA_READ|DATA_WRITE"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add audit_log_config blocks for DATA_READ and DATA_WRITE log types covering allServices."
+      },
+      "requiredActions": [
+        "Add DATA_READ and DATA_WRITE audit_log_config blocks to the audit config."
+      ]
+    },
+    {
+      "ruleId": "GCP_PROJECT_AUDIT_NO_EXEMPTED_MEMBERS",
+      "threat": "Exempting members from audit logging creates blind spots an insider or attacker can hide activity behind.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 2.1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Do not exempt members from audit logging",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_project_iam_audit_config",
+        "forbid": "exempted_members\\s*="
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Remove exempted_members so all principals are subject to audit logging."
+      },
+      "requiredActions": [
+        "Remove exempted_members from the audit_log_config blocks."
+      ]
+    },
+    {
+      "ruleId": "GCP_PUBSUB_TOPIC_MESSAGE_RETENTION",
+      "threat": "Topics without message retention cannot replay events for forensic review after an incident, losing evidence of malicious or anomalous messages.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 1.x"
+      ],
+      "severity": "LOW",
+      "title": "Configure message retention on Pub/Sub topics",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_pubsub_topic",
+        "require": "message_retention_duration\\s*="
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set message_retention_duration on the topic to retain messages for replay/forensics."
+      },
+      "requiredActions": [
+        "Set message_retention_duration on the Pub/Sub topic."
+      ]
+    },
+    {
+      "ruleId": "GCP_PUBSUB_SUBSCRIPTION_NOT_PUBLIC",
+      "threat": "Granting allUsers or allAuthenticatedUsers on a subscription lets anyone consume messages, exposing potentially sensitive event data.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 1.x"
+      ],
+      "severity": "HIGH",
+      "title": "Do not grant public access to Pub/Sub subscriptions",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_pubsub_subscription_iam_member",
+        "forbid": "allUsers|allAuthenticatedUsers"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Replace allUsers/allAuthenticatedUsers with specific service accounts or groups."
+      },
+      "requiredActions": [
+        "Remove allUsers/allAuthenticatedUsers bindings from the subscription IAM member."
+      ]
+    },
+    {
+      "ruleId": "GCP_REDIS_TRANSIT_ENCRYPTION",
+      "threat": "A Memorystore Redis instance without in-transit encryption sends cache data in cleartext, letting a network attacker sniff or tamper with cached secrets and sessions.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 1.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable in-transit encryption on Memorystore Redis",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_redis_instance",
+        "require": "transit_encryption_mode\\s*=\\s*\"SERVER_AUTHENTICATION\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "transit_encryption_mode": "\"SERVER_AUTHENTICATION\""
+        }
+      },
+      "requiredActions": [
+        "Set transit_encryption_mode = \"SERVER_AUTHENTICATION\" on the Redis instance."
+      ]
+    },
+    {
+      "ruleId": "GCP_REDIS_PRIVATE_SERVICE_ACCESS",
+      "threat": "A Redis instance in DIRECT_PEERING or with a public-facing connect mode is more exposed than one using PRIVATE_SERVICE_ACCESS, widening reachability for attackers.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 1.x"
+      ],
+      "severity": "LOW",
+      "title": "Use PRIVATE_SERVICE_ACCESS connect mode for Memorystore Redis",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_redis_instance",
+        "require": "connect_mode\\s*=\\s*\"PRIVATE_SERVICE_ACCESS\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "connect_mode": "\"PRIVATE_SERVICE_ACCESS\""
+        }
+      },
+      "requiredActions": [
+        "Set connect_mode = \"PRIVATE_SERVICE_ACCESS\" on the Redis instance."
+      ]
+    },
+    {
+      "ruleId": "GCP_BIGQUERY_TABLE_CMEK",
+      "threat": "BigQuery tables without customer-managed encryption rely solely on Google-managed keys, removing the customer's ability to revoke access by disabling the key during a breach.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.x"
+      ],
+      "severity": "LOW",
+      "title": "Use CMEK on BigQuery tables",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_bigquery_table",
+        "require": "encryption_configuration\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add an encryption_configuration block with kms_key_name set to a customer-managed key."
+      },
+      "requiredActions": [
+        "Add encryption_configuration with kms_key_name to the BigQuery table."
+      ]
+    },
+    {
+      "ruleId": "GCP_DATAFLOW_NO_PUBLIC_IP",
+      "threat": "Dataflow workers with public IPs are directly reachable from the internet, exposing the job's processing nodes to network attacks.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable public IPs on Dataflow jobs",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_dataflow_job",
+        "require": "ip_configuration\\s*=\\s*\"WORKER_IP_PRIVATE\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "ip_configuration": "\"WORKER_IP_PRIVATE\""
+        }
+      },
+      "requiredActions": [
+        "Set ip_configuration = \"WORKER_IP_PRIVATE\" on the Dataflow job."
+      ]
+    },
+    {
+      "ruleId": "GCP_DATAPROC_SHIELDED_VM",
+      "threat": "Dataproc clusters without Shielded VM config lack secure boot and vTPM protections, exposing cluster nodes to boot-level tampering.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.x"
+      ],
+      "severity": "LOW",
+      "title": "Enable Shielded VM config on Dataproc clusters",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_dataproc_cluster",
+        "require": "shielded_instance_config\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a shielded_instance_config block enabling secure boot, vTPM, and integrity monitoring."
+      },
+      "requiredActions": [
+        "Add a shielded_instance_config block to the Dataproc cluster gce_cluster_config."
+      ]
+    },
+    {
+      "ruleId": "GCP_CLOUDFUNCTIONS_VPC_CONNECTOR",
+      "threat": "A Cloud Function without a VPC connector egresses over the public internet, preventing private routing and exposing outbound traffic to interception.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.x"
+      ],
+      "severity": "LOW",
+      "title": "Route Cloud Functions egress through a VPC connector",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_cloudfunctions_function",
+        "require": "vpc_connector\\s*="
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set vpc_connector to a Serverless VPC Access connector for private egress."
+      },
+      "requiredActions": [
+        "Set vpc_connector on the Cloud Function for private VPC egress."
+      ]
+    },
+    {
+      "ruleId": "GCP_CLOUDFUNCTIONS_NO_PUBLIC_INVOKER",
+      "threat": "Granting allUsers the invoker role on a 1st-gen Cloud Function makes it publicly invocable, exposing the function logic and any downstream access to anyone.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.x"
+      ],
+      "severity": "HIGH",
+      "title": "Do not allow public invocation of Cloud Functions",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_cloudfunctions_function_iam_member",
+        "forbid": "allUsers|allAuthenticatedUsers"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Replace allUsers/allAuthenticatedUsers with specific authenticated principals."
+      },
+      "requiredActions": [
+        "Remove allUsers/allAuthenticatedUsers from the function invoker IAM member."
+      ]
+    },
+    {
+      "ruleId": "GCP_STORAGE_BUCKET_IAM_NOT_PUBLIC",
+      "threat": "Binding allUsers or allAuthenticatedUsers to a storage bucket exposes its objects to the entire internet, the classic GCS data-leak vector.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 5.1"
+      ],
+      "severity": "CRITICAL",
+      "title": "Do not grant public access to storage buckets",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_storage_bucket_iam_member",
+        "forbid": "allUsers|allAuthenticatedUsers"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Remove allUsers/allAuthenticatedUsers bindings and grant access to specific principals."
+      },
+      "requiredActions": [
+        "Remove allUsers/allAuthenticatedUsers from the bucket IAM member binding."
+      ]
+    },
+    {
+      "ruleId": "GCP_BIGQUERY_DATASET_IAM_NOT_PUBLIC",
+      "threat": "Public IAM bindings on a BigQuery dataset let anyone query potentially sensitive analytics data.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.x"
+      ],
+      "severity": "HIGH",
+      "title": "Do not grant public access to BigQuery datasets via IAM",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_bigquery_dataset_iam_member",
+        "forbid": "allUsers|allAuthenticatedUsers"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Remove allUsers/allAuthenticatedUsers and grant dataset access to specific principals."
+      },
+      "requiredActions": [
+        "Remove public members from the BigQuery dataset IAM member binding."
+      ]
+    },
+    {
+      "ruleId": "GCP_PROJECT_IAM_NO_SA_USER_PRIMITIVE",
+      "threat": "Granting primitive owner/editor roles at the project level via binding gives broad standing access that an attacker can abuse for full project control.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 1.x"
+      ],
+      "severity": "HIGH",
+      "title": "Avoid primitive roles in project IAM bindings",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_project_iam_binding",
+        "forbid": "\"roles/owner\"|\"roles/editor\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Replace roles/owner and roles/editor with granular predefined or custom roles."
+      },
+      "requiredActions": [
+        "Replace primitive roles in the project IAM binding with least-privilege roles."
+      ]
+    },
+    {
+      "ruleId": "GCP_SPANNER_DELETION_PROTECTION",
+      "threat": "A Spanner database without deletion protection can be destroyed by a compromised credential or stray Terraform apply, causing irreversible data loss.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 1.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable deletion protection on Spanner databases",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_spanner_database",
+        "require": "deletion_protection\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "deletion_protection": "true"
+        }
+      },
+      "requiredActions": [
+        "Set deletion_protection = true on the Spanner database."
+      ]
+    },
+    {
+      "ruleId": "GCP_BIGTABLE_DELETION_PROTECTION",
+      "threat": "A Bigtable instance without deletion protection can be wiped by an attacker or accidental destroy, losing all stored data.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 1.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable deletion protection on Bigtable instances",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_bigtable_instance",
+        "require": "deletion_protection\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "deletion_protection": "true"
+        }
+      },
+      "requiredActions": [
+        "Set deletion_protection = true on the Bigtable instance."
+      ]
+    },
+    {
+      "ruleId": "GCP_COMPUTE_DISK_NO_PUBLIC_IMAGE_SHARING",
+      "threat": "A disk image granted to allAuthenticatedUsers is downloadable by any Google account, leaking baked-in secrets, code, and credentials.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.x"
+      ],
+      "severity": "HIGH",
+      "title": "Do not share Compute images publicly",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_image_iam_member",
+        "forbid": "allUsers|allAuthenticatedUsers"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Remove allUsers/allAuthenticatedUsers from the image IAM binding and share with specific principals only."
+      },
+      "requiredActions": [
+        "Remove public members from the Compute image IAM member binding."
+      ]
+    },
+    {
+      "ruleId": "GCP_KMS_KEYRING_IAM_NOT_PUBLIC",
+      "threat": "Public IAM on a KMS key ring lets anyone use the contained keys to encrypt/decrypt, breaking the confidentiality of every object protected by those keys.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 1.x"
+      ],
+      "severity": "CRITICAL",
+      "title": "Do not grant public access to KMS key rings",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_kms_key_ring_iam_member",
+        "forbid": "allUsers|allAuthenticatedUsers"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Remove allUsers/allAuthenticatedUsers from the key ring IAM binding."
+      },
+      "requiredActions": [
+        "Remove public members from the KMS key ring IAM member binding."
+      ]
+    },
+    {
+      "ruleId": "GCP_FILESTORE_CMEK",
+      "threat": "A Filestore instance without CMEK relies only on Google-managed keys, removing the customer's ability to revoke data access by disabling a key during a breach.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 1.x"
+      ],
+      "severity": "LOW",
+      "title": "Use CMEK on Filestore instances",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_filestore_instance",
+        "require": "kms_key_name\\s*="
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "kms_key_name": "\"projects/PROJECT/locations/LOCATION/keyRings/RING/cryptoKeys/KEY\""
+        }
+      },
+      "requiredActions": [
+        "Set kms_key_name on the Filestore instance to a customer-managed key."
+      ]
+    },
+    {
+      "ruleId": "GCP_PUBSUB_SUBSCRIPTION_CMEK_TOPIC",
+      "threat": "Vertex AI featurestores without CMEK depend solely on Google-managed encryption, removing the key-revocation control during incident response.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 1.x"
+      ],
+      "severity": "LOW",
+      "title": "Use CMEK on Vertex AI featurestores",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_vertex_ai_featurestore",
+        "require": "encryption_spec\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add an encryption_spec block with kms_key_name referencing a customer-managed key."
+      },
+      "requiredActions": [
+        "Add encryption_spec with kms_key_name to the Vertex AI featurestore."
+      ]
+    },
+    {
+      "ruleId": "GCP_COMPUTE_INSTANCE_TEMPLATE_SHIELDED",
+      "threat": "Instance templates without Shielded VM config propagate insecure boot settings to every VM in a managed instance group, scaling the boot-tampering risk fleet-wide.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.8"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable Shielded VM secure boot in instance templates",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_instance_template",
+        "require": "enable_secure_boot\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "shielded_instance_config.enable_secure_boot": "true"
+        }
+      },
+      "requiredActions": [
+        "Set shielded_instance_config.enable_secure_boot = true in the instance template."
+      ]
+    },
+    {
+      "ruleId": "GCP_COMPUTE_INSTANCE_TEMPLATE_NO_PUBLIC_IP",
+      "threat": "An instance template with an access_config block assigns public IPs to every VM in the group, exposing the whole fleet directly to the internet.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.9"
+      ],
+      "severity": "MEDIUM",
+      "title": "Do not assign public IPs in instance templates",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_instance_template",
+        "forbid": "access_config\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Remove the access_config block so VMs created from the template have no external IP."
+      },
+      "requiredActions": [
+        "Remove the access_config block from the instance template network_interface."
+      ]
+    },
+    {
+      "ruleId": "GCP_BIGQUERY_DATASET_DELETE_CONTENTS",
+      "threat": "delete_contents_on_destroy lets a single Terraform destroy wipe every table in the dataset, turning an accidental or malicious apply into total data loss.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "Do not enable delete_contents_on_destroy on BigQuery datasets",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_bigquery_dataset",
+        "forbid": "delete_contents_on_destroy\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "delete_contents_on_destroy": "false"
+        }
+      },
+      "requiredActions": [
+        "Set delete_contents_on_destroy = false on the BigQuery dataset."
+      ]
+    },
+    {
+      "ruleId": "GCP_GKE_DNS_CACHE",
+      "threat": "Vertex AI workbench instances reachable over a public IP expose notebook environments and attached credentials to internet-borne attacks.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable public IP on Vertex AI Workbench instances",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_workbench_instance",
+        "require": "disable_public_ip\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set gce_setup.disable_public_ip = true on the Workbench instance."
+      },
+      "requiredActions": [
+        "Set disable_public_ip = true on the Vertex AI Workbench instance."
+      ]
+    },
+    {
+      "ruleId": "GCP_COMPUTE_SECURITY_POLICY_DEFAULT_DENY",
+      "threat": "A Cloud Armor security policy whose default rule allows all traffic provides no baseline protection; only explicitly blocked patterns are stopped, leaving everything else through.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 3.x"
+      ],
+      "severity": "LOW",
+      "title": "Avoid default-allow on Cloud Armor security policies",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_security_policy",
+        "require": "rule\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Define explicit rules (including a default rule with appropriate action) on the security policy."
+      },
+      "requiredActions": [
+        "Define explicit rules with a restrictive default action on the Cloud Armor security policy."
+      ]
+    },
+    {
+      "ruleId": "GCP_SQL_LOG_MIN_DURATION_DISABLED",
+      "threat": "Setting log_min_duration_statement to 0 logs every query including those containing sensitive parameters, which can leak secrets into logs an attacker may read.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 6.2.x"
+      ],
+      "severity": "LOW",
+      "title": "Do not log all statements via log_min_duration_statement=0 on Cloud SQL",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_sql_database_instance",
+        "forbid": "name\\s*=\\s*\"log_min_duration_statement\"[\\s\\S]*value\\s*=\\s*\"0\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set log_min_duration_statement to -1 (disabled) or a positive threshold rather than 0."
+      },
+      "requiredActions": [
+        "Set the log_min_duration_statement flag to -1 or a positive value, not 0."
+      ]
+    },
+    {
+      "ruleId": "GCP_DATAPROC_KERBEROS",
+      "threat": "Dataproc clusters without Kerberos lack strong authentication between Hadoop components, allowing an attacker on the network to impersonate services and access data.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.x"
+      ],
+      "severity": "LOW",
+      "title": "Enable Kerberos on Dataproc clusters",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_dataproc_cluster",
+        "require": "kerberos_config\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a security_config.kerberos_config block to enable Kerberos authentication."
+      },
+      "requiredActions": [
+        "Add a kerberos_config block under security_config on the Dataproc cluster."
+      ]
+    },
+    {
+      "ruleId": "GCP_GKE_INSECURE_KUBELET_READONLY_PORT",
+      "threat": "A node pool exposing the kubelet read-only port (10255) lets any pod or local attacker read node and pod metadata without authentication, aiding reconnaissance and escalation.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable the kubelet read-only port on GKE node pools",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_container_node_pool",
+        "forbid": "insecure_kubelet_readonly_port_enabled\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "kubelet_config.insecure_kubelet_readonly_port_enabled": "false"
+        }
+      },
+      "requiredActions": [
+        "Set kubelet_config.insecure_kubelet_readonly_port_enabled = false on the node pool."
+      ]
+    },
+    {
+      "ruleId": "GCP_CLOUD_RUN_V2_NO_DEFAULT_SA",
+      "threat": "A Cloud Run service that omits a dedicated service account runs as the default Compute SA with broad project permissions, so a code-exec bug becomes project-wide compromise.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "Assign a dedicated service account to Cloud Run services",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_cloud_run_v2_service",
+        "require": "service_account\\s*="
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set template.service_account to a dedicated least-privilege service account."
+      },
+      "requiredActions": [
+        "Set a dedicated service_account on the Cloud Run v2 service template."
+      ]
+    },
+    {
+      "ruleId": "GCP_COMPUTE_FIREWALL_NO_OPEN_ALL_PORTS",
+      "threat": "A firewall rule allowing all protocols (all) from 0.0.0.0/0 effectively disables the perimeter, exposing every port on targeted instances to the internet.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 3.x"
+      ],
+      "severity": "CRITICAL",
+      "title": "Do not allow all protocols from the internet in firewall rules",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_firewall",
+        "forbid": "protocol\\s*=\\s*\"all\"[\\s\\S]*0\\.0\\.0\\.0/0"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Replace the protocol = \"all\" allow rule with specific protocols/ports and restricted source_ranges."
+      },
+      "requiredActions": [
+        "Restrict the firewall rule to specific protocols/ports and trusted source_ranges."
+      ]
+    },
+    {
+      "ruleId": "GCP_PROJECT_DEFAULT_SA_NO_IAM_GRANT",
+      "threat": "Granting roles to the default Compute/App Engine service account concentrates excessive privilege on an account attached to many resources, amplifying blast radius of any single compromise.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 1.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "Do not grant elevated roles to default service accounts",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_project_iam_member",
+        "forbid": "compute@developer\\.gserviceaccount\\.com|appspot\\.gserviceaccount\\.com"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Grant roles to dedicated least-privilege service accounts instead of the default SAs."
+      },
+      "requiredActions": [
+        "Remove role grants to default service accounts in the project IAM member binding."
+      ]
+    },
+    {
+      "ruleId": "GCP_COMPUTE_TARGET_SSL_PROXY_SSL_POLICY",
+      "threat": "An attacker negotiates a weak or legacy TLS cipher against an SSL proxy load balancer that has no SSL policy attached, downgrading the connection to intercept traffic.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 3.9"
+      ],
+      "severity": "HIGH",
+      "title": "Attach a restrictive SSL policy to SSL proxy load balancers",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_target_ssl_proxy",
+        "require": "ssl_policy\\s*="
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "ssl_policy": "\"google_compute_ssl_policy.modern.id\""
+        }
+      },
+      "requiredActions": [
+        "Create a google_compute_ssl_policy with min_tls_version TLS_1_2 and profile MODERN or RESTRICTED and reference it via ssl_policy"
+      ]
+    },
+    {
+      "ruleId": "GCP_COMPUTE_SNAPSHOT_CMEK",
+      "threat": "An attacker who exfiltrates a disk snapshot stored with Google-managed keys can restore it in an attacker-controlled project, since no customer key is required to decrypt it.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.7"
+      ],
+      "severity": "MEDIUM",
+      "title": "Encrypt compute snapshots with customer-managed keys",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_snapshot",
+        "require": "snapshot_encryption_key\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a snapshot_encryption_key block referencing a Cloud KMS key."
+      },
+      "requiredActions": [
+        "Add a snapshot_encryption_key block with kms_key_self_link pointing to a customer-managed Cloud KMS key"
+      ]
+    },
+    {
+      "ruleId": "GCP_COMPUTE_IMAGE_CMEK",
+      "threat": "An attacker who gains read access to a custom image encrypted only with Google-managed keys can clone it into another project, exposing baked-in secrets and configuration.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.7"
+      ],
+      "severity": "MEDIUM",
+      "title": "Encrypt compute images with customer-managed keys",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_image",
+        "require": "image_encryption_key\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add an image_encryption_key block referencing a Cloud KMS key."
+      },
+      "requiredActions": [
+        "Add an image_encryption_key block with kms_key_self_link pointing to a customer-managed Cloud KMS key"
+      ]
+    },
+    {
+      "ruleId": "GCP_COMPUTE_NETWORK_NO_AUTO_SUBNETS",
+      "threat": "An auto-mode VPC silently creates a subnet in every region, expanding the network attack surface into regions the team never intended to use and complicating firewall governance.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 3.1"
+      ],
+      "severity": "LOW",
+      "title": "Disable auto-created subnetworks on VPC networks",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_network",
+        "forbid": "auto_create_subnetworks\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "auto_create_subnetworks": "false"
+        }
+      },
+      "requiredActions": [
+        "Set auto_create_subnetworks = false and define subnetworks explicitly per region in use"
+      ]
+    },
+    {
+      "ruleId": "GCP_COMPUTE_PROJECT_METADATA_OSLOGIN",
+      "threat": "Without project-wide OS Login, instances fall back to metadata SSH keys that are not tied to IAM, letting a compromised key grant durable, unaudited shell access across the project.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.4"
+      ],
+      "severity": "HIGH",
+      "title": "Enable OS Login at the project metadata level",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_project_metadata",
+        "require": "enable-oslogin\\s*=\\s*\"?(true|TRUE)"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add enable-oslogin = \"TRUE\" to the project metadata map."
+      },
+      "requiredActions": [
+        "Add enable-oslogin = \"TRUE\" to the metadata map of google_compute_project_metadata"
+      ]
+    },
+    {
+      "ruleId": "GCP_COMPUTE_PROJECT_METADATA_BLOCK_SSH_KEYS",
+      "threat": "Project-level SSH keys in metadata grant broad shell access to every instance; an attacker who adds a key or steals an existing one moves laterally across all VMs.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.3"
+      ],
+      "severity": "MEDIUM",
+      "title": "Block project-wide SSH keys via project metadata",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_project_metadata",
+        "require": "block-project-ssh-keys\\s*=\\s*\"?(true|TRUE)"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add block-project-ssh-keys = \"TRUE\" to the project metadata map."
+      },
+      "requiredActions": [
+        "Add block-project-ssh-keys = \"TRUE\" to the metadata map of google_compute_project_metadata"
+      ]
+    },
+    {
+      "ruleId": "GCP_COMPUTE_SECURITY_POLICY_ADAPTIVE_PROTECTION",
+      "threat": "Without Cloud Armor Adaptive Protection, a volumetric Layer 7 DDoS attack against the application can saturate the backend before static rules ever trigger.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 3.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable Cloud Armor Adaptive Protection for L7 DDoS",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_security_policy",
+        "require": "adaptive_protection_config\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add adaptive_protection_config with layer_7_ddos_defense_config enable = true."
+      },
+      "requiredActions": [
+        "Add an adaptive_protection_config block enabling layer_7_ddos_defense_config"
+      ]
+    },
+    {
+      "ruleId": "GCP_GKE_AUTHENTICATOR_GROUPS",
+      "threat": "Without authenticator group configuration, RBAC cannot bind Kubernetes roles to Google Groups, forcing per-user grants that drift and leave stale cluster-admin access.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.x"
+      ],
+      "severity": "LOW",
+      "title": "Configure Google Groups for GKE RBAC",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_container_cluster",
+        "require": "authenticator_groups_config\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add authenticator_groups_config with the gke-security-groups group."
+      },
+      "requiredActions": [
+        "Add an authenticator_groups_config block with a security_group binding to gke-security-groups@yourdomain"
+      ]
+    },
+    {
+      "ruleId": "GCP_GKE_MESH_CERTIFICATES",
+      "threat": "Without managed mesh certificates, service-to-service mTLS in the cluster relies on manually rotated certs that expire or leak, enabling impersonation between workloads.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.x"
+      ],
+      "severity": "LOW",
+      "title": "Enable managed mesh certificates on GKE",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_container_cluster",
+        "require": "mesh_certificates\\s*\\{[^}]*enable_certificates\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add mesh_certificates with enable_certificates = true."
+      },
+      "requiredActions": [
+        "Add a mesh_certificates block with enable_certificates = true and Workload Identity enabled"
+      ]
+    },
+    {
+      "ruleId": "GCP_GKE_PROTECT_CONFIG_WORKLOAD_VULN",
+      "threat": "Without workload vulnerability scanning, an attacker can deploy containers with known-exploitable packages that go undetected until they are used for initial access.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable GKE workload vulnerability scanning in security posture",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_container_cluster",
+        "require": "workload_vulnerability_mode\\s*=\\s*\"VULNERABILITY_(BASIC|ENTERPRISE)\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set vulnerability_mode in security_posture_config."
+      },
+      "requiredActions": [
+        "Set vulnerability_mode to VULNERABILITY_BASIC or VULNERABILITY_ENTERPRISE inside security_posture_config"
+      ]
+    },
+    {
+      "ruleId": "GCP_GKE_NODE_CONFIDENTIAL_STORAGE",
+      "threat": "Local SSD scratch data written in cleartext can be recovered from the underlying host; without confidential storage encryption, an attacker with host access reads ephemeral workload data.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enable confidential storage on GKE node pools",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_container_node_pool",
+        "require": "enable_confidential_storage\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set enable_confidential_storage = true inside node_config (requires local SSD)."
+      },
+      "requiredActions": [
+        "Set enable_confidential_storage = true in node_config and attach local NVMe SSDs"
+      ]
+    },
+    {
+      "ruleId": "GCP_GKE_NODE_BLOCK_PROJECT_SSH",
+      "threat": "Node VMs that accept project-wide SSH keys give an attacker a direct shell onto Kubernetes hosts, bypassing the control plane and exposing kubelet credentials.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.3"
+      ],
+      "severity": "MEDIUM",
+      "title": "Block project SSH keys on GKE node pools",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_container_node_pool",
+        "require": "block-project-ssh-keys\\s*=\\s*\"?(true|TRUE)"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add block-project-ssh-keys = \"true\" to node_config.metadata."
+      },
+      "requiredActions": [
+        "Add block-project-ssh-keys = \"true\" to the metadata map in node_config"
+      ]
+    },
+    {
+      "ruleId": "GCP_SQL_LOG_STATEMENT_DDL",
+      "threat": "Without statement logging, an attacker performing schema changes or privilege escalation via DDL leaves no audit trail, defeating post-incident forensics.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 6.2.x"
+      ],
+      "severity": "LOW",
+      "title": "Log DDL statements on Cloud SQL PostgreSQL",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_sql_database_instance",
+        "require": "name\\s*=\\s*\"log_statement\"[\\s\\S]*value\\s*=\\s*\"(ddl|mod|all)\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a database_flags block log_statement = ddl (or mod)."
+      },
+      "requiredActions": [
+        "Add a database_flags entry with name = \"log_statement\" and value = \"ddl\" or stricter"
+      ]
+    },
+    {
+      "ruleId": "GCP_SQL_LOG_ERROR_VERBOSITY",
+      "threat": "Terse error verbosity hides query context an investigator needs to reconstruct an attacker's failed injection attempts and probing.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 6.2.x"
+      ],
+      "severity": "LOW",
+      "title": "Set adequate error verbosity on Cloud SQL PostgreSQL",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_sql_database_instance",
+        "require": "name\\s*=\\s*\"log_error_verbosity\"[\\s\\S]*value\\s*=\\s*\"(default|verbose)\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add database_flags log_error_verbosity = default."
+      },
+      "requiredActions": [
+        "Add a database_flags entry with name = \"log_error_verbosity\" and value = \"default\" or \"verbose\""
+      ]
+    },
+    {
+      "ruleId": "GCP_SQL_LOG_HOSTNAME",
+      "threat": "Without hostname logging, connection log entries show only IPs, hampering correlation of an attacker's source host across audit records.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 6.2.x"
+      ],
+      "severity": "LOW",
+      "title": "Log client hostnames on Cloud SQL PostgreSQL",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_sql_database_instance",
+        "require": "name\\s*=\\s*\"log_hostname\"[\\s\\S]*value\\s*=\\s*\"on\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add database_flags log_hostname = on."
+      },
+      "requiredActions": [
+        "Add a database_flags entry with name = \"log_hostname\" and value = \"on\""
+      ]
+    },
+    {
+      "ruleId": "GCP_SQL_LOG_TEMP_FILES",
+      "threat": "Unlogged temp file creation hides resource-exhaustion or data-exfiltration queries that spill large result sets to disk.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 6.2.x"
+      ],
+      "severity": "LOW",
+      "title": "Log temporary files on Cloud SQL PostgreSQL",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_sql_database_instance",
+        "require": "name\\s*=\\s*\"log_temp_files\"[\\s\\S]*value\\s*=\\s*\"0\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add database_flags log_temp_files = 0 to log all temp files."
+      },
+      "requiredActions": [
+        "Add a database_flags entry with name = \"log_temp_files\" and value = \"0\""
+      ]
+    },
+    {
+      "ruleId": "GCP_SQL_PASSWORD_POLICY",
+      "threat": "Without a built-in password policy, weak or reused database passwords survive, letting an attacker brute-force or credential-stuff the instance.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 6.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enforce a password policy on Cloud SQL instances",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_sql_database_instance",
+        "require": "password_validation_policy\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a password_validation_policy block with enable_password_policy = true."
+      },
+      "requiredActions": [
+        "Add a settings.password_validation_policy block with enable_password_policy = true and min_length >= 14"
+      ]
+    },
+    {
+      "ruleId": "GCP_SQL_SSL_MODE_ENCRYPTED_ONLY",
+      "threat": "An instance that still accepts unencrypted connections lets a network attacker sniff or MITM database traffic; require_ssl alone does not enforce the stronger ssl_mode.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 6.4"
+      ],
+      "severity": "HIGH",
+      "title": "Require encrypted-only SSL mode on Cloud SQL",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_sql_database_instance",
+        "require": "ssl_mode\\s*=\\s*\"(ENCRYPTED_ONLY|TRUSTED_CLIENT_CERTIFICATE_REQUIRED)\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set ssl_mode = ENCRYPTED_ONLY in settings.ip_configuration."
+      },
+      "requiredActions": [
+        "Set ssl_mode to ENCRYPTED_ONLY or TRUSTED_CLIENT_CERTIFICATE_REQUIRED in ip_configuration"
+      ]
+    },
+    {
+      "ruleId": "GCP_SQL_PRIVATE_PATH_GOOGLE_SERVICES",
+      "threat": "Without a private path for Google Cloud services, internal GCP service traffic to the database can traverse public IP routing, broadening exposure.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 6.x"
+      ],
+      "severity": "LOW",
+      "title": "Enable private path for Google Cloud services on Cloud SQL",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_sql_database_instance",
+        "require": "enable_private_path_for_google_cloud_services\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set enable_private_path_for_google_cloud_services = true in ip_configuration."
+      },
+      "requiredActions": [
+        "Set enable_private_path_for_google_cloud_services = true in settings.ip_configuration"
+      ]
+    },
+    {
+      "ruleId": "GCP_STORAGE_DEFAULT_EVENT_BASED_HOLD",
+      "threat": "Without a default event-based hold, objects can be deleted before a retention event is set, letting an attacker destroy evidence immediately after writing it.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 5.x"
+      ],
+      "severity": "LOW",
+      "title": "Set default event-based hold on sensitive buckets",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_storage_bucket",
+        "require": "default_event_based_hold\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "default_event_based_hold": "true"
+        }
+      },
+      "requiredActions": [
+        "Set default_event_based_hold = true on the google_storage_bucket"
+      ]
+    },
+    {
+      "ruleId": "GCP_DATAPROC_NO_HTTP_PORT_ACCESS",
+      "threat": "An open Dataproc component-gateway HTTP port exposes cluster web UIs (YARN, Spark) to the internet, leaking job data and offering a foothold for code execution.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 3.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable Dataproc component HTTP port access",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_dataproc_cluster",
+        "forbid": "enable_http_port_access\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set enable_http_port_access = false in cluster_config.endpoint_config."
+      },
+      "requiredActions": [
+        "Set enable_http_port_access = false in endpoint_config or remove the component gateway"
+      ]
+    },
+    {
+      "ruleId": "GCP_DATAFLOW_KMS",
+      "threat": "Dataflow pipeline state and shuffle data encrypted only with Google-managed keys can be read by anyone who compromises the service, with no customer key boundary.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.7"
+      ],
+      "severity": "MEDIUM",
+      "title": "Encrypt Dataflow jobs with a customer-managed key",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_dataflow_job",
+        "require": "kms_key_name\\s*="
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "kms_key_name": "\"google_kms_crypto_key.dataflow.id\""
+        }
+      },
+      "requiredActions": [
+        "Set kms_key_name to a customer-managed Cloud KMS crypto key id"
+      ]
+    },
+    {
+      "ruleId": "GCP_CLOUD_RUN_V2_BINARY_AUTH",
+      "threat": "Without Binary Authorization, an attacker who can push to the registry deploys an unsigned, tampered image to Cloud Run with no admission control.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enforce Binary Authorization on Cloud Run v2 services",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_cloud_run_v2_service",
+        "require": "binary_authorization\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a binary_authorization block referencing a policy."
+      },
+      "requiredActions": [
+        "Add a binary_authorization block (use_default = true or a policy) and define a deploy policy that requires attestations"
+      ]
+    },
+    {
+      "ruleId": "GCP_CLOUD_RUN_V2_CMEK",
+      "threat": "A Cloud Run revision encrypted only with Google-managed keys offers no customer-controlled key revocation if the workload or its data is compromised.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.7"
+      ],
+      "severity": "LOW",
+      "title": "Encrypt Cloud Run v2 services with a customer-managed key",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_cloud_run_v2_service",
+        "require": "encryption_key\\s*="
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set template.encryption_key to a Cloud KMS key."
+      },
+      "requiredActions": [
+        "Set encryption_key in the service template to a customer-managed Cloud KMS key id"
+      ]
+    },
+    {
+      "ruleId": "GCP_CLOUDFUNCTIONS_VPC_EGRESS_PRIVATE",
+      "threat": "A function with ALL_TRAFFIC egress not pinned to the VPC connector can reach the internet directly, enabling data exfiltration that bypasses network controls.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.x"
+      ],
+      "severity": "LOW",
+      "title": "Route all Cloud Function egress through the VPC connector",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_cloudfunctions_function",
+        "require": "vpc_connector_egress_settings\\s*=\\s*\"ALL_TRAFFIC\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "vpc_connector_egress_settings": "\"ALL_TRAFFIC\""
+        }
+      },
+      "requiredActions": [
+        "Set vpc_connector_egress_settings = \"ALL_TRAFFIC\" so all egress traverses the VPC connector"
+      ]
+    },
+    {
+      "ruleId": "GCP_CLOUDFUNCTIONS2_VPC_CONNECTOR",
+      "threat": "A 2nd-gen function with no VPC connector reaches resources over public networking, expanding the egress attack surface and bypassing private-network controls.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.x"
+      ],
+      "severity": "LOW",
+      "title": "Attach a VPC connector to 2nd-gen Cloud Functions",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_cloudfunctions2_function",
+        "require": "vpc_connector\\s*="
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set service_config.vpc_connector to a Serverless VPC Access connector."
+      },
+      "requiredActions": [
+        "Set vpc_connector in service_config to a google_vpc_access_connector id"
+      ]
+    },
+    {
+      "ruleId": "GCP_VERTEX_AI_INDEX_ENDPOINT_CMEK",
+      "threat": "A Vertex AI index endpoint without CMEK stores embedding data under Google-managed keys, removing the customer's ability to revoke access to sensitive vector data.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.7"
+      ],
+      "severity": "LOW",
+      "title": "Encrypt Vertex AI index endpoints with a customer-managed key",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_vertex_ai_index_endpoint",
+        "require": "encryption_spec\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add an encryption_spec block with kms_key_name."
+      },
+      "requiredActions": [
+        "Add an encryption_spec block with kms_key_name set to a customer-managed Cloud KMS key"
+      ]
+    },
+    {
+      "ruleId": "GCP_VERTEX_AI_METADATA_STORE_CMEK",
+      "threat": "ML metadata (lineage, parameters) in a Vertex AI metadata store without CMEK cannot be cryptographically isolated, exposing training provenance if Google-managed keys are compromised.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.7"
+      ],
+      "severity": "LOW",
+      "title": "Encrypt Vertex AI metadata stores with a customer-managed key",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_vertex_ai_metadata_store",
+        "require": "encryption_spec\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add an encryption_spec block with kms_key_name."
+      },
+      "requiredActions": [
+        "Add an encryption_spec block with kms_key_name set to a customer-managed Cloud KMS key"
+      ]
+    },
+    {
+      "ruleId": "GCP_VERTEX_AI_TENSORBOARD_CMEK",
+      "threat": "Tensorboard experiment data without CMEK is encrypted only with Google keys, denying the customer the ability to revoke access to potentially sensitive training artifacts.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.7"
+      ],
+      "severity": "LOW",
+      "title": "Encrypt Vertex AI Tensorboards with a customer-managed key",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_vertex_ai_tensorboard",
+        "require": "encryption_spec\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add an encryption_spec block with kms_key_name."
+      },
+      "requiredActions": [
+        "Add an encryption_spec block with kms_key_name set to a customer-managed Cloud KMS key"
+      ]
+    },
+    {
+      "ruleId": "GCP_NOTEBOOK_DISK_CMEK",
+      "threat": "A Vertex AI Workbench notebook boot/data disk under Google-managed keys exposes notebook contents and credentials if the platform key boundary is breached.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.7"
+      ],
+      "severity": "LOW",
+      "title": "Encrypt notebook instance disks with a customer-managed key",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_notebooks_instance",
+        "require": "kms_key\\s*="
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "disk_encryption": "\"CMEK\"",
+          "kms_key": "\"google_kms_crypto_key.notebook.id\""
+        }
+      },
+      "requiredActions": [
+        "Set disk_encryption = \"CMEK\" and kms_key to a customer-managed Cloud KMS key id"
+      ]
+    },
+    {
+      "ruleId": "GCP_NOTEBOOK_NO_PROXY_ACCESS",
+      "threat": "Leaving the notebook proxy access enabled exposes a public Jupyter URL; an attacker who guesses or steals the proxy URL gains an interactive code-execution session.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable proxy access on notebook instances",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_notebooks_instance",
+        "require": "no_proxy_access\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "no_proxy_access": "true"
+        }
+      },
+      "requiredActions": [
+        "Set no_proxy_access = true on the google_notebooks_instance"
+      ]
+    },
+    {
+      "ruleId": "GCP_ORG_POLICY_DISABLE_SA_KEY_CREATION",
+      "threat": "Long-lived service account keys are the top GCP credential-theft vector; without the constraint, any project member can mint a downloadable key that never expires.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 1.4"
+      ],
+      "severity": "HIGH",
+      "title": "Enforce org policy disabling service account key creation",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_org_policy_policy",
+        "forbid": "iam\\.disableServiceAccountKeyCreation[\\s\\S]*enforce\\s*=\\s*\"FALSE\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set the boolean rule enforce = TRUE for iam.disableServiceAccountKeyCreation."
+      },
+      "requiredActions": [
+        "Set spec.rules.enforce = TRUE for the iam.disableServiceAccountKeyCreation constraint"
+      ]
+    },
+    {
+      "ruleId": "GCP_ORG_POLICY_VM_EXTERNAL_IP_DISABLED",
+      "threat": "Without the vmExternalIpAccess constraint enforced, any VM can be given a public IP, exposing it directly to internet scanning and attack.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.9"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enforce org policy restricting VM external IP access",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_org_policy_policy",
+        "forbid": "compute\\.vmExternalIpAccess[\\s\\S]*allow_all\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set a deny_all = true list rule for compute.vmExternalIpAccess."
+      },
+      "requiredActions": [
+        "Set spec.rules with deny_all = true for the compute.vmExternalIpAccess list constraint"
+      ]
+    },
+    {
+      "ruleId": "GCP_ORG_POLICY_REQUIRE_OSLOGIN",
+      "threat": "Without enforcing compute.requireOsLogin org-wide, projects can fall back to metadata SSH keys that bypass IAM-based access auditing.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.4"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enforce org policy requiring OS Login",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_org_policy_policy",
+        "forbid": "compute\\.requireOsLogin[\\s\\S]*enforce\\s*=\\s*\"FALSE\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set the boolean rule enforce = TRUE for compute.requireOsLogin."
+      },
+      "requiredActions": [
+        "Set spec.rules.enforce = TRUE for the compute.requireOsLogin constraint"
+      ]
+    },
+    {
+      "ruleId": "GCP_ORG_POLICY_SHIELDED_VM",
+      "threat": "Without enforcing compute.requireShieldedVm, attackers can launch VMs lacking secure boot and vTPM, enabling rootkit persistence undetected by integrity monitoring.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.8"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enforce org policy requiring Shielded VM",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_org_policy_policy",
+        "forbid": "compute\\.requireShieldedVm[\\s\\S]*enforce\\s*=\\s*\"FALSE\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set the boolean rule enforce = TRUE for compute.requireShieldedVm."
+      },
+      "requiredActions": [
+        "Set spec.rules.enforce = TRUE for the compute.requireShieldedVm constraint"
+      ]
+    },
+    {
+      "ruleId": "GCP_ORG_POLICY_UNIFORM_BUCKET_ACCESS",
+      "threat": "Without enforcing storage.uniformBucketLevelAccess, buckets can use legacy ACLs that grant object-level public access invisible to IAM-based policy review.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 5.2"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enforce org policy requiring uniform bucket-level access",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_org_policy_policy",
+        "forbid": "storage\\.uniformBucketLevelAccess[\\s\\S]*enforce\\s*=\\s*\"FALSE\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set the boolean rule enforce = TRUE for storage.uniformBucketLevelAccess."
+      },
+      "requiredActions": [
+        "Set spec.rules.enforce = TRUE for the storage.uniformBucketLevelAccess constraint"
+      ]
+    },
+    {
+      "ruleId": "GCP_ORG_POLICY_DISABLE_SERIAL_PORT",
+      "threat": "Serial-port access offers an out-of-band console that bypasses SSH controls; without compute.disableSerialPortAccess enforced, an attacker with metadata access can open an interactive serial session.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.5"
+      ],
+      "severity": "MEDIUM",
+      "title": "Enforce org policy disabling serial port access",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_org_policy_policy",
+        "forbid": "compute\\.disableSerialPortAccess[\\s\\S]*enforce\\s*=\\s*\"FALSE\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set the boolean rule enforce = TRUE for compute.disableSerialPortAccess."
+      },
+      "requiredActions": [
+        "Set spec.rules.enforce = TRUE for the compute.disableSerialPortAccess constraint"
+      ]
+    },
+    {
+      "ruleId": "GCP_ORG_POLICY_RESTRICT_VPC_PEERING",
+      "threat": "Unrestricted VPC peering lets an attacker who controls another project bridge networks into yours, exposing internal services across the peering boundary.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 3.x"
+      ],
+      "severity": "LOW",
+      "title": "Enforce org policy restricting VPC peering",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_org_policy_policy",
+        "forbid": "compute\\.restrictVpcPeering[\\s\\S]*allow_all\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Replace allow_all with an allowed_values list of approved networks for compute.restrictVpcPeering."
+      },
+      "requiredActions": [
+        "Replace allow_all = true with an explicit allowed_values list for the compute.restrictVpcPeering constraint"
+      ]
+    },
+    {
+      "ruleId": "GCP_BINARY_AUTHORIZATION_REQUIRE_ATTESTATION",
+      "threat": "A Binary Authorization policy whose default rule allows all images defeats the control entirely, letting an attacker deploy unsigned malicious containers cluster-wide.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.x"
+      ],
+      "severity": "HIGH",
+      "title": "Require attestation in Binary Authorization default rule",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_binary_authorization_policy",
+        "forbid": "evaluation_mode\\s*=\\s*\"ALWAYS_ALLOW\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Set default_admission_rule evaluation_mode = REQUIRE_ATTESTATION and enforcement_mode = ENFORCED_BLOCK_AND_AUDIT_LOG."
+      },
+      "requiredActions": [
+        "Set the default_admission_rule evaluation_mode to REQUIRE_ATTESTATION with ENFORCED_BLOCK_AND_AUDIT_LOG enforcement"
+      ]
+    },
+    {
+      "ruleId": "GCP_DATA_FUSION_PRIVATE_INSTANCE",
+      "threat": "A non-private Data Fusion instance exposes its pipeline UI and tenant project over public networking, broadening the attack surface for the data-integration plane.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 3.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "Make Data Fusion instances private",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_data_fusion_instance",
+        "require": "private_instance\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "private_instance": "true"
+        }
+      },
+      "requiredActions": [
+        "Set private_instance = true and supply a network_config for private peering"
+      ]
+    },
+    {
+      "ruleId": "GCP_DATA_FUSION_STACKDRIVER_LOGGING",
+      "threat": "Without Stackdriver logging enabled, Data Fusion pipeline executions leave no centralized audit trail, blinding detection of malicious or anomalous data movement.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 2.x"
+      ],
+      "severity": "LOW",
+      "title": "Enable Stackdriver logging on Data Fusion instances",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_data_fusion_instance",
+        "require": "enable_stackdriver_logging\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "enable_stackdriver_logging": "true"
+        }
+      },
+      "requiredActions": [
+        "Set enable_stackdriver_logging = true on the google_data_fusion_instance"
+      ]
+    },
+    {
+      "ruleId": "GCP_DATA_FUSION_STACKDRIVER_MONITORING",
+      "threat": "Without monitoring, resource-abuse or crypto-mining workloads injected into Data Fusion go unnoticed until billing or downstream impact surfaces.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 2.x"
+      ],
+      "severity": "LOW",
+      "title": "Enable Stackdriver monitoring on Data Fusion instances",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_data_fusion_instance",
+        "require": "enable_stackdriver_monitoring\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "enable_stackdriver_monitoring": "true"
+        }
+      },
+      "requiredActions": [
+        "Set enable_stackdriver_monitoring = true on the google_data_fusion_instance"
+      ]
+    },
+    {
+      "ruleId": "GCP_COMPOSER_PRIVATE_ENVIRONMENT",
+      "threat": "A Cloud Composer (Airflow) environment with a public GKE control plane and web server exposes DAG orchestration to the internet, a high-value target for code execution.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 3.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "Make Cloud Composer environments private",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_composer_environment",
+        "require": "enable_private_endpoint\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add private_environment_config with enable_private_endpoint = true."
+      },
+      "requiredActions": [
+        "Add a config.private_environment_config block with enable_private_endpoint = true"
+      ]
+    },
+    {
+      "ruleId": "GCP_COMPOSER_CMEK",
+      "threat": "A Composer environment without CMEK encrypts Airflow metadata and DAG state under Google keys, denying customer key revocation if the orchestration plane is compromised.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.7"
+      ],
+      "severity": "LOW",
+      "title": "Encrypt Cloud Composer environments with a customer-managed key",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_composer_environment",
+        "require": "encryption_config\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add config.encryption_config with kms_key_name."
+      },
+      "requiredActions": [
+        "Add a config.encryption_config block with kms_key_name set to a customer-managed Cloud KMS key"
+      ]
+    },
+    {
+      "ruleId": "GCP_PUBSUB_SUBSCRIPTION_RETENTION",
+      "threat": "Short or default message retention means an attacker who triggers redelivery or replay leaves no window for forensic recovery of the original messages.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 2.x"
+      ],
+      "severity": "LOW",
+      "title": "Set explicit message retention on Pub/Sub subscriptions",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_pubsub_subscription",
+        "require": "message_retention_duration\\s*="
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "message_retention_duration": "\"604800s\""
+        }
+      },
+      "requiredActions": [
+        "Set message_retention_duration explicitly on the subscription"
+      ]
+    },
+    {
+      "ruleId": "GCP_ARTIFACT_REGISTRY_IAM_NOT_PUBLIC",
+      "threat": "An Artifact Registry repo granted to allUsers lets anyone pull (or with write roles, poison) container images, enabling supply-chain compromise of every consumer.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 5.x"
+      ],
+      "severity": "HIGH",
+      "title": "Prevent public IAM bindings on Artifact Registry repositories",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_artifact_registry_repository_iam_member",
+        "forbid": "allUsers|allAuthenticatedUsers"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Remove allUsers/allAuthenticatedUsers and bind to specific principals."
+      },
+      "requiredActions": [
+        "Remove allUsers and allAuthenticatedUsers members; grant repository access only to named principals"
+      ]
+    },
+    {
+      "ruleId": "GCP_SERVICE_ACCOUNT_IAM_NO_PUBLIC_ACTAS",
+      "threat": "Granting actAs/serviceAccountUser to allUsers lets anyone impersonate the service account, inheriting all of its IAM privileges for privilege escalation.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 1.x"
+      ],
+      "severity": "CRITICAL",
+      "title": "Prevent public impersonation of service accounts",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_service_account_iam_member",
+        "forbid": "allUsers|allAuthenticatedUsers"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Remove allUsers/allAuthenticatedUsers from the service account IAM member."
+      },
+      "requiredActions": [
+        "Remove allUsers and allAuthenticatedUsers from google_service_account_iam_member bindings"
+      ]
+    },
+    {
+      "ruleId": "GCP_PROJECT_AUDIT_ALL_SERVICES",
+      "threat": "An audit config scoped to a single service leaves other APIs unlogged; an attacker pivots to an unaudited service to operate without leaving Data Access logs.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 2.1"
+      ],
+      "severity": "MEDIUM",
+      "title": "Apply audit logging to all services",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_project_iam_audit_config",
+        "require": "service\\s*=\\s*\"allServices\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "service": "\"allServices\""
+        }
+      },
+      "requiredActions": [
+        "Set service = \"allServices\" with DATA_READ and DATA_WRITE audit_log_config entries"
+      ]
+    },
+    {
+      "ruleId": "GCP_DATASTORE_OBJECT_ACL_NO_PUBLIC",
+      "threat": "A default object ACL granting allUsers makes every newly uploaded object world-readable, silently leaking data the moment it is written.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 5.1"
+      ],
+      "severity": "HIGH",
+      "title": "Prevent public default object ACLs on buckets",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_storage_default_object_access_control",
+        "forbid": "entity\\s*=\\s*\"allUsers\"|allAuthenticatedUsers"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Remove allUsers/allAuthenticatedUsers from the default object ACL; prefer uniform bucket-level access."
+      },
+      "requiredActions": [
+        "Remove allUsers and allAuthenticatedUsers entities from default object ACLs and enable uniform bucket-level access"
+      ]
+    },
+    {
+      "ruleId": "GCP_SQL_LOG_DURATION",
+      "threat": "Without log_duration, slow or abusive queries leave no timing trace, hindering detection of injection-driven enumeration or denial-of-service patterns.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 6.2.x"
+      ],
+      "severity": "LOW",
+      "title": "Enable statement duration logging on Cloud SQL PostgreSQL",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_sql_database_instance",
+        "require": "name\\s*=\\s*\"log_duration\"[\\s\\S]*value\\s*=\\s*\"on\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add database_flags log_duration = on."
+      },
+      "requiredActions": [
+        "Add a database_flags entry with name = \"log_duration\" and value = \"on\""
+      ]
+    },
+    {
+      "ruleId": "GCP_COMPUTE_TARGET_SSL_PROXY_NO_SSLV3",
+      "threat": "An SSL proxy whose attached policy permits TLS 1.0 lets an attacker force a downgrade to a deprecated protocol vulnerable to known cipher attacks.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 3.9"
+      ],
+      "severity": "MEDIUM",
+      "title": "Reject TLS 1.0 on SSL policies used by proxies",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_ssl_policy",
+        "forbid": "min_tls_version\\s*=\\s*\"TLS_1_1\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "min_tls_version": "\"TLS_1_2\""
+        }
+      },
+      "requiredActions": [
+        "Set min_tls_version to TLS_1_2 on the SSL policy"
+      ]
+    },
+    {
+      "ruleId": "GCP_COMPUTE_NETWORK_DELETE_DEFAULT_ROUTES",
+      "threat": "The auto-created default internet route on a VPC permits direct egress to the internet; leaving it enables data exfiltration from instances that should be isolated.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 3.x"
+      ],
+      "severity": "LOW",
+      "title": "Delete default internet routes on isolated VPCs",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_network",
+        "require": "delete_default_routes_on_create\\s*=\\s*true"
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "delete_default_routes_on_create": "true"
+        }
+      },
+      "requiredActions": [
+        "Set delete_default_routes_on_create = true and add only the egress routes you require"
+      ]
+    },
+    {
+      "ruleId": "GCP_GKE_NODE_POOL_DEFAULTS_SECURE_BOOT",
+      "threat": "Cluster node-pool defaults without Shielded VM let auto-provisioned node pools boot unverified images, enabling firmware/bootkit persistence on nodes.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.x"
+      ],
+      "severity": "LOW",
+      "title": "Set Shielded defaults for auto-provisioned GKE node pools",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_container_cluster",
+        "require": "node_pool_defaults\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add node_pool_defaults to set secure defaults for node auto-provisioning."
+      },
+      "requiredActions": [
+        "Add a node_pool_defaults block establishing Shielded and secure node_config defaults"
+      ]
+    },
+    {
+      "ruleId": "GCP_DATAFLOW_FLEX_NO_PUBLIC_IP",
+      "threat": "A Dataflow Flex Template job with public-IP workers exposes worker VMs to the internet, expanding the attack surface of the data-processing fleet.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 3.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "Disable public IPs on Dataflow Flex Template workers",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_dataflow_flex_template_job",
+        "require": "ip_configuration\\s*=\\s*\"WORKER_IP_PRIVATE\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "ip_configuration": "\"WORKER_IP_PRIVATE\""
+        }
+      },
+      "requiredActions": [
+        "Set ip_configuration = \"WORKER_IP_PRIVATE\" on the Flex Template job"
+      ]
+    },
+    {
+      "ruleId": "GCP_DATAFLOW_FLEX_KMS",
+      "threat": "Flex Template job state under Google-managed keys cannot be cryptographically isolated, removing the customer's ability to revoke access to in-flight data.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.7"
+      ],
+      "severity": "LOW",
+      "title": "Encrypt Dataflow Flex Template jobs with a customer-managed key",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_dataflow_flex_template_job",
+        "require": "kms_key_name\\s*="
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "kms_key_name": "\"google_kms_crypto_key.dataflow.id\""
+        }
+      },
+      "requiredActions": [
+        "Set kms_key_name to a customer-managed Cloud KMS crypto key id"
+      ]
+    },
+    {
+      "ruleId": "GCP_VERTEX_AI_ENDPOINT_CMEK",
+      "threat": "A Vertex AI endpoint serving a model without CMEK keeps deployed model artifacts under Google keys, removing customer revocation if the serving plane is compromised.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.7"
+      ],
+      "severity": "LOW",
+      "title": "Encrypt Vertex AI endpoints with a customer-managed key",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_vertex_ai_endpoint",
+        "require": "encryption_spec\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add an encryption_spec block with kms_key_name."
+      },
+      "requiredActions": [
+        "Add an encryption_spec block with kms_key_name set to a customer-managed Cloud KMS key"
+      ]
+    },
+    {
+      "ruleId": "GCP_REDIS_RDB_PERSISTENCE_ENCRYPTED",
+      "threat": "A Redis instance without transit encryption in a non-private connect mode exposes cache contents, including session tokens, to network sniffing.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 6.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "Require server-authentication transit encryption on Memorystore Redis",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_redis_instance",
+        "forbid": "transit_encryption_mode\\s*=\\s*\"DISABLED\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "transit_encryption_mode": "\"SERVER_AUTHENTICATION\""
+        }
+      },
+      "requiredActions": [
+        "Set transit_encryption_mode to SERVER_AUTHENTICATION (not DISABLED)"
+      ]
+    },
+    {
+      "ruleId": "GCP_SQL_DENY_MAINTENANCE_NOT_BLOCKING_PATCH",
+      "threat": "An overly broad deny-maintenance period blocks security patches indefinitely, leaving the database exposed to known CVEs an attacker can exploit.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 6.x"
+      ],
+      "severity": "LOW",
+      "title": "Avoid open-ended Cloud SQL maintenance deny periods",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_sql_database_instance",
+        "require": "maintenance_window\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Define a maintenance_window so security patches apply on a schedule."
+      },
+      "requiredActions": [
+        "Define a settings.maintenance_window with an update_track so patches apply regularly"
+      ]
+    },
+    {
+      "ruleId": "GCP_BIGQUERY_TABLE_NO_PUBLIC_ACCESS",
+      "threat": "A BigQuery table-level IAM grant to allUsers exposes potentially sensitive rows to the entire internet for unauthenticated querying.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 5.x"
+      ],
+      "severity": "HIGH",
+      "title": "Prevent public IAM bindings on BigQuery tables",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_bigquery_table_iam_member",
+        "forbid": "allUsers|allAuthenticatedUsers"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Remove allUsers/allAuthenticatedUsers from the table IAM member."
+      },
+      "requiredActions": [
+        "Remove allUsers and allAuthenticatedUsers from google_bigquery_table_iam_member bindings"
+      ]
+    },
+    {
+      "ruleId": "GCP_SECRET_MANAGER_IAM_NOT_PUBLIC",
+      "threat": "A Secret Manager secret granted to allUsers exposes credentials, API keys, or tokens to anyone, an immediate full-credential compromise.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 1.x"
+      ],
+      "severity": "CRITICAL",
+      "title": "Prevent public IAM bindings on Secret Manager secrets",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_secret_manager_secret_iam_member",
+        "forbid": "allUsers|allAuthenticatedUsers"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Remove allUsers/allAuthenticatedUsers from the secret IAM member."
+      },
+      "requiredActions": [
+        "Remove allUsers and allAuthenticatedUsers from google_secret_manager_secret_iam_member bindings"
+      ]
+    },
+    {
+      "ruleId": "GCP_COMPUTE_ATTACHED_DISK_CMEK_SNAPSHOT_KEY",
+      "threat": "A region disk created without a customer-managed key cannot have its data access revoked independently of Google, leaving exfiltrated volumes decryptable.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.7"
+      ],
+      "severity": "MEDIUM",
+      "title": "Encrypt regional persistent disks with a customer-managed key",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_region_disk",
+        "require": "disk_encryption_key\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a disk_encryption_key block with kms_key_name."
+      },
+      "requiredActions": [
+        "Add a disk_encryption_key block with kms_key_name set to a customer-managed Cloud KMS key"
+      ]
+    },
+    {
+      "ruleId": "GCP_COMPUTE_ROUTE_NO_DEFAULT_INTERNET_GATEWAY",
+      "threat": "A custom route to the default internet gateway with a 0.0.0.0/0 destination opens unrestricted egress, enabling data exfiltration from supposedly isolated subnets.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 3.x"
+      ],
+      "severity": "LOW",
+      "title": "Avoid broad internet-gateway routes on isolated networks",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_route",
+        "forbid": "dest_range\\s*=\\s*\"0\\.0\\.0\\.0/0\"[\\s\\S]*next_hop_gateway"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Scope dest_range to required CIDRs or route egress via a NAT/proxy instead of the default internet gateway."
+      },
+      "requiredActions": [
+        "Replace the 0.0.0.0/0 default-internet-gateway route with narrowly scoped egress routes"
+      ]
+    },
+    {
+      "ruleId": "GCP_GKE_COST_DISABLE_INSECURE_KUBELET",
+      "threat": "GKE node pools left with the legacy kubelet config defaults can expose an unauthenticated read-only port; absent an explicit kubelet_config the cluster relies on insecure defaults.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.x"
+      ],
+      "severity": "LOW",
+      "title": "Set an explicit kubelet configuration on GKE node pools",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_container_node_pool",
+        "require": "kubelet_config\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a kubelet_config block and disable the read-only port."
+      },
+      "requiredActions": [
+        "Add a node_config.kubelet_config block and set insecure_kubelet_readonly_port_enabled = false"
+      ]
+    },
+    {
+      "ruleId": "GCP_CLOUD_RUN_V2_NO_PUBLIC_INGRESS",
+      "threat": "A Cloud Run v2 service that allows all ingress is reachable directly from the internet, bypassing any load balancer WAF and exposing the app to direct attack.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.x"
+      ],
+      "severity": "MEDIUM",
+      "title": "Restrict Cloud Run v2 ingress away from all traffic",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_cloud_run_v2_service",
+        "forbid": "ingress\\s*=\\s*\"INGRESS_TRAFFIC_ALL\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "ingress": "\"INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER\""
+        }
+      },
+      "requiredActions": [
+        "Set ingress to INGRESS_TRAFFIC_INTERNAL_ONLY or INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+      ]
+    },
+    {
+      "ruleId": "GCP_PUBSUB_SUBSCRIPTION_DEAD_LETTER",
+      "threat": "Without a dead-letter topic, poison messages that crash consumers redeliver indefinitely, an availability attack vector and a blind spot for malformed-payload detection.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 2.x"
+      ],
+      "severity": "LOW",
+      "title": "Configure a dead-letter policy on Pub/Sub subscriptions",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_pubsub_subscription",
+        "require": "dead_letter_policy\\s*\\{"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Add a dead_letter_policy block referencing a DLQ topic."
+      },
+      "requiredActions": [
+        "Add a dead_letter_policy block with a dead_letter_topic and max_delivery_attempts"
+      ]
+    },
+    {
+      "ruleId": "GCP_COMPUTE_FORWARDING_RULE_INTERNAL_ONLY",
+      "threat": "A forwarding rule with EXTERNAL load balancing scheme publishes the backend directly to the internet; using INTERNAL keeps the service on private networking.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 3.x"
+      ],
+      "severity": "LOW",
+      "title": "Prefer internal load balancing scheme on forwarding rules",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_compute_forwarding_rule",
+        "forbid": "load_balancing_scheme\\s*=\\s*\"EXTERNAL\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Use load_balancing_scheme = INTERNAL or place the EXTERNAL rule behind Cloud Armor."
+      },
+      "requiredActions": [
+        "Set load_balancing_scheme to INTERNAL or INTERNAL_MANAGED, or attach Cloud Armor if external exposure is required"
+      ]
+    },
+    {
+      "ruleId": "GCP_BIGTABLE_TABLE_DELETION_PROTECTION",
+      "threat": "A Bigtable table without deletion protection can be wiped by a compromised credential, destroying operational data with no built-in safeguard.",
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 6.x"
+      ],
+      "severity": "LOW",
+      "title": "Enable deletion protection on Bigtable tables",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "google_bigtable_table",
+        "require": "deletion_protection\\s*=\\s*\"PROTECTED\""
+      },
+      "remediate": {
+        "strategy": "set-attr",
+        "ensure": {
+          "deletion_protection": "\"PROTECTED\""
+        }
+      },
+      "requiredActions": [
+        "Set deletion_protection = \"PROTECTED\" on the google_bigtable_table"
+      ]
     }
   ]
 }
