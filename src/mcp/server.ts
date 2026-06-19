@@ -41,6 +41,7 @@ import {
   verifyChain, VerifyChainParams, VerifyChainSchema,
   getChain, GetChainParams, GetChainSchema
 } from "./audit-chain.js";
+import { withToolAudit } from "./tool-audit.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = resolve(__dirname, "../..");
@@ -74,7 +75,24 @@ const server = new McpServer({
   name: "security-mcp",
   version: _pkgVersion
 });
-const tool = server.tool.bind(server) as (...args: unknown[]) => void;
+const _rawTool = server.tool.bind(server) as (...args: unknown[]) => void;
+
+// Per-tool-call audit: transparently wrap every registered handler so each
+// invocation emits one structured log line (see tool-audit.ts). Applies to all
+// tools — including security.authenticate — so auth attempts are also recorded
+// (the token argument is redacted before it is written).
+const tool = (...args: unknown[]): void => {
+  const name = typeof args[0] === "string" ? (args[0] as string) : "unknown";
+  const lastIdx = args.length - 1;
+  const handler = args[lastIdx];
+  if (typeof handler === "function") {
+    args[lastIdx] = withToolAudit(
+      name,
+      handler as (a: unknown, e: unknown) => Promise<unknown>
+    );
+  }
+  _rawTool(...args);
+};
 
 // ---------------------------------------------------------------------------
 // Helper

@@ -213,6 +213,21 @@ export type AgentFindingsFile = {
 // Merged findings — produced by orchestration.merge_agent_findings
 // ---------------------------------------------------------------------------
 
+// Result of validating + attestation-verifying every agent's findings file
+// before it is trusted into the merged gate result (inter-agent payload integrity).
+export type SignatureVerification = {
+  // enforced       — an attestation chain is in use; every merged agent's findings
+  //                  hash was matched against its attested hash.
+  // unattested     — no attestation chain present; findings were schema-validated only.
+  // chain_invalid  — the attestation chain failed integrity verification; the run
+  //                  is forced to FAIL because no attestation can be trusted.
+  mode: "enforced" | "unattested" | "chain_invalid";
+  chainValid: boolean;
+  attestedAgents: string[];   // agents whose findings hash matched their attestation
+  rejectedAgents: string[];   // agents excluded from the merge (bad schema / hash / unattested)
+  warning?: string;
+};
+
 export type MergedFindings = {
   agentRunId: string;
   runId: string;
@@ -227,6 +242,7 @@ export type MergedFindings = {
   skillMdSectionsCovered: string[];
   uncoveredSections: string[];
   findings: AgentFinding[];
+  signatureVerification: SignatureVerification;
 };
 
 // ---------------------------------------------------------------------------

@@ -21,6 +21,7 @@ HANDOFF.md
 .mcp/agent-runs/
 .mcp/memory/
 .mcp/baselines/
+.mcp/audit/
 
 # Generated baseline outputs inside fixtures
 fixtures/**/.mcp/baselines/

@@ -27,6 +27,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { updateReviewStep } from "../review/store.js";
+import { getChain, verifyChain, computeFindingsHash } from "./audit-chain.js";
 import type {
   AgentName,
   AgentRunManifest,
@@ -35,6 +36,7 @@ import type {
   AgentFindingsFile,
   AgentFinding,
   MergedFindings,
+  SignatureVerification,
   StackContext,
   UpdateCheckResult
 } from "../types/agent-run.js";
@@ -346,6 +348,48 @@ export async function updateAgentStatus(args: z.infer<typeof UpdateAgentStatusSc
 // 3. merge_agent_findings
 // ---------------------------------------------------------------------------
 
+// CWE-20 / inter-agent payload integrity: strict schema for an agent findings file.
+// mergeAgentFindings is the single trust sink for an entire run, so every agent's
+// file is schema-validated AND its findings hash is matched against that agent's
+// signed attestation before any of it reaches the merged gate result.
+const AgentFindingSchema = z.object({
+  id: z.string().min(1).max(128),
+  title: z.string().min(1).max(500),
+  severity: z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]),
+  cwe: z.string().max(64).optional(),
+  attackTechnique: z.string().max(128).optional(),
+  cvssV4: z.number().min(0).max(10).optional(),
+  exploitChain: z.array(z.string().max(1000)).max(100).optional(),
+  files: z.array(z.string().max(1024)).max(500).optional(),
+  evidence: z.array(z.string().max(4000)).max(200).optional(),
+  remediated: z.boolean(),
+  remediationSummary: z.string().max(4000).optional(),
+  requiredActions: z.array(z.string().max(2000)).max(200),
+  complianceImpact: z.object({
+    pciDss: z.array(z.string().max(128)).max(200).optional(),
+    soc2: z.array(z.string().max(128)).max(200).optional(),
+    nist80053: z.array(z.string().max(128)).max(200).optional(),
+    iso27001: z.array(z.string().max(128)).max(200).optional(),
+    gdpr: z.array(z.string().max(128)).max(200).optional(),
+    hipaa: z.array(z.string().max(128)).max(200).optional()
+  }).optional(),
+  beyondSkillMd: z.boolean().optional()
+});
+
+const AgentFindingsFileSchema = z.object({
+  agentName: z.string().regex(SAFE_AGENT_NAME_RE).optional(),
+  agentRunId: z.string().max(128).optional(),
+  completedAt: z.string().max(64).optional(),
+  internetUsed: z.boolean().optional(),
+  memoryUpdated: z.boolean().optional(),
+  skillMdSectionsCovered: z.array(z.string().max(64)).max(64).optional(),
+  beyondSkillMd: z.array(z.string().max(500)).max(200).optional(),
+  summary: z.string().max(4000).optional(),
+  findings: z.array(AgentFindingSchema).max(5000),
+  remediatedCount: z.number().optional(),
+  openCount: z.number().optional()
+});
+
 export const MergeAgentFindingsSchema = z.object({
   agentRunId: z.string().describe("Agent run ID."),
   runId: z.string().uuid().describe("Review run ID — used to update the review step record.")
@@ -370,41 +414,138 @@ export async function mergeAgentFindings(args: z.infer<typeof MergeAgentFindings
   const sectionsSeen = new Set<string>();
   const beyondSkillMdNotes: string[] = [];
 
-  for (const file of files) {
-    try {
-      const raw = await readFile(join(dir, file), "utf-8");
-      const parsed = JSON.parse(raw) as AgentFindingsFile;
-      allFindings.push(...parsed.findings);
-      if (parsed.agentName) {
-        const manifest = await readManifest(agentRunId);
-        const rec = manifest.agents[parsed.agentName];
-        if (rec?.status === "completed_partial") {
-          agentsPartial.push(parsed.agentName);
-        } else {
-          agentsCovered.push(parsed.agentName);
-        }
-      }
-      for (const s of (parsed.skillMdSectionsCovered ?? [])) sectionsSeen.add(s);
-      for (const n of (parsed.beyondSkillMd ?? [])) beyondSkillMdNotes.push(n);
-    } catch {
-      // Corrupted file — skip, note partial
-      agentsPartial.push(file.replace(".json", "") as AgentName);
+  // ── Inter-agent payload integrity (article surface #3) ───────────────────
+  // Verify the attestation chain and index each agent's attested findings hash.
+  // The chain is the source of truth for "did this agent really produce this
+  // output". If the chain itself is tampered, no attestation can be trusted.
+  const chainResult = await verifyChain(agentRunId);
+  const chain = await getChain(agentRunId);
+  const attestedHashByAgent = new Map<string, string>();
+  for (const link of chain.links) {
+    if (link.agentName && link.agentName !== "genesis") {
+      attestedHashByAgent.set(link.agentName, link.findingsHash); // last attestation wins
     }
   }
+  const chainHasAttestations = attestedHashByAgent.size > 0;
+  const chainInvalid = chainHasAttestations && !chainResult.valid;
+  const verificationMode: SignatureVerification["mode"] =
+    chainInvalid ? "chain_invalid" : chainHasAttestations ? "enforced" : "unattested";
+  const attestedAgents: string[] = [];
+  const rejectedAgents: string[] = [];
+  let tamperDetected = chainInvalid;
 
-  // Deduplicate by id (first occurrence wins)
-  const seen = new Set<string>();
-  const deduped = allFindings.filter((f) => {
-    if (seen.has(f.id)) return false;
-    seen.add(f.id);
-    return true;
-  });
+  // Read the manifest once (not per-file) for covered/partial classification.
+  const manifest = await readManifest(agentRunId);
+
+  for (const file of files) {
+    let parsed: AgentFindingsFile;
+    let rawFindings: AgentFinding[];
+    let agentName: string | undefined;
+    try {
+      const raw = await readFile(join(dir, file), "utf-8");
+      const rawObj = JSON.parse(raw) as { findings?: AgentFinding[]; agentName?: string };
+      // CWE-20: strict schema validation BEFORE the payload is trusted downstream.
+      parsed = AgentFindingsFileSchema.parse(rawObj) as AgentFindingsFile;
+      // Hash the raw (pre-zod) findings so the digest matches exactly what the
+      // agent serialized when it called security.attest_agent.
+      rawFindings = (rawObj.findings ?? []) as AgentFinding[];
+      agentName = parsed.agentName;
+    } catch {
+      // Corrupted or schema-invalid file — skip, note partial.
+      agentsPartial.push(file.replace(".json", "") as AgentName);
+      continue;
+    }
+
+    // Reject anything we cannot cryptographically trust when attestations are in use.
+    const label = agentName ?? file.replace(".json", "");
+    if (verificationMode === "chain_invalid") {
+      rejectedAgents.push(`${label} (chain-invalid)`);
+      continue;
+    }
+    if (verificationMode === "enforced") {
+      const expected = agentName ? attestedHashByAgent.get(agentName) : undefined;
+      if (!expected) {
+        rejectedAgents.push(`${label} (unattested)`);
+        continue;
+      }
+      if (expected !== computeFindingsHash(rawFindings)) {
+        rejectedAgents.push(`${label} (hash-mismatch)`);
+        tamperDetected = true; // findings changed after the agent signed them
+        continue;
+      }
+      if (agentName) attestedAgents.push(agentName);
+    }
+
+    allFindings.push(...parsed.findings);
+    if (parsed.agentName) {
+      const rec = manifest.agents[parsed.agentName as AgentName];
+      if (rec?.status === "completed_partial") {
+        agentsPartial.push(parsed.agentName as AgentName);
+      } else {
+        agentsCovered.push(parsed.agentName as AgentName);
+      }
+    }
+    for (const s of (parsed.skillMdSectionsCovered ?? [])) sectionsSeen.add(s);
+    for (const n of (parsed.beyondSkillMd ?? [])) beyondSkillMdNotes.push(n);
+  }
+
+  // Deduplicate by id — on collision keep the HIGHEST severity so a malicious or
+  // mislabeled low-severity finding cannot shadow a real CRITICAL that shares its id.
+  const severityOrder = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+  const byId = new Map<string, AgentFinding>();
+  for (const f of allFindings) {
+    const prev = byId.get(f.id);
+    if (!prev || (severityOrder[f.severity] ?? 3) < (severityOrder[prev.severity] ?? 3)) {
+      byId.set(f.id, f);
+    }
+  }
+  const deduped = Array.from(byId.values());
 
   // Sort: CRITICAL > HIGH > MEDIUM > LOW
-  const severityOrder = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
   deduped.sort((a, b) => (severityOrder[a.severity] ?? 3) - (severityOrder[b.severity] ?? 3));
 
   const uncoveredSections = SKILL_MD_SECTIONS.filter((s) => !sectionsSeen.has(s));
+
+  // Opt-in fail-closed enforcement. An UNSIGNED attestation chain is forgeable by
+  // anyone who can write the run directory (the chain hashes are SHA-256 over public
+  // data), so "enforced" mode only carries cryptographic weight when the chain is
+  // HMAC-signed. Operators who depend on inter-agent integrity set this flag; when
+  // set, the run must be signed + enforced + clean or the gate fails closed. Default
+  // off preserves backward-compatible behavior for runs that never attested.
+  const requireAttestation = ["1", "true", "yes"].includes(
+    (process.env.SECURITY_REQUIRE_AGENT_ATTESTATION ?? "").toLowerCase()
+  );
+  const chainSigned = Boolean(process.env.SECURITY_AUDIT_HMAC_KEY || process.env.SECURITY_POLICY_HMAC_KEY);
+  const attestationDeficient =
+    requireAttestation &&
+    (verificationMode !== "enforced" || !chainResult.valid || !chainSigned || rejectedAgents.length > 0);
+
+  const warnings: string[] = [];
+  if (verificationMode === "unattested") {
+    warnings.push("No attestation chain present — agent findings were schema-validated but not cryptographically verified. Call security.init_chain + security.attest_agent per agent to enforce inter-agent payload integrity.");
+  }
+  if (chainInvalid) {
+    warnings.push(`Attestation chain failed verification (${chainResult.broken?.reason ?? "unknown"}). All agent findings rejected; gate forced to FAIL.`);
+  }
+  // Honest reporting: surface verifyChain's unsigned-chain caveat even on the success
+  // path so "enforced" is never silently equated with cryptographic guarantee.
+  if (chainResult.warning) {
+    warnings.push(chainResult.warning);
+  }
+  if (rejectedAgents.length > 0) {
+    warnings.push(`${rejectedAgents.length} agent finding file(s) rejected before merge: ${rejectedAgents.join(", ")}.`);
+  }
+  if (attestationDeficient) {
+    warnings.push("SECURITY_REQUIRE_AGENT_ATTESTATION is set but this run is not a signed + enforced + clean attestation — gate forced to FAIL.");
+  }
+
+  const signatureVerification: SignatureVerification = {
+    mode: verificationMode,
+    chainValid: chainResult.valid,
+    attestedAgents,
+    rejectedAgents,
+    ...(warnings.length > 0 ? { warning: warnings.join(" ") } : {})
+  };
 
   const merged: MergedFindings = {
     agentRunId,
@@ -419,17 +560,20 @@ export async function mergeAgentFindings(args: z.infer<typeof MergeAgentFindings
     low: deduped.filter((f) => f.severity === "LOW").length,
     skillMdSectionsCovered: Array.from(sectionsSeen),
     uncoveredSections,
-    findings: deduped
+    findings: deduped,
+    signatureVerification
   };
 
   // Write merged-findings.json
   const mergedPath = join(dir, "merged-findings.json");
   await writeFile(mergedPath, JSON.stringify(merged, null, 2) + "\n", { encoding: "utf-8", mode: 0o600 });
 
-  // Hook into existing attestation flow
+  // Hook into existing attestation flow. A tampered attestation chain or a
+  // findings-hash mismatch (tamperDetected) forces FAIL even with zero findings —
+  // a manipulated run must never produce a green gate.
   const hasCritical = merged.critical > 0;
   const hasHigh = merged.high > 0;
-  const gateStatus = hasCritical || hasHigh ? "FAIL" : "PASS";
+  const gateStatus = tamperDetected || attestationDeficient || hasCritical || hasHigh ? "FAIL" : "PASS";
   await updateReviewStep(runId, "run_pr_gate", "completed", {
     source: "multi-agent-run",
     agentRunId,
@@ -441,6 +585,7 @@ export async function mergeAgentFindings(args: z.infer<typeof MergeAgentFindings
     medium: merged.medium,
     low: merged.low,
     uncoveredSkillMdSections: uncoveredSections,
+    signatureVerification,
     gateStatus
   });
 
