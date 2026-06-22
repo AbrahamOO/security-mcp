@@ -75,7 +75,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",
-    "@types/node": "^24.12.4",
+    "@types/node": "^26.0.0",
     "@types/picomatch": "^4.0.3",
     "eslint": "^9.22.0",
     "globals": "^16.0.0",
