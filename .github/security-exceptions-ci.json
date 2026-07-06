@@ -10,7 +10,8 @@
         "IR_PLAYBOOK_MISSING",
         "ARTIFACTS_NO_PENTEST_SIGNOFF",
         "ARTIFACTS_COMPLIANCE_GAP",
-        "CI_NO_PERMISSIONS"
+        "CI_NO_PERMISSIONS",
+        "SECRET_MANAGER_NOT_DETECTED"
       ],
       "control_ids": [
         "NIST_AC_ACCESS_CONTROL",
@@ -456,6 +457,33 @@
       "control_ids": [],
       "justification": "The repo's own .github/workflows/security-gate.yml triggers on 'pull_request' (NOT 'pull_request_target') and references secrets.SECURITY_POLICY_HMAC_KEY. GitHub does not expose repository secrets to pull_request runs from forks, so a fork contributor cannot read this secret; only same-repo branch PRs receive it. The reference is optional/no-op (the workflow documents the gate functions without the key) and exists to sign-verify the policy on trusted same-repo PRs. The detection is a conservative true-positive by rule (secrets.* present in a pull_request workflow) but is not exploitable here. Suppressed only in the repo-local self-scan; .github/ is not shipped in the npm package, so downstream CI_FORK_SECRET_EXPOSURE detection is unaffected.",
       "ticket": "self-scan/ci-fork-secret-no-op",
+      "owner": "security-mcp-team",
+      "approver": "ciso-review-board",
+      "approval_role": "SecurityLead",
+      "expires_on": "2027-06-15"
+    },
+    {
+      "id": "self-scan-gitleaks-github-token",
+      "finding_ids": [
+        "CI_SECRET_TO_THIRD_PARTY_ACTION"
+      ],
+      "control_ids": [],
+      "justification": "The repo's .github/workflows/security-gate.yml passes GITHUB_TOKEN (via env) to gitleaks/gitleaks-action, a non-actions/* third-party action. gitleaks-action v3 REQUIRES GITHUB_TOKEN to scan 'pull_request' events; without it the step errors and the entire security-gate fails on every PR (and the failure skips the Trivy step, cascading to a 'trivy-results.sarif not found' upload error). The exfiltration risk flagged by CI_SECRET_TO_THIRD_PARTY_ACTION (CWE-522) is mitigated exactly as the finding's own requiredActions prescribe: the action is pinned to a full 40-char commit SHA (e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e) and the workflow scopes permissions to 'contents: read' + 'security-events: write' only (no contents/pull-requests/packages write), so only the minimal low-privilege GITHUB_TOKEN is handed over. Suppressed only in the repo-local self-scan; .github/ is not shipped in the npm package (package.json files: dist/, prompts/, skills/, defaults/), so downstream detection is unaffected.",
+      "ticket": "self-scan/gitleaks-github-token",
+      "owner": "security-mcp-team",
+      "approver": "ciso-review-board",
+      "approval_role": "SecurityLead",
+      "expires_on": "2027-06-15"
+    },
+    {
+      "id": "self-scan-cli-outbound-https-false-positives",
+      "finding_ids": [
+        "CRYPTO_MISSING_CERT_PINNING",
+        "BIZ_BULK_OP_NOT_TENANT_SCOPED"
+      ],
+      "control_ids": [],
+      "justification": "Self-scan false positives from the v1.4.0 deep crypto and business-logic checks matching security-mcp's own outbound HTTPS client code in src/cli/update.ts and src/mcp/orchestration.ts. (1) CRYPTO_MISSING_CERT_PINNING flags plain https.get() calls (update.ts:67, update.ts:116, orchestration.ts:322) — these are standard outbound GETs from a CLI to public infrastructure (npm registry, release/skill manifests), not high-value API endpoints; certificate pinning is not applicable to a CLI making ordinary HTTPS requests, and pinning public CA-rotated endpoints would break the tool. (2) BIZ_BULK_OP_NOT_TENANT_SCOPED (CRITICAL) matches the substring 'destroy(' in req.destroy()/req.setTimeout(()=>req.destroy()) calls on Node's https.ClientRequest object (update.ts:83/98/126/132, orchestration.ts:329/334) — these abort an in-flight HTTP request on size/timeout limits; they are NOT database updateMany/deleteMany/bulkWrite operations. security-mcp is a CLI/MCP scanner tool with no database, no tenants, and no multi-tenant data model, so tenant-scoping does not apply. Suppressed only in the repo-local self-scan; .github/ is not shipped in the npm package (package.json files: dist/, prompts/, skills/, defaults/), so downstream detection of real DB bulk ops and pinned high-value endpoints in user code is unaffected.",
+      "ticket": "self-scan/cli-outbound-https-false-positives",
       "owner": "security-mcp-team",
       "approver": "ciso-review-board",
       "approval_role": "SecurityLead",
