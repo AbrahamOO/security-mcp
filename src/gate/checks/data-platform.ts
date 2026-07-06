@@ -333,6 +333,65 @@ const SF_DATA_RETENTION_ZERO_PATTERN =
 const SF_REKEYING_OFF_PATTERN =
   String.raw`PERIODIC_DATA_REKEYING\s*=\s*FALSE|periodic_data_rekeying\s*=\s*false`;
 
+// ---------------------------------------------------------------------------
+// New detections (Round 3): notebook SQL injection, dynamic SQL, token expiry,
+// share to parameterized account, public SCIM/API integration.
+// ---------------------------------------------------------------------------
+
+// 47. Notebook SQL built via f-string / .format() / concat with user/widget input.
+// Databricks widgets (dbutils.widgets.get) and Snowflake session/bind params are
+// classic untrusted sources interpolated straight into a SQL string. Per-line.
+// Split into <500-char sub-patterns: searchRepo rejects any single regex over 500 chars,
+// which would otherwise throw and disable the entire data-platform check.
+const NB_SQL_INJECTION_PATTERNS = [
+  // f-string SQL containing a widgets.get / user / param interpolation
+  String.raw`f["'](?:[^"']*\b(?:SELECT|INSERT|UPDATE|DELETE|MERGE|DROP|CREATE|GRANT|ALTER)\b[^"']*)\{[^}]*(?:dbutils\.widgets\.get|widget|user|param|input|request|getArgument)[^}]*\}`,
+  // .format() applied to a SQL string with widgets/user args
+  String.raw`["'][^"']*\b(?:SELECT|INSERT|UPDATE|DELETE|MERGE|DROP)\b[^"']*["']\s*\.\s*format\s*\([^)]*(?:dbutils\.widgets\.get|getArgument|widget|user|param|input)`,
+  // string concatenation of a SQL keyword with a widgets.get / user var
+  String.raw`\b(?:SELECT|INSERT|UPDATE|DELETE|MERGE|WHERE|FROM)\b[^"'\n]*["']\s*\+\s*(?:dbutils\.widgets\.get|getArgument|\w*(?:widget|user|input|param)\w*)`,
+  String.raw`(?:dbutils\.widgets\.get|getArgument)\s*\([^)]*\)\s*\+\s*["'][^"']*\b(?:FROM|WHERE|VALUES|SET)\b`,
+  // spark.sql / cursor.execute wrapping an f-string with interpolation
+  String.raw`(?:spark\.sql|cursor\.execute|session\.sql|con\.execute)\s*\(\s*f["'][^"']*\{[^}]*(?:widget|user|param|input|getArgument)`,
+];
+
+// 48. Snowflake EXECUTE IMMEDIATE / dynamic SQL with concatenation in a stored proc.
+// Per-line signals: EXECUTE IMMEDIATE on a concatenated expression, or a dynamic
+// SQL variable built with || concatenation of a keyword and a non-literal.
+const SF_DYNAMIC_SQL_CONCAT_PATTERN =
+  String.raw`EXECUTE\s+IMMEDIATE\s+(?:["'][^"']*["']\s*\|\||\w+\s*\|\||['"][^'"]*\$\{|:\w+\s*\|\|)|` +
+  String.raw`EXECUTE\s+IMMEDIATE\s+["'][^"']*\b(?:WHERE|FROM|SET|VALUES)\b[^"']*["']\s*\|\||` +
+  String.raw`(?:sqlText|stmt|query|command)\s*(?::=|=)\s*["'][^"']*\b(?:SELECT|INSERT|UPDATE|DELETE|DROP|MERGE)\b[^"']*["']\s*\|\|\s*(?!["'])|` +
+  String.raw`sqlText\s*[:=]+\s*[^;\n]*\|\|\s*(?:ARGUMENT|:?\w*(?:input|arg|param|user)\w*)|` +
+  // JS stored proc: snowflake.execute({sqlText: "..." + VAR})
+  String.raw`snowflake\.(?:execute|createStatement)\s*\(\s*\{[^}]*sqlText\s*:\s*["'][^"']*["']\s*\+`;
+
+// 49. Databricks token with no expiry (-1) / effectively no expiry, or an
+// orphaned PAT (token resource with no comment / owner tag). Distinct from #6:
+// this fires on the explicit never-expire / missing-lifetime shape.
+const DBX_TOKEN_NO_EXPIRY_PATTERN =
+  String.raw`resource\s+"databricks_token"\b(?![^}]*lifetime_seconds)[^}]*\}|` +   // token resource with NO lifetime_seconds at all
+  String.raw`lifetime_seconds\s*=\s*-1\b|` +                                        // explicit never-expire
+  String.raw`lifetime_seconds\s*=\s*0\b|` +                                         // 0 → no expiry
+  String.raw`create_token[^)\n]*lifetime[_-]?seconds\s*[=:]\s*(?:-1|0)\b|` +
+  String.raw`"?lifetime_seconds"?\s*:\s*(?:-1|0)\b`;
+
+// 50. Snowflake ALTER SHARE ADD ACCOUNTS to an external / parameterized account
+// (a template var or non-literal → the target account is not statically pinned).
+const SF_SHARE_PARAM_ACCOUNT_PATTERN =
+  String.raw`ALTER\s+SHARE\s+[^;]*ADD\s+ACCOUNTS\s*=\s*\$\{|` +           // ${var}
+  String.raw`ALTER\s+SHARE\s+[^;]*ADD\s+ACCOUNTS\s*=\s*(?:var\.|local\.|:\w+)|` + // tf/bind var
+  String.raw`ALTER\s+SHARE\s+[^;]*ADD\s+ACCOUNTS\s*=\s*["']?[A-Za-z0-9_]+\.[A-Za-z0-9_]+["']?\s*,\s*["']?[A-Za-z0-9_]+|` + // multiple external orgs
+  String.raw`accounts\s*=\s*\[[^\]]*(?:var\.|\$\{)`;
+
+// 51. SCIM / API / security integration endpoint without a network policy — the
+// integration is reachable from any IP (public). Presence signal for a public
+// (no NETWORK_POLICY) integration; complements existing SCIM absence check #33.
+const SF_INTEGRATION_PUBLIC_PATTERN =
+  String.raw`CREATE\s+(?:OR\sREPLACE\s)?(?:SECURITY|API|NOTIFICATION)\s+INTEGRATION\b[^;]*ENABLED\s*=\s*TRUE(?![^;]*NETWORK_POLICY)|` +
+  String.raw`snowflake_(?:scim|api|security)_integration\b(?![^}]*network_policy)[^}]*enabled\s*=\s*true|` +
+  String.raw`SCIM_CLIENT\s*=\s*["'](?:AZURE|OKTA|GENERIC)["'](?![^;]*NETWORK_POLICY)`;
+
 function ev(matches: { file: string; line: number; preview: string }[]): string[] {
   return matches.slice(0, 20).map((m) => `${m.file}:${m.line}: ${m.preview}`);
 }
@@ -392,6 +451,11 @@ export async function checkDataPlatform(_opts: { changedFiles: string[] }): Prom
     sfWhNoSuspend,
     sfDataRetentionZero,
     sfRekeyingOff,
+    nbSqlInjection,
+    sfDynamicSqlConcat,
+    dbxTokenNoExpiry,
+    sfSharePersonalAccount,
+    sfIntegrationPublic,
   ] = await Promise.all([
     searchRepo({ query: DBX_HARDCODED_TOKEN_PATTERN, isRegex: true, maxMatches: 200 }),
     searchRepo({ query: DBX_SECRET_LEAK_PATTERN, isRegex: true, maxMatches: 200 }),
@@ -444,6 +508,11 @@ export async function checkDataPlatform(_opts: { changedFiles: string[] }): Prom
     searchRepo({ query: SF_WAREHOUSE_NO_SUSPEND_PATTERN, isRegex: true, maxMatches: 200 }),
     searchRepo({ query: SF_DATA_RETENTION_ZERO_PATTERN, isRegex: true, maxMatches: 200 }),
     searchRepo({ query: SF_REKEYING_OFF_PATTERN, isRegex: true, maxMatches: 200 }),
+    (async () => (await Promise.all(NB_SQL_INJECTION_PATTERNS.map((q) => searchRepo({ query: q, isRegex: true, maxMatches: 200 })))).flat())(),
+    searchRepo({ query: SF_DYNAMIC_SQL_CONCAT_PATTERN, isRegex: true, maxMatches: 200 }),
+    searchRepo({ query: DBX_TOKEN_NO_EXPIRY_PATTERN, isRegex: true, maxMatches: 200 }),
+    searchRepo({ query: SF_SHARE_PARAM_ACCOUNT_PATTERN, isRegex: true, maxMatches: 200 }),
+    searchRepo({ query: SF_INTEGRATION_PUBLIC_PATTERN, isRegex: true, maxMatches: 200 }),
   ]);
 
   // 1.
@@ -1151,6 +1220,86 @@ export async function checkDataPlatform(_opts: { changedFiles: string[] }): Prom
         "Set PERIODIC_DATA_REKEYING = TRUE so Snowflake re-encrypts data with new keys yearly.",
         "Document key rotation for SOC 2 / PCI DSS evidence.",
         "Use Tri-Secret Secure with a customer-managed key for regulated workloads.",
+      ],
+    });
+  }
+
+  // 47. Notebook SQL injection via f-string / .format() / concat with widget/user input.
+  if (nbSqlInjection.length > 0) {
+    findings.push({
+      id: "DATAPLATFORM_NOTEBOOK_SQL_INJECTION",
+      title: "Databricks/Snowflake SQL built via f-string/.format()/concatenation with user or widget input",
+      severity: "CRITICAL",
+      evidence: ev(nbSqlInjection),
+      sla: "24h",
+      requiredActions: [
+        "Never interpolate dbutils.widgets.get / getArgument / user input into a SQL string via f-string, .format(), or '+'/'||' concatenation — this is SQL injection (CWE-89).",
+        "Use bound parameters: spark.sql(query, args={...}) / parameter markers (:name) / the connector's parameterized execute; pass values, never build the statement text.",
+        "Validate and allowlist any identifier (table/column) that cannot be bound, and run notebooks under least-privilege Unity Catalog grants.",
+      ],
+    });
+  }
+
+  // 48. Snowflake EXECUTE IMMEDIATE / dynamic SQL with concatenation in a stored proc.
+  if (sfDynamicSqlConcat.length > 0) {
+    findings.push({
+      id: "SNOWFLAKE_DYNAMIC_SQL_CONCAT",
+      title: "Snowflake EXECUTE IMMEDIATE / dynamic SQL built by concatenation (stored-procedure SQL injection)",
+      severity: "HIGH",
+      evidence: ev(sfDynamicSqlConcat),
+      sla: "7d",
+      requiredActions: [
+        "Do not concatenate arguments into EXECUTE IMMEDIATE / sqlText with '||' or '+' — a crafted argument alters the executed statement, and with EXECUTE AS OWNER it escalates privilege (CWE-89).",
+        "Use bind variables (USING (:arg)) or the Snowpark/connector parameterized API; concatenate only validated identifiers via IDENTIFIER() or an allowlist.",
+        "Prefer EXECUTE AS CALLER for procedures that build dynamic SQL and restrict who can CALL them.",
+      ],
+    });
+  }
+
+  // 49. Databricks token with no expiry / lifetime = -1 or 0, or orphaned PAT.
+  if (dbxTokenNoExpiry.length > 0) {
+    findings.push({
+      id: "DATABRICKS_TOKEN_NO_EXPIRY",
+      title: "Databricks token with no expiry (lifetime_seconds = -1/0 or unset) — non-expiring/orphaned PAT",
+      severity: "HIGH",
+      evidence: ev(dbxTokenNoExpiry),
+      sla: "7d",
+      requiredActions: [
+        "Set an explicit short lifetime_seconds (e.g. <= 3600) on every databricks_token — never -1, 0, or an unset lifetime, which yield tokens that never expire (CWE-798/CWE-613).",
+        "Inventory and revoke orphaned/non-expiring PATs; rotate tokens automatically and tag each with an owner.",
+        "Prefer OAuth M2M (service principal) tokens with short-lived, auto-refreshing credentials over static PATs.",
+      ],
+    });
+  }
+
+  // 50. Snowflake ALTER SHARE ADD ACCOUNTS to an external / parameterized account.
+  if (sfSharePersonalAccount.length > 0) {
+    findings.push({
+      id: "SNOWFLAKE_SHARE_PARAMETERIZED_ACCOUNT",
+      title: "ALTER SHARE ADD ACCOUNTS targets an external or parameterized (non-pinned) account",
+      severity: "HIGH",
+      evidence: ev(sfSharePersonalAccount),
+      sla: "7d",
+      requiredActions: [
+        "Never add a share to a variable/template-driven account (${var}, var.*, :bind) — the recipient is not statically reviewable and can be redirected to an attacker-controlled org (CWE-668).",
+        "Pin ADD ACCOUNTS to explicitly named, approved account locators and review each addition in code review.",
+        "Apply secure views / row-access policies to shared objects and audit share membership regularly.",
+      ],
+    });
+  }
+
+  // 51. SCIM/API/security integration with no network policy (public).
+  if (sfIntegrationPublic.length > 0) {
+    findings.push({
+      id: "SNOWFLAKE_INTEGRATION_NO_NETWORK_POLICY",
+      title: "Snowflake SCIM/API/security integration enabled with no network policy — reachable from any IP",
+      severity: "CRITICAL",
+      evidence: ev(sfIntegrationPublic),
+      sla: "24h",
+      requiredActions: [
+        "Attach a NETWORK_POLICY to every SCIM/API/security integration so its bearer token/endpoint is usable only from the IdP or approved provider IP ranges (CWE-284/CWE-306).",
+        "Rotate the integration's access token and store it in a secret manager; scope the owning role to least privilege.",
+        "Prefer Private Link / private connectivity for integrations rather than public reachability.",
       ],
     });
   }

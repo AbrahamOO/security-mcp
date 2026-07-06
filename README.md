@@ -22,6 +22,7 @@ npx -y security-mcp@latest install
 ## Table of Contents
 
 - [Why this exists](#why-this-exists)
+- [What's new in 1.4.0](#whats-new-in-140)
 - [What's new in 1.3.3](#whats-new-in-133)
 - [System overview](#system-overview)
 - [The two entry points](#the-two-entry-points)
@@ -55,6 +56,18 @@ You get three things from one install:
 - An interactive security engineer that fixes code inside your editor.
 - A multi-agent security program that runs a full audit on demand.
 - A standalone CI gate that needs no AI session to enforce the line.
+
+---
+
+## What's new in 1.4.0
+
+**Full-power model routing by default.** The model router now runs security agents at maximum capability instead of cheapest-first. Security-critical reasoning tasks — code review, remediation, threat modeling, compliance analysis, exploit chains, AI red-teaming, pentesting, crypto analysis, auth analysis, incident response, risk scoring — default to the advanced capability tier, and within that tier the most capable model (Claude Opus 4.8) is selected first, with cost only a tiebreak. Light mechanical tasks (secret scanning, DLP, pattern matching, manifest/lockfile parsing, config reads, dependency scans) stay on the cheap tier, and report generation stays standard. A budget safety valve still exists: once spend utilization crosses `downgrade_threshold_pct` (default 80%), non-protected advanced tasks drop to standard — but exploit-chain, pentest, AI red-team, crypto, auth, threat-model, and remediation tasks never downgrade, no matter the spend. New `model_budget` policy fields: `downgrade_threshold_pct` and an opt-**out** `force_standard_tier_for` list. Model IDs are refreshed to Claude Sonnet 5, Claude Opus 4.8, and Claude Haiku 4.5.
+
+**Orchestration thoroughness enforcement.** A green gate now requires proof that agents actually did the work, not just that they reported success. `orchestration.merge_agent_findings` verifies SKILL.md section coverage and fails the gate if it drops below 90% (`SECURITY_MIN_SKILL_COVERAGE_PCT`), detects ghost or missing required Phase-1 leads, and flags findings marked remediated with no remediation summary. Failed agents are retried up to twice before being escalated, which also forces the gate to FAIL. `stackContext` values are now sanitized before they reach spawned-agent prompts.
+
+**155 new detection rules.** The check engine grew across injection, auth, crypto, business logic, cloud, CI/CD, mobile, AI/LLM, and MCP-specific threats — among them HTTP request smuggling, template/code injection (XSLT, Groovy, Perl), MongoDB operator injection, JWT `kid` injection, SAML XXE, static-IV and AEAD-bypass crypto flaws, hardcoded webhook and registry secrets, payment idempotency and wallet-balance race conditions, IAM privilege escalation via `PassRole`, Kubernetes default-SA token automount, unsafe model deserialization (pickle/joblib/torch), MCP tool-description poisoning, and WebView/keychain issues on Android and iOS. Four new AWS cloud-control rules were added to the controls engine, bringing total coverage to 1,002 rules.
+
+Earlier releases (1.3.3) closed inter-agent payload integrity and per-tool-call audit gaps; 1.3.2 added the cloud security controls engine. See the [CHANGELOG](CHANGELOG.md) for the full list.
 
 ---
 
@@ -139,17 +152,17 @@ A crashed check module never disappears quietly. It becomes a HIGH coverage-gap 
 
 | Module | Patterns | What it targets |
 | --- | --- | --- |
-| Deep injection | 42 | SQL/NoSQL, SSTI, SpEL/OGNL, deserialization, CRLF, SSRF, and more |
-| Deep authentication | 43 | JWT confusion, session and OAuth flaws, weak hashing, token entropy |
-| Deep supply chain | 32 | Obfuscated payloads, malicious scripts, exfiltration channels |
-| Business logic | 31 | IDOR, race conditions, payment and e-commerce abuse |
-| Data platform | 47 | Databricks and Snowflake misconfiguration |
-| Deep Docker | 49 | Container build and runtime hardening |
-| GitOps | 41 | ArgoCD and Flux pipeline integrity |
-| Agentic-instruction integrity | 11 | Poisoned AI agent instruction files |
+| Deep injection | 56 | SQL/NoSQL, SSTI, SpEL/OGNL, deserialization, CRLF, SSRF, HTTP request smuggling, and more |
+| Deep authentication | 55 | JWT confusion (including `kid` injection), session and OAuth flaws, SAML XXE, weak hashing, token entropy |
+| Deep supply chain | 33 | Obfuscated payloads, malicious scripts, exfiltration channels |
+| Business logic | 41 | IDOR, race conditions, payment and e-commerce abuse |
+| Data platform | 52 | Databricks and Snowflake misconfiguration |
+| Deep Docker | 52 | Container build and runtime hardening |
+| GitOps | 45 | ArgoCD and Flux pipeline integrity |
+| Agentic-instruction integrity | 16 | Poisoned AI agent instruction files |
 | AI governance | 3 | Shadow-AI and data-to-LLM exfiltration |
 
-Alongside these, the gate runs Kubernetes (70 checks), IaC (56), and dedicated modules for secrets, dependencies, crypto, web/Next.js, API, mobile (iOS and Android), GraphQL, database, DLP, SBOM, an incident-response playbook, runtime/DAST, CI pipeline hardening, and a Nuclei DAST integration.
+Alongside these, the gate runs Kubernetes (74 checks), IaC (63), and dedicated modules for secrets, dependencies, crypto, web/Next.js, API, mobile (iOS and Android), GraphQL, database, DLP, SBOM, an incident-response playbook, runtime/DAST, CI pipeline hardening, and a Nuclei DAST integration.
 
 ### Scanner orchestration and threat intel
 
@@ -161,19 +174,19 @@ Live threat intelligence (cached for 24 hours) enriches the verdict: CISA KEV, E
 
 ## Cloud security controls engine
 
-A registry-driven engine scans infrastructure-as-code against 998 rules mapped to AWS Foundational Security Best Practices (FSBP), CIS Benchmarks for AWS, GCP, and Azure, and the Microsoft Cloud Security Benchmark.
+A registry-driven engine scans infrastructure-as-code against 1,002 rules mapped to AWS Foundational Security Best Practices (FSBP), CIS Benchmarks for AWS, GCP, and Azure, and the Microsoft Cloud Security Benchmark.
 
 | Coverage | Rules |
 | --- | --- |
-| AWS | 483 |
+| AWS | 487 |
 | Azure | 320 |
 | GCP | 195 |
-| Terraform / HCL | 774 |
+| Terraform / HCL | 778 |
 | CloudFormation | 128 |
 | Bicep | 96 |
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/assets/diagrams/cloud-controls.svg" alt="Cloud controls flow: detect IaC against the 998-rule registry, surface violations, auto-fix safe Terraform cases then re-detect to confirm, revert if not cleared, and report anything unsafe as a manual action with a snippet." width="720">
+  <img src="https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/assets/diagrams/cloud-controls.svg" alt="Cloud controls flow: detect IaC against the 1,002-rule registry, surface violations, auto-fix safe Terraform cases then re-detect to confirm, revert if not cleared, and report anything unsafe as a manual action with a snippet." width="720">
 </p>
 
 Terraform supports auto-remediation through `security-mcp autoharden` (use `--dry-run` to preview). The engine applies a fix, re-detects to confirm the violation actually cleared, and only then keeps the change. Anything it cannot safely auto-fix is reported as a manual action with a code snippet.

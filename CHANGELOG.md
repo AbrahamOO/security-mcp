@@ -3,6 +3,91 @@
 All notable changes to `security-mcp` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.4.0] - 2026-07-05
+
+### Changed — full-power model routing by default
+
+Security agents now run at maximum capability by default instead of cheapest-first.
+
+- **Capability-first advanced tier.** Security-critical reasoning tasks (`code_review`,
+  `remediation`, `threat_model`, `compliance_analysis`, `exploit_chain`, `ai_redteam`,
+  `pentest`, `crypto_analysis`, `auth_analysis`, `incident_response`, `risk_scoring`)
+  default to the `advanced` capability tier. Within that tier the router now selects the
+  most capable model (Claude Opus 4.8) first and uses cost only as a tiebreak, so flagship
+  security reasoning is never silently downgraded to a cheaper, weaker advanced model.
+- **Budget safety valve with a protected set.** When spend utilization reaches
+  `model_budget.downgrade_threshold_pct` (default 80), only NON-protected advanced tasks
+  drop to standard, emitting a `MODEL_BUDGET_DOWNGRADE` audit event. The protected set —
+  `exploit_chain`, `pentest`, `ai_redteam`, `crypto_analysis`, `auth_analysis`,
+  `threat_model`, `remediation` — never downgrades, regardless of spend.
+- **Opt-out, not opt-in.** New `model_budget.force_standard_tier_for` list forces named
+  tasks down to standard; protected tasks ignore it. Legacy `advanced_task_preference` is
+  still honored (unioned in, never reduces power). Light mechanical tasks (`secret_scan`,
+  `dlp_scan`, `pattern_match`, manifest/lockfile parsing, `config_read`, `dependency_scan`)
+  stay on the cheap tier; `report_generation` stays standard.
+- **Refreshed model IDs and honest logging.** `SONNET_MODEL` is now `claude-sonnet-5`,
+  the advanced tier is `claude-opus-4-8`, Haiku is `claude-haiku-4-5`. Routing decisions
+  log reason `max_power_advanced` for advanced selections, and degrade gracefully with a
+  `MODEL_ADVANCED_UNAVAILABLE` event if no advanced model is healthy.
+
+### Added — orchestration thoroughness enforcement
+
+A green gate now requires proof that agents did thorough work, not just that they
+reported success.
+
+- **Coverage gate.** `orchestration.merge_agent_findings` auto-runs SKILL.md section
+  coverage verification and forces the gate to FAIL when coverage falls below a threshold
+  (default 90%, `SECURITY_MIN_SKILL_COVERAGE_PCT`), listing uncovered sections.
+- **Ghost / missing-agent detection.** Required Phase-1 lead agents must report
+  `completed` / `completed_partial`; a missing lead forces the gate to FAIL.
+- **Semantic finding validation.** Findings marked remediated must carry a remediation
+  summary; a completed high-risk lead with zero findings and no explicit "no issues found"
+  note raises `WEAK_AGENT_OUTPUT`.
+- **Agent failure escalation.** Failed agents are retried up to twice
+  (`AGENT_RETRY_TRIGGERED`) then escalated (`AGENT_ESCALATION_REQUIRED`), forcing the gate
+  to FAIL. New optional manifest fields `failureCount` / `escalationRequired`
+  (`defaults/agent-run-schema.json`) are backward compatible.
+- **Prompt-injection hardening.** Nested `stackContext` string arrays are sanitized before
+  they reach spawned-agent prompts.
+
+### Added — 155 new detection rules
+
+Net 155 new unique detection rules across the check engine, plus new AWS cloud-control
+rules (controls engine total: 1,002). Highlights by domain:
+
+- **Injection / database:** HTTP request smuggling, .NET / XSLT / Groovy / Perl template
+  and code injection, MongoDB server-side JS and operator-key injection, prepared-statement
+  misuse, dynamic SQL, RLS-bypass and GRANT privilege escalation.
+- **Auth / crypto:** JWT `kid` injection and `none`-in-alg-list, OIDC nonce, OAuth code
+  reuse, SAML assertion XXE, predictable session IDs, post-login open redirect; static-IV
+  and stream-cipher nonce reuse, AEAD tag not verified, insecure RNG for key material,
+  hardcoded symmetric keys, weak ECDSA curve, SHA-1 signatures, weak KDF parameters.
+- **Secrets / DLP:** OpenSSH keys, webhook signing secrets, container-registry passwords,
+  client-exposed API keys; PHI / biometric / OAuth-token / passport / license in logs,
+  web-exposed database backups.
+- **Business logic / API / GraphQL / web:** payment idempotency, wallet and gift-card
+  non-atomic decrement, refund-without-purchase, bulk operations not tenant-scoped,
+  inventory underflow; webhook signature verification, batch amplification; GraphQL
+  auth-cache leakage, mutation rate limiting, subscription DoS; Next.js client env leakage,
+  image-loader SSRF, middleware matcher gaps, SSR fetch of user input.
+- **Cloud / Kubernetes / CI / supply chain:** VPC flow logs, CloudTrail, IAM privilege
+  escalation (`PassRole` / `CreatePolicyVersion`), Lambda plaintext env secrets, K8s
+  default-SA token automount and admission-webhook external URLs, PodSecurity exemptions;
+  `COPY .git`, plaintext build fetch, CI job-level secret env, secret-in-step-output,
+  secrets passed to third-party actions, self-hosted runners on PR triggers, ArgoCD
+  default-project auto-prune, Flux validation disabled, git-protocol / local-path
+  dependency overrides, install-integrity bypass.
+- **AI / LLM / agentic / data platform:** unsafe model deserialization
+  (pickle / joblib / torch), insecure LLM output handling, tool-call substitution,
+  confused-deputy tool chains, missing RAG tenant filter, cross-user prompt caching; MCP
+  tool-description poisoning, recursive base64, instruction chain-loading, homoglyph / bidi
+  obfuscation, script-in-markdown, symlink escape; notebook SQL injection, Snowflake
+  dynamic SQL, non-expiring Databricks tokens.
+- **Mobile:** Android WebView user-controlled load, wildcard-MIME intent filters,
+  world-readable file modes, cleartext traffic; iOS WKWebView custom-scheme handlers,
+  synchronizable keychain, pasteboard access without a user gesture, method swizzling,
+  keychain accessible-when-locked.
+
 ## [1.3.4] - 2026-06-19
 
 ### Changed

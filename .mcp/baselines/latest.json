@@ -1,11 +1,11 @@
 {
-  "runId": "7a3ffc02-0eb9-43ad-8ac4-44aa1a5dbf2c",
-  "commitHash": "56fc78749a3c77753e303b92b8724660e27ef5c4",
-  "savedAt": "2026-06-17T14:20:43.272Z",
+  "runId": "bbb07046-a071-494a-90b9-d3122cfbc0b4",
+  "commitHash": "8dcdc646a6f1305b8809833f3def6cc6f93d3212",
+  "savedAt": "2026-07-06T01:24:52.213Z",
   "result": {
     "status": "FAIL",
     "policyVersion": "1.0.0",
-    "evaluatedAt": "2026-06-17T14:20:43.270Z",
+    "evaluatedAt": "2026-07-06T01:24:52.211Z",
     "scope": {
       "mode": "folder_by_folder",
       "targets": [
@@ -39,7 +39,7 @@
           "Reference the threat model from your PR description and link it to changed components."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "ARTIFACTS_NO_SBOM",
@@ -57,57 +57,23 @@
           "Ensure the SBOM is included in any artifact upload to your registry (SLSA Level 2+)."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
-        "id": "GIT_HISTORY_SECRET",
-        "title": "Secret detected in git history (21 findings)",
-        "severity": "HIGH",
-        "files": [
-          "fixtures/data-platform-insecure/databricks/etl_notebook.py",
-          "fixtures/data-platform-insecure/snowflake/connection.tf",
-          "fixtures/gitops-insecure/argocd-repo-creds.yaml",
-          "fixtures/gitops-insecure/flux-helmrelease-inline.yaml",
-          "fixtures/gitops-insecure/plaintext-secret.yaml",
-          "fixtures/iac-insecure/cloudformation/deep.json",
-          "fixtures/iac-insecure/pulumi/index.ts",
-          "fixtures/iac-insecure/terraform/prod.auto.tfvars",
-          "fixtures/iac-insecure/terraform/r3_providers.tf",
-          "fixtures/iac-insecure/terraform/secrets.tf",
-          "fixtures/k8s-insecure/secret.yaml",
-          "skills/stride-pasta-analyst/SKILL.md",
-          "src/mcp/server.ts"
-        ],
+        "id": "GITLEAKS_NOT_IN_PATH",
+        "title": "git history not scanned — gitleaks binary not found",
+        "severity": "MEDIUM",
+        "files": [],
         "evidence": [
-          "commit=4bd0a1f6 file=fixtures/data-platform-insecure/databricks/etl_notebook.py rule=generic-api-key",
-          "commit=4bd0a1f6 file=fixtures/data-platform-insecure/snowflake/connection.tf rule=hashicorp-tf-password",
-          "commit=4bd0a1f6 file=fixtures/data-platform-insecure/snowflake/connection.tf rule=hashicorp-tf-password",
-          "commit=4bd0a1f6 file=fixtures/gitops-insecure/argocd-repo-creds.yaml rule=github-pat",
-          "commit=4bd0a1f6 file=fixtures/gitops-insecure/argocd-repo-creds.yaml rule=private-key",
-          "commit=4bd0a1f6 file=fixtures/gitops-insecure/flux-helmrelease-inline.yaml rule=generic-api-key",
-          "commit=4bd0a1f6 file=fixtures/gitops-insecure/plaintext-secret.yaml rule=kubernetes-secret-yaml",
-          "commit=4bd0a1f6 file=fixtures/iac-insecure/cloudformation/deep.json rule=generic-api-key",
-          "commit=4bd0a1f6 file=fixtures/iac-insecure/pulumi/index.ts rule=generic-api-key",
-          "commit=4bd0a1f6 file=fixtures/iac-insecure/terraform/prod.auto.tfvars rule=generic-api-key",
-          "commit=4bd0a1f6 file=fixtures/iac-insecure/terraform/prod.auto.tfvars rule=generic-api-key",
-          "commit=4bd0a1f6 file=fixtures/iac-insecure/terraform/r3_providers.tf rule=generic-api-key",
-          "commit=4bd0a1f6 file=fixtures/iac-insecure/terraform/secrets.tf rule=generic-api-key",
-          "commit=4bd0a1f6 file=fixtures/iac-insecure/terraform/secrets.tf rule=generic-api-key",
-          "commit=4bd0a1f6 file=fixtures/iac-insecure/terraform/secrets.tf rule=generic-api-key",
-          "commit=4bd0a1f6 file=fixtures/iac-insecure/terraform/secrets.tf rule=hashicorp-tf-password",
-          "commit=4bd0a1f6 file=fixtures/k8s-insecure/secret.yaml rule=kubernetes-secret-yaml",
-          "commit=4bd0a1f6 file=fixtures/k8s-insecure/secret.yaml rule=generic-api-key",
-          "commit=f6e03ae7 file=skills/stride-pasta-analyst/SKILL.md rule=jwt",
-          "commit=47fbcb09 file=src/mcp/server.ts rule=generic-api-key"
+          "gitleaks was not found in PATH; git history secrets scan was skipped"
         ],
         "requiredActions": [
-          "Secrets in git history remain exposed even after removal from the working tree.",
-          "Rotate all exposed credentials immediately.",
-          "Use git-filter-repo or BFG Repo-Cleaner to purge the secrets from history, then force-push and notify all collaborators to re-clone.",
-          "Enable branch protection and secret scanning alerts on the remote host."
+          "Install gitleaks (https://github.com/gitleaks/gitleaks) to enable git history scanning.",
+          "Run: gitleaks detect --source . --log-opts='--all' to scan full commit history.",
+          "Secrets committed in the past and later removed are still exposed in git history."
         ],
-        "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "sla": "30d",
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -122,7 +88,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -137,7 +103,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -151,7 +117,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -165,7 +131,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -179,7 +145,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -194,7 +160,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -209,7 +175,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -224,7 +190,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -239,7 +205,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -254,7 +220,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -269,7 +235,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -284,7 +250,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -299,7 +265,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -313,7 +279,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -328,7 +294,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -343,7 +309,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -358,7 +324,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -373,7 +339,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -388,7 +354,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -403,7 +369,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -418,7 +384,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -433,7 +399,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -449,7 +415,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -465,7 +431,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -480,7 +446,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -495,7 +461,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -510,7 +476,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -525,7 +491,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -540,7 +506,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -555,7 +521,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -570,7 +536,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -585,7 +551,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -600,7 +566,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -615,7 +581,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -630,7 +596,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -645,7 +611,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -660,7 +626,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -675,7 +641,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -690,7 +656,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -705,7 +671,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -720,7 +686,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -735,7 +701,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -750,7 +716,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -765,7 +731,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -779,7 +745,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -793,7 +759,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "SECRET_MANAGER_NOT_DETECTED",
@@ -808,7 +774,7 @@
           "Never store secrets in environment files committed to the repo, CI log output, or container images."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "INFRA_LAMBDA_URL_NO_AUTH",
@@ -823,7 +789,7 @@
           "If public invocation is intentional, add CORS restrictions and rate limiting."
         ],
         "sla": "24h",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "INFRA_VPC_NO_FLOW_LOGS",
@@ -835,7 +801,7 @@
           "Create CloudWatch metric filters and alarms for rejected traffic spikes."
         ],
         "sla": "30d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "INFRA_NO_VPC_ENDPOINT",
@@ -851,7 +817,7 @@
           "Set the VPC endpoint policy to restrict access to specific S3 buckets or ECR repositories."
         ],
         "sla": "30d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "INFRA_GUARDDUTY_MISSING",
@@ -863,7 +829,7 @@
           "Subscribe to GuardDuty findings via EventBridge and route high-severity alerts to your on-call channel."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "INFRA_SECURITY_HUB_MISSING",
@@ -875,28 +841,14 @@
           "Aggregate Security Hub findings across regions and accounts into a central delegated admin."
         ],
         "sla": "30d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
-      },
-      {
-        "id": "SBOM_MISSING",
-        "title": "No SBOM found. Syft is available — run it to generate one.",
-        "severity": "HIGH",
-        "evidence": [
-          "Expected at: /Users/smilesparker/workplace/security-mcp/.mcp/sbom/latest.json"
-        ],
-        "requiredActions": [
-          "Run: syft . -o cyclonedx-json=.mcp/sbom/latest.json",
-          "Or set SECURITY_AUTO_SBOM=true to auto-generate on each gate run."
-        ],
-        "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "PROVENANCE_MISSING",
         "title": "No SLSA provenance attestation found",
         "severity": "HIGH",
         "evidence": [
-          "Attestation dir: /Users/smilesparker/workplace/security-mcp/.mcp/attestations"
+          "Attestation dir: /sessions/inspiring-admiring-hamilton/mnt/security-mcp/.mcp/attestations"
         ],
         "requiredActions": [
           "Generate SLSA provenance during CI/CD build.",
@@ -904,7 +856,7 @@
           "Store provenance in .mcp/attestations/"
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "IR_PLAYBOOK_MISSING",
@@ -919,7 +871,7 @@
           "Include all required sections: detection criteria, escalation path, containment, eradication, recovery, communication, post-incident review, and MTTD/MTTR targets."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "IR_PLAYBOOK_MISSING",
@@ -934,7 +886,7 @@
           "Include all required sections: detection criteria, escalation path, containment, eradication, recovery, communication, post-incident review, and MTTD/MTTR targets."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "IAC_TF_UNSAFE_DESTROY",
@@ -950,7 +902,7 @@
           "Keep skip_provider_registration / disable_rollback at their safe defaults."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "IAC_PUBLIC_RESOURCE",
@@ -967,7 +919,7 @@
           "Front any legitimately public asset bucket with CloudFront + Origin Access Control, not a public ACL."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "IAC_TF_S3_MISSING_HARDENING",
@@ -993,7 +945,7 @@
           "Verify: checkov -d . --check CKV2_AWS_6,CKV_AWS_19 ; trivy config ."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "AWS_EC2_IMDSV2_REQUIRED",
@@ -1009,7 +961,7 @@
           "Add metadata_options { http_tokens = \"required\", http_put_response_hop_limit = 1 } to the aws_instance so IMDSv2 session tokens are mandatory and the metadata endpoint is unreachable from a single-hop SSRF."
         ],
         "sla": "24h",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "AWS_RDS_NOT_PUBLIC",
@@ -1025,7 +977,7 @@
           "Set publicly_accessible = false on the aws_db_instance and place it in private subnets behind a security group that only allows the application tier."
         ],
         "sla": "24h",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "AWS_RDS_STORAGE_ENCRYPTED",
@@ -1041,7 +993,7 @@
           "Set storage_encrypted = true (and kms_key_id) on the aws_db_instance. Note: encryption can only be enabled at creation; rebuild from an encrypted snapshot if the instance already exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "AWS_S3_BUCKET_NO_PUBLIC_ACL",
@@ -1057,7 +1009,7 @@
           "Set acl = \"private\" and attach an aws_s3_bucket_public_access_block with all four block flags = true."
         ],
         "sla": "24h",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "AWS_S3_BLOCK_PUBLIC_ACCESS",
@@ -1073,7 +1025,7 @@
           "Add an aws_s3_bucket_public_access_block referencing this bucket with block_public_acls, block_public_policy, ignore_public_acls, and restrict_public_buckets all set to true."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "AWS_KMS_KEY_ROTATION",
@@ -1089,7 +1041,7 @@
           "Set enable_key_rotation = true on the aws_kms_key."
         ],
         "sla": "30d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "AWS_LAMBDA_URL_AUTH_REQUIRED",
@@ -1105,7 +1057,7 @@
           "Set authorization_type = \"AWS_IAM\" on the aws_lambda_function_url, or front it with API Gateway / a Lambda authorizer that enforces authentication."
         ],
         "sla": "24h",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "AWS_S3_BUCKET_VERSIONING",
@@ -1121,7 +1073,7 @@
           "Add an aws_s3_bucket_versioning resource for this bucket with versioning_configuration { status = \"Enabled\" }."
         ],
         "sla": "90d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "AWS_RDS_DELETION_PROTECTION",
@@ -1137,7 +1089,7 @@
           "Set deletion_protection = true on the aws_db_instance."
         ],
         "sla": "30d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "AWS_RDS_BACKUP_RETENTION",
@@ -1153,7 +1105,7 @@
           "Set backup_retention_period to at least 7 (days) on the aws_db_instance."
         ],
         "sla": "90d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "AWS_S3_DEFAULT_ENCRYPTION",
@@ -1169,7 +1121,7 @@
           "Add an aws_s3_bucket_server_side_encryption_configuration for this bucket using aws:kms (or AES256)."
         ],
         "sla": "90d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "AWS_S3_BUCKET_LOGGING",
@@ -1185,7 +1137,7 @@
           "Add an aws_s3_bucket_logging resource for this bucket. Choose a separate, access-restricted target_bucket for the logs."
         ],
         "sla": "90d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "AWS_RDS_COPY_TAGS_TO_SNAPSHOT",
@@ -1201,7 +1153,7 @@
           "Set copy_tags_to_snapshot = true on the aws_db_instance."
         ],
         "sla": "90d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "AWS_RDS_ENHANCED_MONITORING",
@@ -1217,7 +1169,7 @@
           "Enable enhanced monitoring (monitoring_interval + monitoring_role_arn) on the aws_db_instance."
         ],
         "sla": "90d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       },
       {
         "id": "AWS_RDS_LOG_EXPORTS",
@@ -1233,7 +1185,87 @@
           "Enable enabled_cloudwatch_logs_exports on the aws_db_instance (log types vary by engine)."
         ],
         "sla": "90d",
-        "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
+      },
+      {
+        "id": "AWS_RDS_IAM_AUTH",
+        "title": "RDS instance should enable IAM database authentication — Without IAM database authentication, the database relies solely on long-lived static passwords that, once leaked, grant standing access with no central revocation.",
+        "severity": "MEDIUM",
+        "evidence": [
+          "terraform/main.tf:6: aws_db_instance — secure setting missing"
+        ],
+        "files": [
+          "terraform/main.tf"
+        ],
+        "requiredActions": [
+          "Set iam_database_authentication_enabled = true on the aws_db_instance so connections use short-lived IAM tokens instead of static passwords."
+        ],
+        "sla": "30d",
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
+      },
+      {
+        "id": "AWS_S3_BUCKET_OBJECT_LOCK",
+        "title": "Enable S3 Object Lock for immutable buckets — A bucket without Object Lock lets an attacker (or compromised credential) overwrite or delete objects, defeating ransomware recovery and tamper-evidence for logs and backups.",
+        "severity": "MEDIUM",
+        "evidence": [
+          "terraform/main.tf:13: aws_s3_bucket — secure setting missing"
+        ],
+        "files": [
+          "terraform/main.tf"
+        ],
+        "requiredActions": [
+          "Set object_lock_enabled = true at bucket creation and configure a retention rule via aws_s3_bucket_object_lock_configuration for WORM buckets."
+        ],
+        "sla": "30d",
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
+      },
+      {
+        "id": "AWS_EC2_INSTANCE_EBS_OPTIMIZED_MONITORING",
+        "title": "Enable detailed monitoring on EC2 instances — An EC2 instance without detailed monitoring delays anomaly detection on a compromised host, lengthening the time an attacker operates before metrics surface unusual CPU or network activity.",
+        "severity": "LOW",
+        "evidence": [
+          "terraform/main.tf:1: aws_instance — secure setting missing"
+        ],
+        "files": [
+          "terraform/main.tf"
+        ],
+        "requiredActions": [
+          "Set monitoring = true on the EC2 instance."
+        ],
+        "sla": "90d",
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
+      },
+      {
+        "id": "AWS_DB_INSTANCE_PERF_INSIGHTS_ENCRYPTED",
+        "title": "Encrypt RDS Performance Insights with a CMK — Performance Insights data without a KMS key is stored under an AWS-owned key, reducing tenant control and auditability of sensitive query metrics.",
+        "severity": "LOW",
+        "evidence": [
+          "terraform/main.tf:6: aws_db_instance — secure setting missing"
+        ],
+        "files": [
+          "terraform/main.tf"
+        ],
+        "requiredActions": [
+          "Set performance_insights_kms_key_id to a CMK ARN"
+        ],
+        "sla": "90d",
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
+      },
+      {
+        "id": "AWS_DB_INSTANCE_MANAGE_MASTER_PASSWORD",
+        "title": "Manage RDS master password via Secrets Manager — An RDS instance with an inline master_password commits the credential to Terraform state; managing it via Secrets Manager removes the plaintext secret and enables rotation.",
+        "severity": "MEDIUM",
+        "evidence": [
+          "terraform/main.tf:6: aws_db_instance — secure setting missing"
+        ],
+        "files": [
+          "terraform/main.tf"
+        ],
+        "requiredActions": [
+          "Set manage_master_user_password = true on the aws_db_instance to use Secrets Manager"
+        ],
+        "sla": "30d",
+        "slaAssignedAt": "2026-07-06T01:24:52.210Z"
       }
     ],
     "suppressedFindings": [],
@@ -2162,7 +2194,7 @@
             "Never store secrets in environment files committed to the repo, CI log output, or container images."
           ],
           "sla": "7d",
-          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+          "slaAssignedAt": "2026-07-06T01:24:52.210Z"
         },
         {
           "id": "INFRA_LAMBDA_URL_NO_AUTH",
@@ -2177,7 +2209,7 @@
             "If public invocation is intentional, add CORS restrictions and rate limiting."
           ],
           "sla": "24h",
-          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+          "slaAssignedAt": "2026-07-06T01:24:52.210Z"
         },
         {
           "id": "INFRA_VPC_NO_FLOW_LOGS",
@@ -2189,7 +2221,7 @@
             "Create CloudWatch metric filters and alarms for rejected traffic spikes."
           ],
           "sla": "30d",
-          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+          "slaAssignedAt": "2026-07-06T01:24:52.210Z"
         },
         {
           "id": "INFRA_NO_VPC_ENDPOINT",
@@ -2205,7 +2237,7 @@
             "Set the VPC endpoint policy to restrict access to specific S3 buckets or ECR repositories."
           ],
           "sla": "30d",
-          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+          "slaAssignedAt": "2026-07-06T01:24:52.210Z"
         },
         {
           "id": "INFRA_GUARDDUTY_MISSING",
@@ -2217,7 +2249,7 @@
             "Subscribe to GuardDuty findings via EventBridge and route high-severity alerts to your on-call channel."
           ],
           "sla": "7d",
-          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+          "slaAssignedAt": "2026-07-06T01:24:52.210Z"
         },
         {
           "id": "INFRA_SECURITY_HUB_MISSING",
@@ -2229,7 +2261,7 @@
             "Aggregate Security Hub findings across regions and accounts into a central delegated admin."
           ],
           "sla": "30d",
-          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+          "slaAssignedAt": "2026-07-06T01:24:52.210Z"
         },
         {
           "id": "IAC_TF_UNSAFE_DESTROY",
@@ -2245,7 +2277,7 @@
             "Keep skip_provider_registration / disable_rollback at their safe defaults."
           ],
           "sla": "7d",
-          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+          "slaAssignedAt": "2026-07-06T01:24:52.210Z"
         },
         {
           "id": "IAC_PUBLIC_RESOURCE",
@@ -2262,7 +2294,7 @@
             "Front any legitimately public asset bucket with CloudFront + Origin Access Control, not a public ACL."
           ],
           "sla": "7d",
-          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+          "slaAssignedAt": "2026-07-06T01:24:52.210Z"
         },
         {
           "id": "IAC_TF_S3_MISSING_HARDENING",
@@ -2288,7 +2320,7 @@
             "Verify: checkov -d . --check CKV2_AWS_6,CKV_AWS_19 ; trivy config ."
           ],
           "sla": "7d",
-          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+          "slaAssignedAt": "2026-07-06T01:24:52.210Z"
         },
         {
           "id": "AWS_EC2_IMDSV2_REQUIRED",
@@ -2304,7 +2336,7 @@
             "Add metadata_options { http_tokens = \"required\", http_put_response_hop_limit = 1 } to the aws_instance so IMDSv2 session tokens are mandatory and the metadata endpoint is unreachable from a single-hop SSRF."
           ],
           "sla": "24h",
-          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+          "slaAssignedAt": "2026-07-06T01:24:52.210Z"
         },
         {
           "id": "AWS_RDS_NOT_PUBLIC",
@@ -2320,7 +2352,7 @@
             "Set publicly_accessible = false on the aws_db_instance and place it in private subnets behind a security group that only allows the application tier."
           ],
           "sla": "24h",
-          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+          "slaAssignedAt": "2026-07-06T01:24:52.210Z"
         },
         {
           "id": "AWS_RDS_STORAGE_ENCRYPTED",
@@ -2336,7 +2368,7 @@
             "Set storage_encrypted = true (and kms_key_id) on the aws_db_instance. Note: encryption can only be enabled at creation; rebuild from an encrypted snapshot if the instance already exists."
           ],
           "sla": "7d",
-          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+          "slaAssignedAt": "2026-07-06T01:24:52.210Z"
         },
         {
           "id": "AWS_S3_BUCKET_NO_PUBLIC_ACL",
@@ -2352,7 +2384,7 @@
             "Set acl = \"private\" and attach an aws_s3_bucket_public_access_block with all four block flags = true."
           ],
           "sla": "24h",
-          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+          "slaAssignedAt": "2026-07-06T01:24:52.210Z"
         },
         {
           "id": "AWS_S3_BLOCK_PUBLIC_ACCESS",
@@ -2368,7 +2400,7 @@
             "Add an aws_s3_bucket_public_access_block referencing this bucket with block_public_acls, block_public_policy, ignore_public_acls, and restrict_public_buckets all set to true."
           ],
           "sla": "7d",
-          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+          "slaAssignedAt": "2026-07-06T01:24:52.210Z"
         },
         {
           "id": "AWS_KMS_KEY_ROTATION",
@@ -2384,7 +2416,7 @@
             "Set enable_key_rotation = true on the aws_kms_key."
           ],
           "sla": "30d",
-          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+          "slaAssignedAt": "2026-07-06T01:24:52.210Z"
         },
         {
           "id": "AWS_LAMBDA_URL_AUTH_REQUIRED",
@@ -2400,7 +2432,7 @@
             "Set authorization_type = \"AWS_IAM\" on the aws_lambda_function_url, or front it with API Gateway / a Lambda authorizer that enforces authentication."
           ],
           "sla": "24h",
-          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+          "slaAssignedAt": "2026-07-06T01:24:52.210Z"
         },
         {
           "id": "AWS_S3_BUCKET_VERSIONING",
@@ -2416,7 +2448,7 @@
             "Add an aws_s3_bucket_versioning resource for this bucket with versioning_configuration { status = \"Enabled\" }."
           ],
           "sla": "90d",
-          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+          "slaAssignedAt": "2026-07-06T01:24:52.210Z"
         },
         {
           "id": "AWS_RDS_DELETION_PROTECTION",
@@ -2432,7 +2464,7 @@
             "Set deletion_protection = true on the aws_db_instance."
           ],
           "sla": "30d",
-          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+          "slaAssignedAt": "2026-07-06T01:24:52.210Z"
         },
         {
           "id": "AWS_RDS_BACKUP_RETENTION",
@@ -2448,7 +2480,7 @@
             "Set backup_retention_period to at least 7 (days) on the aws_db_instance."
           ],
           "sla": "90d",
-          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+          "slaAssignedAt": "2026-07-06T01:24:52.210Z"
         },
         {
           "id": "AWS_S3_DEFAULT_ENCRYPTION",
@@ -2464,7 +2496,7 @@
             "Add an aws_s3_bucket_server_side_encryption_configuration for this bucket using aws:kms (or AES256)."
           ],
           "sla": "90d",
-          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+          "slaAssignedAt": "2026-07-06T01:24:52.210Z"
         },
         {
           "id": "AWS_S3_BUCKET_LOGGING",
@@ -2480,7 +2512,7 @@
             "Add an aws_s3_bucket_logging resource for this bucket. Choose a separate, access-restricted target_bucket for the logs."
           ],
           "sla": "90d",
-          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+          "slaAssignedAt": "2026-07-06T01:24:52.210Z"
         },
         {
           "id": "AWS_RDS_COPY_TAGS_TO_SNAPSHOT",
@@ -2496,7 +2528,7 @@
             "Set copy_tags_to_snapshot = true on the aws_db_instance."
           ],
           "sla": "90d",
-          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+          "slaAssignedAt": "2026-07-06T01:24:52.210Z"
         },
         {
           "id": "AWS_RDS_ENHANCED_MONITORING",
@@ -2512,7 +2544,7 @@
             "Enable enhanced monitoring (monitoring_interval + monitoring_role_arn) on the aws_db_instance."
           ],
           "sla": "90d",
-          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+          "slaAssignedAt": "2026-07-06T01:24:52.210Z"
         },
         {
           "id": "AWS_RDS_LOG_EXPORTS",
@@ -2528,7 +2560,87 @@
             "Enable enabled_cloudwatch_logs_exports on the aws_db_instance (log types vary by engine)."
           ],
           "sla": "90d",
-          "slaAssignedAt": "2026-06-17T14:20:43.269Z"
+          "slaAssignedAt": "2026-07-06T01:24:52.210Z"
+        },
+        {
+          "id": "AWS_RDS_IAM_AUTH",
+          "title": "RDS instance should enable IAM database authentication — Without IAM database authentication, the database relies solely on long-lived static passwords that, once leaked, grant standing access with no central revocation.",
+          "severity": "MEDIUM",
+          "evidence": [
+            "terraform/main.tf:6: aws_db_instance — secure setting missing"
+          ],
+          "files": [
+            "terraform/main.tf"
+          ],
+          "requiredActions": [
+            "Set iam_database_authentication_enabled = true on the aws_db_instance so connections use short-lived IAM tokens instead of static passwords."
+          ],
+          "sla": "30d",
+          "slaAssignedAt": "2026-07-06T01:24:52.210Z"
+        },
+        {
+          "id": "AWS_S3_BUCKET_OBJECT_LOCK",
+          "title": "Enable S3 Object Lock for immutable buckets — A bucket without Object Lock lets an attacker (or compromised credential) overwrite or delete objects, defeating ransomware recovery and tamper-evidence for logs and backups.",
+          "severity": "MEDIUM",
+          "evidence": [
+            "terraform/main.tf:13: aws_s3_bucket — secure setting missing"
+          ],
+          "files": [
+            "terraform/main.tf"
+          ],
+          "requiredActions": [
+            "Set object_lock_enabled = true at bucket creation and configure a retention rule via aws_s3_bucket_object_lock_configuration for WORM buckets."
+          ],
+          "sla": "30d",
+          "slaAssignedAt": "2026-07-06T01:24:52.210Z"
+        },
+        {
+          "id": "AWS_EC2_INSTANCE_EBS_OPTIMIZED_MONITORING",
+          "title": "Enable detailed monitoring on EC2 instances — An EC2 instance without detailed monitoring delays anomaly detection on a compromised host, lengthening the time an attacker operates before metrics surface unusual CPU or network activity.",
+          "severity": "LOW",
+          "evidence": [
+            "terraform/main.tf:1: aws_instance — secure setting missing"
+          ],
+          "files": [
+            "terraform/main.tf"
+          ],
+          "requiredActions": [
+            "Set monitoring = true on the EC2 instance."
+          ],
+          "sla": "90d",
+          "slaAssignedAt": "2026-07-06T01:24:52.210Z"
+        },
+        {
+          "id": "AWS_DB_INSTANCE_PERF_INSIGHTS_ENCRYPTED",
+          "title": "Encrypt RDS Performance Insights with a CMK — Performance Insights data without a KMS key is stored under an AWS-owned key, reducing tenant control and auditability of sensitive query metrics.",
+          "severity": "LOW",
+          "evidence": [
+            "terraform/main.tf:6: aws_db_instance — secure setting missing"
+          ],
+          "files": [
+            "terraform/main.tf"
+          ],
+          "requiredActions": [
+            "Set performance_insights_kms_key_id to a CMK ARN"
+          ],
+          "sla": "90d",
+          "slaAssignedAt": "2026-07-06T01:24:52.210Z"
+        },
+        {
+          "id": "AWS_DB_INSTANCE_MANAGE_MASTER_PASSWORD",
+          "title": "Manage RDS master password via Secrets Manager — An RDS instance with an inline master_password commits the credential to Terraform state; managing it via Secrets Manager removes the plaintext secret and enables rotation.",
+          "severity": "MEDIUM",
+          "evidence": [
+            "terraform/main.tf:6: aws_db_instance — secure setting missing"
+          ],
+          "files": [
+            "terraform/main.tf"
+          ],
+          "requiredActions": [
+            "Set manage_master_user_password = true on the aws_db_instance to use Secrets Manager"
+          ],
+          "sla": "30d",
+          "slaAssignedAt": "2026-07-06T01:24:52.210Z"
         }
       ],
       "resolvedFindings": [
@@ -2540,7 +2652,7 @@
             "Verify this is intentional. If not, add dependencies with pinned ranges."
           ],
           "sla": "90d",
-          "slaAssignedAt": "2026-06-17T14:20:41.159Z"
+          "slaAssignedAt": "2026-07-06T01:24:51.456Z"
         },
         {
           "id": "AI_OUTPUT_BOUNDS_MISSING",
@@ -2554,7 +2666,7 @@
             "Add prompt-injection defenses: input sanitization, tool allowlists, deny-by-default tool router, and sensitive data redaction."
           ],
           "sla": "7d",
-          "slaAssignedAt": "2026-06-17T14:20:41.159Z"
+          "slaAssignedAt": "2026-07-06T01:24:51.456Z"
         },
         {
           "id": "AI_INJECTION_CUES",
@@ -2568,7 +2680,7 @@
             "Add a red-team test harness with injection payloads and exfil attempts."
           ],
           "sla": "30d",
-          "slaAssignedAt": "2026-06-17T14:20:41.159Z"
+          "slaAssignedAt": "2026-07-06T01:24:51.456Z"
         },
         {
           "id": "AI_EXCESSIVE_AGENCY",
@@ -2583,7 +2695,7 @@
             "Apply principle of least privilege to all agentic capabilities."
           ],
           "sla": "7d",
-          "slaAssignedAt": "2026-06-17T14:20:41.159Z"
+          "slaAssignedAt": "2026-07-06T01:24:51.456Z"
         },
         {
           "id": "AI_BIAS_TESTING_ABSENT",
@@ -2595,7 +2707,7 @@
             "Gate model promotion on fairness thresholds in CI and re-evaluate on every retrain to catch drift-induced bias."
           ],
           "sla": "30d",
-          "slaAssignedAt": "2026-06-17T14:20:41.159Z"
+          "slaAssignedAt": "2026-07-06T01:24:51.456Z"
         }
       ],
       "coverageChange": -3

@@ -89,12 +89,120 @@ const SKILL_MD_SECTIONS = [
   "§ZERO-MISS-MANDATE"
 ];
 
+// Minimum fraction of SKILL.md sections that must be covered across a run before the
+// gate is allowed to PASS. Enforces that agents actually did thorough work. Overridable
+// via SECURITY_MIN_SKILL_COVERAGE_PCT (0–100); defaults to 90%.
+const DEFAULT_MIN_COVERAGE_PCT = 90;
+function minCoveragePct(): number {
+  const raw = Number(process.env.SECURITY_MIN_SKILL_COVERAGE_PCT);
+  return Number.isFinite(raw) && raw >= 0 && raw <= 100 ? raw : DEFAULT_MIN_COVERAGE_PCT;
+}
+
+// Always-on Phase-1 leads that MUST report a terminal completed/completed_partial
+// status for a run to be considered thorough. Stack-conditional leads (ai-llm-redteam,
+// mobile-security-specialist) are only required when their surface is present, so they
+// are validated dynamically from the manifest rather than hardcoded here.
+const ALWAYS_ON_PHASE1_LEADS: AgentName[] = [
+  "threat-modeler",
+  "appsec-code-auditor",
+  "cloud-infra-specialist",
+  "supply-chain-devsecops",
+  "crypto-pki-specialist"
+];
+
+// High-risk surfaces: a "completed" agent on one of these leads that reports zero
+// findings and no explicit "no issues found" note is suspicious (WEAK_AGENT_OUTPUT).
+const HIGH_RISK_LEADS: ReadonlySet<AgentName> = new Set<AgentName>([
+  "appsec-code-auditor",
+  "crypto-pki-specialist",
+  "supply-chain-devsecops",
+  "cloud-infra-specialist",
+  "ai-llm-redteam",
+  "pentest-team",
+  "threat-modeler"
+]);
+
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 
 async function ensureDir(p: string): Promise<void> {
   await mkdir(p, { recursive: true, mode: 0o700 });
+}
+
+// ---------------------------------------------------------------------------
+// Prompt-injection hardening for stackContext (CWE-116 / OWASP LLM01)
+// ---------------------------------------------------------------------------
+
+/**
+ * Sanitize a single free-text value before it can reach a spawned-agent prompt.
+ *
+ * stackContext arrays (languages, frameworks, aptGroups, databases, cloudProvider,
+ * etc.) are derived from a project scan and are later interpolated into the prompts
+ * of spawned specialist agents. An attacker who can influence those values (e.g. a
+ * crafted package name or framework marker in the repo) could otherwise inject
+ * prompt structure. This mirrors server.ts#sanitizePromptParam: strip Unicode
+ * bidi overrides, collapse newlines, strip model-specific role delimiters and
+ * HTML/XML tags and markdown structure, then hard-cap length.
+ */
+function sanitizePromptParam(value: string): string {
+  return value
+    // 1. Unicode bidirectional overrides — AML.T0051 / OWASP LLM01
+    .replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, "")
+    // 2. Collapse newlines
+    .replace(/[\r\n\v\f\u0085\u2028\u2029]+/gu, " ")
+    // 3. Model-specific injection delimiters (Llama, Mistral, tool-use XML)
+    .replace(/\[INST\]|\[\/INST\]|<<SYS>>|<<\/SYS>>|<\/s>|\[s\]/gi, "")
+    .replace(/<\|(?:im_start|im_end|system|user|assistant)\|>/gi, "")
+    // 4. HTML/XML tags (catches <system>, <tool_use>, <function_call>, <parameter>, etc.)
+    .replace(/<[^>]{0,256}>/g, "")
+    // 5. Markdown structure
+    .replace(/^#+\s/gm, "")
+    .replace(/^-{3,}$/gm, "")
+    // 6. Hard length cap
+    .slice(0, 200);
+}
+
+/** Sanitize every string in a possibly-undefined string array. */
+function sanitizeStringArray(arr: string[] | undefined): string[] {
+  if (!Array.isArray(arr)) return [];
+  return arr.map((s) => sanitizePromptParam(String(s)));
+}
+
+/**
+ * Sanitize the nested string arrays of a StackContext so none of them can carry
+ * prompt-injection payloads into a spawned agent's prompt. Booleans are passed
+ * through unchanged. cloudProvider is re-narrowed to its literal union after
+ * sanitization. Unknown extra string arrays (e.g. aptGroups) are also sanitized.
+ */
+function sanitizeStackContext(ctx: StackContext): StackContext {
+  const cloudProvider = sanitizeStringArray(ctx.cloudProvider as unknown as string[])
+    .map((c) => (["aws", "gcp", "azure"].includes(c) ? c : "unknown")) as StackContext["cloudProvider"];
+
+  const sanitized = {
+    ...ctx,
+    languages: sanitizeStringArray(ctx.languages),
+    frameworks: sanitizeStringArray(ctx.frameworks),
+    databases: sanitizeStringArray(ctx.databases),
+    cloudProvider,
+    paymentProcessor: sanitizeStringArray(ctx.paymentProcessor),
+    packageManagers: sanitizeStringArray(ctx.packageManagers),
+    ciPlatform: sanitizeStringArray(ctx.ciPlatform)
+  } as StackContext & Record<string, unknown>;
+
+  // Defensively sanitize any additional string[] fields not in the base type
+  // (e.g. aptGroups) so future/extended stackContext keys are covered too.
+  for (const [key, val] of Object.entries(sanitized)) {
+    if (
+      Array.isArray(val) &&
+      val.every((v) => typeof v === "string") &&
+      !["languages", "frameworks", "databases", "cloudProvider", "paymentProcessor", "packageManagers", "ciPlatform"].includes(key)
+    ) {
+      (sanitized as Record<string, unknown>)[key] = sanitizeStringArray(val as string[]);
+    }
+  }
+
+  return sanitized as StackContext;
 }
 
 function agentRunDir(agentRunId: string): string {
@@ -273,6 +381,11 @@ export async function createAgentRun(args: z.infer<typeof CreateAgentRunSchema>)
 
   await ensureDir(agentRunDir(agentRunId));
 
+  // Close prompt-injection via stackContext: sanitize every nested string array
+  // (languages, frameworks, aptGroups, etc.) BEFORE it is persisted to the manifest
+  // and BEFORE it reaches any spawned-agent prompt.
+  const safeStackContext = sanitizeStackContext(stackContext as StackContext);
+
   const manifest: AgentRunManifest = {
     agentRunId,
     runId,
@@ -280,9 +393,9 @@ export async function createAgentRun(args: z.infer<typeof CreateAgentRunSchema>)
     updatedAt: new Date().toISOString(),
     phase: 0,
     internetPermitted,
-    stackContext: stackContext as StackContext,
+    stackContext: safeStackContext,
     scope,
-    agents: buildInitialAgents(stackContext as StackContext)
+    agents: buildInitialAgents(safeStackContext)
   };
 
   await writeManifest(manifest);
@@ -313,9 +426,49 @@ export async function updateAgentStatus(args: z.infer<typeof UpdateAgentStatusSc
     throw new Error(`Unknown agent: ${agentName}`);
   }
 
-  record.status = status as AgentStatus;
-  if (status === "running") record.startedAt = new Date().toISOString();
-  if (status === "completed" || status === "completed_partial" || status === "failed") {
+  // ── Failure escalation with retry ────────────────────────────────────────
+  // On "failed": increment failureCount and, for up to MAX_AGENT_RETRIES, requeue the
+  // agent as "pending" so it can be re-run (intent: at the advanced/full-power tier).
+  // After retries are exhausted, mark escalationRequired so mergeAgentFindings forces
+  // the gate to FAIL. Backward compatible — failureCount defaults to 0 on old records.
+  const MAX_AGENT_RETRIES = 2;
+  let effectiveStatus: AgentStatus = status as AgentStatus;
+  if (status === "failed") {
+    const prior = record.failureCount ?? 0;
+    const nextCount = prior + 1;
+    record.failureCount = nextCount;
+    if (nextCount <= MAX_AGENT_RETRIES) {
+      // Requeue for another attempt at full power.
+      effectiveStatus = "pending";
+      record.completedAt = null;
+      console.warn(JSON.stringify({
+        event: "AGENT_RETRY_TRIGGERED",
+        timestamp: new Date().toISOString(),
+        agentRunId,
+        agentName,
+        attempt: nextCount,
+        maxRetries: MAX_AGENT_RETRIES,
+        intent: "retry_at_advanced_tier",
+        severity: "MEDIUM"
+      }));
+    } else {
+      // Retries exhausted — escalate and force the gate to FAIL at merge time.
+      record.escalationRequired = true;
+      console.error(JSON.stringify({
+        event: "AGENT_ESCALATION_REQUIRED",
+        timestamp: new Date().toISOString(),
+        agentRunId,
+        agentName,
+        failureCount: nextCount,
+        action: "Gate will be forced to FAIL. Manual investigation required.",
+        severity: "HIGH"
+      }));
+    }
+  }
+
+  record.status = effectiveStatus;
+  if (effectiveStatus === "running") record.startedAt = new Date().toISOString();
+  if (effectiveStatus === "completed" || effectiveStatus === "completed_partial" || effectiveStatus === "failed") {
     record.completedAt = new Date().toISOString();
   }
   if (findingsPath) record.findingsPath = findingsPath;
@@ -413,6 +566,8 @@ export async function mergeAgentFindings(args: z.infer<typeof MergeAgentFindings
   const agentsPartial: AgentName[] = [];
   const sectionsSeen = new Set<string>();
   const beyondSkillMdNotes: string[] = [];
+  // Per-agent signal used by semantic validation (WEAK_AGENT_OUTPUT detection).
+  const agentReportSignals = new Map<string, { findingCount: number; summary: string }>();
 
   // ── Inter-agent payload integrity (article surface #3) ───────────────────
   // Verify the attestation chain and index each agent's attested findings hash.
@@ -484,6 +639,10 @@ export async function mergeAgentFindings(args: z.infer<typeof MergeAgentFindings
       } else {
         agentsCovered.push(parsed.agentName as AgentName);
       }
+      agentReportSignals.set(parsed.agentName, {
+        findingCount: parsed.findings.length,
+        summary: (parsed.summary ?? "").toLowerCase()
+      });
     }
     for (const s of (parsed.skillMdSectionsCovered ?? [])) sectionsSeen.add(s);
     for (const n of (parsed.beyondSkillMd ?? [])) beyondSkillMdNotes.push(n);
@@ -539,6 +698,74 @@ export async function mergeAgentFindings(args: z.infer<typeof MergeAgentFindings
     warnings.push("SECURITY_REQUIRE_AGENT_ATTESTATION is set but this run is not a signed + enforced + clean attestation — gate forced to FAIL.");
   }
 
+  // ── Thoroughness enforcement (ensure agents actually did the work) ────────
+  // These are hard-fail signals that force the gate to FAIL, independent of severity.
+  let thoroughnessFailed = false;
+
+  // (a) SKILL.md section coverage verification. Reuse verifySkillCoverage as the
+  //     single source of truth for coverage, then fail the gate below threshold.
+  const coverage = await verifySkillCoverage({ agentRunId });
+  const requiredCoverage = minCoveragePct();
+  if (coverage.coveragePercent < requiredCoverage) {
+    thoroughnessFailed = true;
+    warnings.push(
+      `Skill-section coverage ${coverage.coveragePercent}% is below the required ${requiredCoverage}% — ` +
+      `${coverage.uncovered.length} section(s) uncovered: ${coverage.uncovered.join(", ")}. Gate forced to FAIL.`
+    );
+  }
+
+  // (b) Ghost / missing agent detection. Every always-on Phase-1 lead present in the
+  //     manifest must have reported a terminal completed/completed_partial status.
+  //     Stack-conditional leads are required only when they exist in the manifest.
+  const conditionalLeads: AgentName[] = ["ai-llm-redteam", "mobile-security-specialist"];
+  const requiredLeads: AgentName[] = [
+    ...ALWAYS_ON_PHASE1_LEADS.filter((n) => manifest.agents[n] !== undefined),
+    ...conditionalLeads.filter((n) => manifest.agents[n] !== undefined)
+  ];
+  const missingLeads: string[] = [];
+  for (const lead of requiredLeads) {
+    const rec = manifest.agents[lead];
+    const ok = rec && (rec.status === "completed" || rec.status === "completed_partial");
+    if (!ok) missingLeads.push(`${lead} (${rec?.status ?? "absent"})`);
+  }
+  if (missingLeads.length > 0) {
+    thoroughnessFailed = true;
+    warnings.push(`Required Phase-1 lead(s) did not complete: ${missingLeads.join(", ")}. Gate forced to FAIL.`);
+  }
+
+  // (c) Escalation-required agents (retries exhausted in updateAgentStatus).
+  const escalatedAgents = Object.entries(manifest.agents)
+    .filter(([, rec]) => rec.escalationRequired)
+    .map(([name]) => name);
+  if (escalatedAgents.length > 0) {
+    thoroughnessFailed = true;
+    warnings.push(`Agent(s) exhausted retries and require escalation: ${escalatedAgents.join(", ")}. Gate forced to FAIL.`);
+  }
+
+  // (d) Lightweight semantic validation.
+  //     - A finding marked remediated/resolved must carry a non-empty remediation summary.
+  //     - A "completed" high-risk lead reporting zero findings and no explicit
+  //       "no issues found" note yields a WEAK_AGENT_OUTPUT warning (non-fatal).
+  const NO_ISSUE_NOTE_RE = /\b(no (issues?|findings?|vulnerabilit\w+) (found|identified|detected)|clean|nothing to report)\b/;
+  const weaklyRemediated = deduped.filter((f) => f.remediated && !(f.remediationSummary ?? "").trim());
+  if (weaklyRemediated.length > 0) {
+    warnings.push(
+      `WEAK_AGENT_OUTPUT: ${weaklyRemediated.length} finding(s) marked remediated without a remediation summary: ` +
+      `${weaklyRemediated.slice(0, 10).map((f) => f.id).join(", ")}.`
+    );
+  }
+  for (const lead of HIGH_RISK_LEADS) {
+    const rec = manifest.agents[lead];
+    if (!rec || rec.status !== "completed") continue;
+    const signal = agentReportSignals.get(lead);
+    if (signal && signal.findingCount === 0 && !NO_ISSUE_NOTE_RE.test(signal.summary)) {
+      warnings.push(
+        `WEAK_AGENT_OUTPUT: high-risk lead "${lead}" reported completed with zero findings and no explicit ` +
+        `"no issues found" note — verify it actually performed a thorough analysis.`
+      );
+    }
+  }
+
   const signatureVerification: SignatureVerification = {
     mode: verificationMode,
     chainValid: chainResult.valid,
@@ -570,10 +797,15 @@ export async function mergeAgentFindings(args: z.infer<typeof MergeAgentFindings
 
   // Hook into existing attestation flow. A tampered attestation chain or a
   // findings-hash mismatch (tamperDetected) forces FAIL even with zero findings —
-  // a manipulated run must never produce a green gate.
+  // a manipulated run must never produce a green gate. Thoroughness failures
+  // (insufficient coverage, ghost/missing leads, exhausted-retry escalation) also
+  // force FAIL so a run can never pass green without the agents doing full work.
   const hasCritical = merged.critical > 0;
   const hasHigh = merged.high > 0;
-  const gateStatus = tamperDetected || attestationDeficient || hasCritical || hasHigh ? "FAIL" : "PASS";
+  const gateStatus =
+    tamperDetected || attestationDeficient || thoroughnessFailed || hasCritical || hasHigh
+      ? "FAIL"
+      : "PASS";
   await updateReviewStep(runId, "run_pr_gate", "completed", {
     source: "multi-agent-run",
     agentRunId,
@@ -585,6 +817,10 @@ export async function mergeAgentFindings(args: z.infer<typeof MergeAgentFindings
     medium: merged.medium,
     low: merged.low,
     uncoveredSkillMdSections: uncoveredSections,
+    skillCoveragePercent: coverage.coveragePercent,
+    missingLeads,
+    escalatedAgents,
+    thoroughnessFailed,
     signatureVerification,
     gateStatus
   });

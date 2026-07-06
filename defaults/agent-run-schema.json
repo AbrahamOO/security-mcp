@@ -91,7 +91,16 @@
         "startedAt":    { "type": ["string", "null"], "format": "date-time" },
         "completedAt":  { "type": ["string", "null"], "format": "date-time" },
         "findingsPath": { "type": ["string", "null"] },
-        "summary":      { "type": ["string", "null"] }
+        "summary":      { "type": ["string", "null"] },
+        "failureCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of times this agent transitioned to failed. Requeued as pending for up to 2 retries; beyond that the gate is forced to FAIL. Optional (backward compatible)."
+        },
+        "escalationRequired": {
+          "type": "boolean",
+          "description": "True once retries are exhausted; forces the merge gate to FAIL. Optional (backward compatible)."
+        }
       }
     }
   }

@@ -974,6 +974,322 @@ async function checkHttpResponseSplitting(): Promise<Finding | null> {
   };
 }
 
+async function checkRequestSmuggling(): Promise<Finding | null> {
+  // User input flowing into raw Transfer-Encoding / Content-Length headers, or
+  // raw header strings assembled with CRLF that an attacker could desync.
+  const hits = await codeSearch(
+    String.raw`(?:setHeader|headers\[|headers\.set|\.header)\s*\(?\s*['"](?:transfer-encoding|content-length)['"]\s*(?:,|\])\s*(?:req\.|body\.|params\.|query\.|headers\.|user\.)|(?:Transfer-Encoding|Content-Length)\s*:\s*[\x60'"][^\x60'"]*\$\{(?:req|body|params|query|headers)`
+  );
+  const unsafe = hits.filter(
+    (h) => !/replace\s*\(.*\\r|replace\s*\(.*\\n|sanitize|Number\s*\(|parseInt/.test(h.preview)
+  );
+  if (!unsafe.length) return null;
+  return {
+    id: "HTTP_REQUEST_SMUGGLING",
+    title: "HTTP request smuggling — user input in raw Transfer-Encoding/Content-Length headers (CWE-444)",
+    severity: "CRITICAL",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    requiredActions: [
+      "Never let user input set Transfer-Encoding or Content-Length; let the HTTP stack compute framing headers.",
+      "CWE-444 / ATT&CK T1090 — TE/CL desync smuggles requests past front-end proxies to poison caches and hijack sessions.",
+      String.raw`Fix: remove manual TE/CL headers; if a length is required, use Number(len) and reject non-numeric values. Strip \r\n from any header value.`
+    ]
+  };
+}
+
+async function checkDotNetTemplateInjection(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`(?:Razor\.Parse|RazorEngine\.[A-Za-z]+|Engine\.Razor\.RunCompile|\.CompileRenderStringAsync|Template\.Parse\s*\(|Scriban\.Template\.Parse|scriban|new\s+Template\s*\(|DotLiquid\.Template\.Parse|Handlebars\.Compile)\s*\([^)]*(?:Request\.|req\.|userInput|Request\.Form|Request\.QueryString|model\.)`
+  );
+  if (!hits.length) return null;
+  return {
+    id: "SSTI_DOTNET_ENGINES",
+    title: ".NET template engine (Razor/Scriban/DotLiquid) compiles user input — SSTI RCE (CWE-94)",
+    severity: "CRITICAL",
+    evidence: toEvidence(hits),
+    files: toFiles(hits),
+    requiredActions: [
+      "Never pass user input as the template source to Razor, Scriban, or DotLiquid — only bind it as model/context data.",
+      "CWE-94 / ATT&CK T1059 — Razor SSTI evaluates @{ } blocks; @System.Diagnostics.Process.Start achieves RCE.",
+      "Fix: precompile templates from trusted files at build time; render with a strict model and disable member access on untrusted context (Scriban MemberRenamer/allowlist)."
+    ]
+  };
+}
+
+async function checkXsltInjection(): Promise<Finding | null> {
+  const xsltLibHits = await codeSearch(
+    String.raw`(?:require\s*\(\s*['"](?:xslt-processor|node_xslt|xslt|saxon-js)['"]\)|XSLTProcessor|SaxonJS\.transform|\.transformToFragment|\.transformToDocument|libxslt|Transform\.Compile|XslCompiledTransform)`
+  );
+  if (!xsltLibHits.length) return null;
+  const injectionHits = await codeSearch(
+    String.raw`(?:transform|compile|readStylesheet|stylesheet|Load)\s*\([^)]*(?:req\.|body\.|params\.|query\.|userInput|Request\.)`
+  );
+  const xsltFiles = new Set(xsltLibHits.map((h) => h.file));
+  const hits = injectionHits.filter((h) => xsltFiles.has(h.file));
+  if (!hits.length) return null;
+  return {
+    id: "XSLT_INJECTION",
+    title: "XSLT stylesheet compiled/transformed from user input — RCE and file disclosure (CWE-91)",
+    severity: "CRITICAL",
+    evidence: toEvidence(hits),
+    files: toFiles(hits),
+    requiredActions: [
+      "Never compile an XSLT stylesheet from user-controlled input; load stylesheets only from trusted, static sources.",
+      "CWE-91 / ATT&CK T1059 — attacker XSLT can call extension functions (e.g. php:function, System.Reflection) for RCE and read local files via document().",
+      "Fix: pin the stylesheet to a bundled file; disable extension functions and external document() access in the processor configuration."
+    ]
+  };
+}
+
+async function checkGroovyInjection(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`(?:Eval\.me|Eval\.x|Eval\.xy|new\s+GroovyShell\s*\([^)]*\)\s*\.\s*(?:evaluate|parse)|GroovyShell\s*\(\s*\)\.evaluate|new\s+GroovyClassLoader|GroovyScriptEngine|\.parseClass|shell\.evaluate)\s*\([^)]*(?:request|req\.|userInput|getParameter|params\.)`
+  );
+  if (!hits.length) return null;
+  return {
+    id: "GROOVY_CODE_INJECTION",
+    title: "Groovy script evaluated from user input (Eval.me/GroovyShell/parse) — RCE (CWE-94)",
+    severity: "CRITICAL",
+    evidence: toEvidence(hits),
+    files: toFiles(hits),
+    requiredActions: [
+      "Never evaluate Groovy from user input; Groovy has full JVM access and cannot be safely sandboxed by default.",
+      "CWE-94 / ATT&CK T1059 — GroovyShell.evaluate('Runtime.getRuntime().exec(\"id\")') achieves immediate RCE.",
+      "Fix: remove dynamic Groovy evaluation; if scripting is required, use a locked-down SecureASTCustomizer allowlist and run in a restricted sandbox."
+    ]
+  };
+}
+
+async function checkPerlEvalInjection(): Promise<Finding | null> {
+  const perlLibHits = await codeSearch(
+    String.raw`(?:^|\s)(?:use\s+strict|use\s+warnings|CGI->new|\$cgi->param|require\s+CGI)`
+  );
+  if (!perlLibHits.length) return null;
+  const hits = await codeSearch(
+    String.raw`eval\s*(?:\{[^}]*|\()?[^;\n]*(?:\$cgi->param|param\s*\(|\$ENV\{QUERY|\$q->param|<STDIN>|\$ARGV|\$_(?:GET|POST|REQUEST))`
+  );
+  if (!hits.length) return null;
+  return {
+    id: "PERL_EVAL_INJECTION",
+    title: "Perl eval executes user-controlled string — arbitrary code execution (CWE-95)",
+    severity: "CRITICAL",
+    evidence: toEvidence(hits),
+    files: toFiles(hits),
+    requiredActions: [
+      "Never pass CGI/user parameters into Perl string eval; string eval compiles and runs arbitrary Perl.",
+      "CWE-95 / ATT&CK T1059 — eval \"$param\" with '; system(\"id\"); #' achieves RCE and full host compromise.",
+      "Fix: use block eval (eval { ... }) for exception handling only; parse untrusted data with a strict validator, never eval it."
+    ]
+  };
+}
+
+async function checkMongoServerSideJs(): Promise<Finding | null> {
+  // $where / mapReduce server-side JS combined with user-controlled data.
+  const hits = await codeSearch(
+    String.raw`(?:\$where\s*:\s*[\x60'"][^\x60'"]*\$\{(?:req|body|params|query)|\.mapReduce\s*\([^)]*(?:req\.|body\.|params\.|query\.)|(?:map|reduce)\s*:\s*[\x60'"][^\x60'"]*\$\{(?:req|body|params|query)|\$where\s*:\s*(?:req\.|body\.|params\.|query\.))`
+  );
+  if (!hits.length) return null;
+  return {
+    id: "MONGO_SERVER_SIDE_JS",
+    title: "MongoDB $where/mapReduce server-side JavaScript built from user data — NoSQL injection (CWE-943)",
+    severity: "CRITICAL",
+    evidence: toEvidence(hits),
+    files: toFiles(hits),
+    requiredActions: [
+      "Never build $where clauses or mapReduce map/reduce functions from user input — they run JavaScript on the DB server.",
+      "CWE-943 / ATT&CK T1190 — $where: `this.pin == '${input}'` allows JS injection for auth bypass and DoS (sleep loops).",
+      "Fix: replace $where with native operators ($eq/$gt/$in); disable server-side JS (mongod --noscripting / security.javascriptEnabled:false)."
+    ]
+  };
+}
+
+async function checkImageMagickShellInjection(): Promise<Finding | null> {
+  const imLibHits = await codeSearch(
+    String.raw`(?:require\s*\(\s*['"](?:gm|imagemagick|node-imagemagick|sharp)['"]\)|gm\s*\(|imagemagick\.|\.convert\s*\(|['"]convert['"]\s*,|['"]mogrify['"])`
+  );
+  if (!imLibHits.length) return null;
+  const hits = await codeSearch(
+    String.raw`(?:gm\s*\(|\.convert\s*\(|convert\s*\(|magick\s*\(|\.read\s*\(|subClass|input)\s*[^)]*(?:req\.|body\.|params\.|query\.|filename|fileName|file_path|filePath|originalname|upload)`
+  );
+  const imFiles = new Set(imLibHits.map((h) => h.file));
+  const unsafe = hits.filter(
+    (h) => imFiles.has(h.file) && !/allowlist|sanitizeFilename|path\.basename|extname.*(?:allow|valid)|magickload_no|MAGICK_CONFIGURE/.test(h.preview)
+  );
+  if (!unsafe.length) return null;
+  return {
+    id: "IMAGEMAGICK_DELEGATE_INJECTION",
+    title: "ImageMagick invoked with user-controlled filename — delegate/shell injection (ImageTragick, CWE-78)",
+    severity: "CRITICAL",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    requiredActions: [
+      "Never pass user-controlled filenames or content directly to ImageMagick; validate extension and use a fixed, safe basename.",
+      "CWE-78 / CVE-2016-3714 (ImageTragick) — filenames like `|id;` or crafted MVG/SVG delegates execute shell commands via ImageMagick delegates.",
+      "Fix: disable risky coders in policy.xml (MVG, MSL, URL, EPHEMERAL, HTTPS); validate magic bytes; pass files by a generated safe path, not the client name."
+    ]
+  };
+}
+
+async function checkSvgXxe(): Promise<Finding | null> {
+  const svgParseHits = await codeSearch(
+    String.raw`(?:svg2img|svgson\.parse|new\s+Resvg|sharp\s*\([^)]*\)\.[^;]*|parseSvg|loadSVG|\.from\s*\([^)]*\.svg|svgParse|xmldom.*svg|DOMParser[^;]*svg)`
+  );
+  if (!svgParseHits.length) return null;
+  const unsafe = svgParseHits.filter(
+    (h) => /svg/i.test(h.preview) && !/noEntity|processEntities\s*:\s*false|resolveEntities\s*:\s*false|DISALLOW_DOCTYPE|FEATURE_SECURE_PROCESSING/.test(h.preview)
+  );
+  if (!unsafe.length) return null;
+  return {
+    id: "SVG_XXE",
+    title: "SVG parsed without XXE protection — external entity expansion via uploaded SVG (CWE-611)",
+    severity: "HIGH",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    requiredActions: [
+      "Disable DOCTYPE/external entity processing when parsing user-supplied SVG; SVG is XML and carries XXE risk.",
+      "CWE-611 / ATT&CK T1190 — a malicious SVG with <!ENTITY xxe SYSTEM 'file:///etc/passwd'> exfiltrates local files.",
+      "Fix: strip DOCTYPE before parsing, or use a parser configured with resolveEntities:false / DISALLOW_DOCTYPE; sanitize SVG with DOMPurify (SVG profile)."
+    ]
+  };
+}
+
+async function checkHandlebarsUnsafe(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`(?:new\s+Handlebars\.SafeString\s*\([^)]*(?:req\.|body\.|params\.|query\.|user\.)|Handlebars\.registerHelper\s*\([^)]*noEscape|noEscape\s*:\s*true|\{\{\{\s*(?:body|user|req|params|query|input))`
+  );
+  if (!hits.length) return null;
+  return {
+    id: "HANDLEBARS_UNSAFE_CONTEXT",
+    title: "Handlebars unescaped output — SafeString/noEscape/triple-stache with user data (XSS, CWE-79)",
+    severity: "HIGH",
+    evidence: toEvidence(hits),
+    files: toFiles(hits),
+    requiredActions: [
+      "Never wrap user input in Handlebars.SafeString, set noEscape:true, or render it through triple-stache {{{ }}}.",
+      "CWE-79 — unescaped Handlebars output renders <script> and event handlers from user data, yielding stored/reflected XSS.",
+      "Fix: use double-stache {{ }} so Handlebars HTML-escapes automatically; if raw HTML is unavoidable, sanitize with DOMPurify first."
+    ]
+  };
+}
+
+async function checkStaticRedos(): Promise<Finding | null> {
+  // Static regex literals with nested-quantifier constructs applied to user input.
+  // The pattern is assembled from fragments so it never itself contains a literal
+  // nested-quantifier group (which searchRepo's own ReDoS guard would reject).
+  const q = "[+*]";
+  const grp = String.raw`\([^)]*` + q + String.raw`[^)]*\)`;      // ( ...+... )
+  const nested = grp + q;                                          // ( ...+... )+
+  const dotStar = String.raw`\(\.` + q + String.raw`\)` + q;      // (.*)+
+  const altGrp = String.raw`\([^)|]*\|[^)]*\)` + q;               // (a|ab)+
+  const regexLit = String.raw`\/[^\/\n]*(?:` + nested + "|" + dotStar + "|" + altGrp + String.raw`)[^\/\n]*\/[gimsuy]*`;
+  const usage = String.raw`\.(?:test|exec|match|replace)\s*\(\s*(?:req\.|body\.|params\.|query\.|user\.|input\b)`;
+  const hits = await codeSearch(regexLit + String.raw`\s*` + usage);
+  if (!hits.length) return null;
+  return {
+    id: "REDOS_STATIC_NESTED_QUANTIFIER",
+    title: "ReDoS — static regex with nested quantifier ((.*)+, (\\w*)*, (a|ab)+) run against user input (CWE-1333)",
+    severity: "HIGH",
+    evidence: toEvidence(hits),
+    files: toFiles(hits),
+    requiredActions: [
+      "Rewrite the regex to remove nested quantifiers and ambiguous alternation ((.*)+, (\\w*)*, (a|ab)+ backtrack exponentially).",
+      "CWE-1333 / ATT&CK T1499 — a crafted input string makes the pattern backtrack for seconds, hanging the Node.js event loop per request.",
+      "Fix: use a linear-time engine (re2), possessive/atomic groups where available, and enforce a strict maximum input length before matching."
+    ]
+  };
+}
+
+async function checkResponseSplittingBeforeEnd(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`(?:res\.setHeader|res\.set|res\.header|res\.writeHead)\s*\([^)]*(?:req\.|body\.|params\.|query\.|headers\.|user\.)[^)]*\)`
+  );
+  const unsafe = hits.filter(
+    (h) => !/replace\s*\(.*\\r|replace\s*\(.*\\n|sanitize|encodeURIComponent|Number\s*\(|parseInt|validator\./.test(h.preview)
+  );
+  if (!unsafe.length) return null;
+  return {
+    id: "HTTP_RESPONSE_SPLITTING_HEADER",
+    title: "HTTP response splitting — user input written to a response header before response end (CWE-113)",
+    severity: "HIGH",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    requiredActions: [
+      "Strip CR and LF from user-controlled values before setting any response header.",
+      "CWE-113 — injected \\r\\n splits the response, letting an attacker inject headers or an entire second response (cache poisoning, XSS).",
+      String.raw`Fix: const safe = String(value).replace(/[\r\n]/g, ''); res.setHeader('X-Header', safe);`
+    ]
+  };
+}
+
+async function checkContentTypeConfusion(): Promise<Finding | null> {
+  const hits = await codeSearch(
+    String.raw`(?:res\.(?:setHeader|set|header|type)\s*\(\s*['"]?[Cc]ontent-[Tt]ype['"]?\s*,?\s*(?:req\.|body\.|params\.|query\.|headers\.)|res\.type\s*\(\s*(?:req\.|body\.|params\.|query\.|headers\.)|contentType\s*[:=]\s*(?:req\.headers|headers\[['"]content-type))`
+  );
+  if (!hits.length) return null;
+  return {
+    id: "CONTENT_TYPE_CONFUSION",
+    title: "User-controlled Content-Type reflected/trusted on response — MIME confusion (CWE-16 / CWE-79)",
+    severity: "HIGH",
+    evidence: toEvidence(hits),
+    files: toFiles(hits),
+    requiredActions: [
+      "Set Content-Type from a server-side allowlist based on the actual payload; never echo the client's Content-Type onto the response.",
+      "CWE-79 — reflecting a user Content-Type (e.g. text/html for an upload) enables stored XSS and content-sniffing attacks.",
+      "Fix: choose Content-Type explicitly per route; add X-Content-Type-Options: nosniff to every response."
+    ]
+  };
+}
+
+async function checkLdapWildcardInjection(): Promise<Finding | null> {
+  const ldapLibHits = await codeSearch(
+    String.raw`require\s*\(\s*['"](?:ldapjs|ldapts|activedirectory)['"]\)|new\s+(?:Client|ldap\.createClient)`
+  );
+  if (!ldapLibHits.length) return null;
+  const hits = await codeSearch(
+    String.raw`(?:filter|searchFilter)\s*[:=]\s*[\x60'"][^\x60'"]*\*[^\x60'"]*\$\{(?:req|body|params|query)|\(\w+=\*[^)]*[\x60'"]?\s*\+\s*(?:req\.|body\.|params\.|query\.)`
+  );
+  const unsafe = hits.filter(
+    (h) => !/searchFilterEscape|escapeFilter|ldapEscape/.test(h.preview)
+  );
+  if (!unsafe.length) return null;
+  return {
+    id: "LDAP_WILDCARD_INJECTION",
+    title: "LDAP filter mixes wildcard and unescaped user input — auth bypass/enumeration (CWE-90)",
+    severity: "HIGH",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    requiredActions: [
+      "Escape LDAP special characters (* ( ) \\ NUL) in user input and never build wildcard filters from raw user values.",
+      "CWE-90 — a filter like (uid=*${input}*) lets `*)(uid=*` match all entries, bypassing auth and dumping the directory.",
+      "Fix: const safe = ldap.searchFilterEscape(input); use exact-match filters and remove attacker-controlled wildcards."
+    ]
+  };
+}
+
+async function checkXpathFunctionInjection(): Promise<Finding | null> {
+  const xpathLibHits = await codeSearch(
+    String.raw`require\s*\(\s*['"]xpath['"]|xpath\.select|xpath\.evaluate|XPathEvaluator|\.selectNodes|\.selectSingleNode`
+  );
+  if (!xpathLibHits.length) return null;
+  const hits = await codeSearch(
+    String.raw`(?:substring|string-length|starts-with|contains|normalize-space|concat)\s*\([^)]*[\x60'"]?\s*\+\s*(?:req\.|body\.|params\.|query\.)|(?:substring|string-length|starts-with|contains)\s*\([^)]*\$\{(?:req|body|params|query)`
+  );
+  if (!hits.length) return null;
+  return {
+    id: "XPATH_FUNCTION_INJECTION",
+    title: "XPath function (substring/string-length/starts-with) built with user input — blind XPath injection (CWE-643)",
+    severity: "HIGH",
+    evidence: toEvidence(hits),
+    files: toFiles(hits),
+    requiredActions: [
+      "Never concatenate user input into XPath function arguments; bind values via a parameterized XPath API.",
+      "CWE-643 — string-length()/substring() with user input drives blind XPath injection that extracts the XML document character by character.",
+      "Fix: use variable resolvers / compiled XPath with parameters, or strictly validate user values against an allowlist before use."
+    ]
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function checkInjectionDeep(_opts: { changedFiles: string[] }): Promise<Finding[]> {
@@ -1013,6 +1329,21 @@ export async function checkInjectionDeep(_opts: { changedFiles: string[] }): Pro
       checkSseCrlfInjection(),
       checkPdfDocInjection(),
       checkHttpResponseSplitting(),
+      // New checks (deep injection gaps)
+      checkRequestSmuggling(),
+      checkDotNetTemplateInjection(),
+      checkXsltInjection(),
+      checkGroovyInjection(),
+      checkPerlEvalInjection(),
+      checkMongoServerSideJs(),
+      checkImageMagickShellInjection(),
+      checkSvgXxe(),
+      checkHandlebarsUnsafe(),
+      checkStaticRedos(),
+      checkResponseSplittingBeforeEnd(),
+      checkContentTypeConfusion(),
+      checkLdapWildcardInjection(),
+      checkXpathFunctionInjection(),
     ]);
     return results.flat().filter((f): f is Finding => f !== null);
   } catch (err) {

@@ -800,6 +800,244 @@ async function checkDoubleSpendPayment(): Promise<Finding | null> {
   };
 }
 
+async function checkPaymentIdempotency(): Promise<Finding | null> {
+  // Charge/payment-intent creation without an idempotency key: a network retry
+  // (or attacker replay) produces a duplicate charge.
+  const hits = await codeSearch(
+    String.raw`(?:stripe\.(?:charges|paymentIntents)\.(?:create|confirm|capture)|\.createCharge|\.chargeCard|\.createPaymentIntent|createCharge)\s*\(`
+  );
+  const safeRe = /idempotency|idempotencyKey|Idempotency-Key|requestId\s*,|{\s*idempotency/i;
+  const unsafe = hits.filter((h) => !safeRe.test(h.preview));
+  if (!unsafe.length) return null;
+  return {
+    id: "BIZ_PAYMENT_NO_IDEMPOTENCY",
+    title: "Payment/charge created without idempotency key — retry or replay double-charges the customer (CWE-799)",
+    severity: "CRITICAL",
+    sla: "24h",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    requiredActions: [
+      "Pass a per-operation idempotency key (e.g. the order ID) to every charge/payment-intent create/capture call so retries collapse to a single charge.",
+      "CWE-799 — without idempotency, a client or network retry re-executes the charge and bills the customer multiple times.",
+      "Fix: await stripe.paymentIntents.create({ amount, currency }, { idempotencyKey: orderId });"
+    ]
+  };
+}
+
+async function checkWalletNonAtomicDecrement(): Promise<Finding | null> {
+  // Gift-card / wallet / store-credit balance mutated via read-modify-write on a
+  // JS value rather than an atomic DB decrement — concurrent spends over-draw.
+  const hits = await codeSearch(
+    String.raw`(?:giftCard|gift_card|wallet|storeCredit|store_credit|balance)\b[^;\n]{0,60}(?:balance|amount)\s*(?:-=|=\s*[\w.]+\s*-)`
+  );
+  const safeRe = /decrement\s*:|{\s*decrement|FOR\s+UPDATE|\$transaction|serializable|\.increment\(|atomic|WHERE[^;]*balance\s*>=/i;
+  const unsafe = hits.filter((h) => !safeRe.test(h.preview));
+  if (!unsafe.length) return null;
+  return {
+    id: "BIZ_WALLET_NONATOMIC_DECREMENT",
+    title: "Gift-card/wallet balance decremented via read-modify-write, not an atomic operation — concurrent spend double-spends (CWE-362)",
+    severity: "CRITICAL",
+    sla: "24h",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    requiredActions: [
+      "Decrement wallet/gift-card balances with an atomic, conditional DB update, not a JS subtraction of a previously read value.",
+      "CWE-362 — two concurrent spend requests both read the same balance and both subtract, letting a user spend more than they have.",
+      "Fix: UPDATE wallet SET balance = balance - :amt WHERE id = :id AND balance >= :amt (0 rows affected => reject); or Prisma { balance: { decrement: amt } } inside a serializable transaction."
+    ]
+  };
+}
+
+async function checkRefundWithoutPurchase(): Promise<Finding | null> {
+  // Refund issued without first verifying the original order was paid/captured.
+  const hits = await codeSearch(
+    String.raw`(?:refund|createRefund|issueRefund|processRefund|stripe\.refunds\.create)\s*\(`
+  );
+  const safeRe = /status\s*===?\s*['"](?:paid|captured|succeeded|completed)['"]|isPaid|paidAt|verifyPayment|paymentStatus|charge(?:Id)?\s*[,)]|original.*paid|hasPaid/i;
+  const unsafe = hits.filter((h) => !safeRe.test(h.preview));
+  if (!unsafe.length) return null;
+  return {
+    id: "BIZ_REFUND_WITHOUT_PAID_PURCHASE",
+    title: "Refund issued without verifying the original purchase was paid — refund fraud / negative-balance abuse (CWE-840)",
+    severity: "CRITICAL",
+    sla: "24h",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    requiredActions: [
+      "Before issuing any refund, load the original order and confirm it was actually paid/captured and not already refunded.",
+      "CWE-840 — refunding without checking the original payment lets an attacker extract money for orders that were never paid or were already refunded.",
+      "Fix: const order = await db.order.findUnique({ where: { id } }); if (order.status !== 'paid' || order.refundedAt) throw new Error('Not refundable'); then refund at most order.amountPaid."
+    ]
+  };
+}
+
+async function checkBulkOpNotTenantScoped(): Promise<Finding | null> {
+  // updateMany/deleteMany (or bulk UPDATE/DELETE) whose where-clause is not scoped
+  // to the caller's tenant/user — mass update or delete across all tenants.
+  const hits = await codeSearch(
+    String.raw`\.(?:updateMany|deleteMany|removeAll|bulkWrite|destroy)\s*\(|(?:UPDATE|DELETE\s+FROM)\s+\w+\b[^;]{0,80}\bWHERE\b`
+  );
+  const safeRe = /(?:tenantId|tenant_id|orgId|org_id|organizationId|userId|user_id|accountId|account_id|workspaceId)\s*[:=]|where[^;]*(?:tenantId|orgId|userId|accountId)/i;
+  const unsafe = hits.filter((h) => !safeRe.test(h.preview));
+  if (!unsafe.length) return null;
+  return {
+    id: "BIZ_BULK_OP_NOT_TENANT_SCOPED",
+    title: "Bulk update/delete not scoped to tenant or user — mass modification across all tenants (CWE-639 / CWE-284)",
+    severity: "CRITICAL",
+    sla: "24h",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    requiredActions: [
+      "Every bulk updateMany/deleteMany must include the caller's tenantId/userId in the where clause so it cannot touch other tenants' rows.",
+      "CWE-639 / CWE-284 — an unscoped bulk operation lets one tenant mass-update or delete every tenant's data.",
+      "Fix: await db.record.deleteMany({ where: { id: { in: ids }, tenantId: req.user.tenantId } });"
+    ]
+  };
+}
+
+async function checkCouponSingleUseReplay(): Promise<Finding | null> {
+  // Coupon/promo redemption that does not enforce single-use via a unique
+  // constraint or a persisted redeemed check — the code can be replayed.
+  const hits = await codeSearch(
+    String.raw`(?:coupon|promo(?:Code)?|discount(?:Code)?|voucher)\b[^;\n]{0,60}(?:redeem|apply|validate|use)`
+  );
+  const safeRe = /unique|usedAt|redeemedAt|redemptionCount|usageLimit|timesUsed|already.*redeem|redeemed\s*(?:===|!==|==|!=)|@@unique|createMany.*skipDuplicates|UNIQUE/i;
+  const unsafe = hits.filter((h) => !safeRe.test(h.preview));
+  if (!unsafe.length) return null;
+  return {
+    id: "BIZ_COUPON_SINGLE_USE_NOT_ENFORCED",
+    title: "Single-use coupon/promo redemption not enforced by unique constraint — replay reuses the code (CWE-384)",
+    severity: "HIGH",
+    sla: "7d",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    requiredActions: [
+      "Enforce single-use redemption with a database UNIQUE(code) or UNIQUE(code, userId) constraint written inside the same transaction that grants the discount.",
+      "CWE-384 — checking a boolean in application code is racy; two concurrent redemptions both pass and the code is used twice.",
+      "Fix: insert a redemption row with a unique constraint and treat the duplicate-key error as 'already redeemed' rather than reading-then-writing a flag."
+    ]
+  };
+}
+
+async function checkWithdrawalLimitRace(): Promise<Finding | null> {
+  // Daily/periodic withdrawal or transfer limit checked then applied without an
+  // atomic guard — concurrent requests each pass the limit check.
+  const hits = await codeSearch(
+    String.raw`(?:daily|withdrawal|transfer|payout|spending)\w*[Ll]imit\b|(?:withdraw|transfer|payout)\b[^;\n]{0,60}limit`
+  );
+  const safeRe = /FOR\s+UPDATE|\$transaction|serializable|atomic|mutex|lock\b|WHERE[^;]*(?:sum|total)[^;]*<=|redis.*incr|SELECT.*SUM.*FOR\s+UPDATE/i;
+  const unsafe = hits.filter((h) => !safeRe.test(h.preview));
+  if (!unsafe.length) return null;
+  return {
+    id: "BIZ_WITHDRAWAL_LIMIT_RACE",
+    title: "Withdrawal/transfer daily-limit check not atomic — concurrent requests bypass the limit (CWE-362)",
+    severity: "HIGH",
+    sla: "7d",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    requiredActions: [
+      "Compute the running total and enforce the limit inside a single serializable transaction with SELECT ... FOR UPDATE (or an atomic counter), not a read-check-then-write.",
+      "CWE-362 — two withdrawals fired simultaneously both read the same prior total, both pass the limit check, and together exceed it.",
+      "Fix: BEGIN; SELECT COALESCE(SUM(amount),0) FROM withdrawals WHERE user_id=:u AND day=:today FOR UPDATE; if total+amount>limit reject; INSERT; COMMIT;"
+    ]
+  };
+}
+
+async function checkRoleNotRevalidated(): Promise<Finding | null> {
+  // Authorization decisions read the role from the session/JWT rather than
+  // re-loading it per request — a role revoked after login stays effective.
+  const hits = await codeSearch(
+    String.raw`(?:if|return|&&|\|\|)\s*[^;\n]{0,40}(?:req\.(?:session|user)\.role|session\.role|token\.role|jwt\.role|decoded\.role|req\.user\.isAdmin)\s*(?:===|==|!==|!=)\s*['"]`
+  );
+  const safeRe = /await\s+[^;]*(?:findUnique|findById|getRole|db\.|prisma|repository|loadUser|refetch)|fetchRole|reloadUser|await.*role/i;
+  const unsafe = hits.filter((h) => !safeRe.test(h.preview));
+  if (!unsafe.length) return null;
+  return {
+    id: "BIZ_ROLE_NOT_REVALIDATED",
+    title: "Authorization uses role from session/JWT without per-request re-validation — stale role after revocation (CWE-613)",
+    severity: "HIGH",
+    sla: "7d",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    requiredActions: [
+      "Re-load the user's current role/permissions from the source of truth on each privileged request rather than trusting the role baked into the session or JWT at login.",
+      "CWE-613 — a role or permission revoked after the token was issued remains effective until the token expires, letting a demoted user keep admin access.",
+      "Fix: const { role } = await db.user.findUnique({ where: { id: req.user.id }, select: { role: true } }); if (role !== 'admin') return res.status(403).end();"
+    ]
+  };
+}
+
+async function checkPermissionCacheNoTtl(): Promise<Finding | null> {
+  // A permissions/roles/ACL cache populated without a TTL or an invalidation
+  // hook — permission changes never take effect until process restart.
+  const hits = await codeSearch(
+    String.raw`(?:permission|permissions|roles?|acl|entitlement|authz)\w*[Cc]ache\b|cache(?:\.set)?\s*\([^)]*(?:permission|role|acl|entitlement)`
+  );
+  const safeRe = /ttl|expires?|maxAge|EX\b|setex|invalidate|\.del\(|\.delete\(|evict|revalidate|staleWhileRevalidate|expireAt/i;
+  const unsafe = hits.filter((h) => !safeRe.test(h.preview));
+  if (!unsafe.length) return null;
+  return {
+    id: "BIZ_PERMISSION_CACHE_NO_TTL",
+    title: "Permission/role cache without TTL or invalidation — revoked permissions stay effective (CWE-613)",
+    severity: "MEDIUM",
+    sla: "30d",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    requiredActions: [
+      "Give the permission/role cache a short TTL and invalidate it explicitly whenever a user's role or permissions change.",
+      "CWE-613 — a permission cache with no expiry serves stale authorization data, so a revoked grant keeps working indefinitely.",
+      "Fix: cache.set(key, perms, { ttl: 60 }); and call cache.del(userPermKey) inside the role-change handler."
+    ]
+  };
+}
+
+async function checkInventoryUnderflow(): Promise<Finding | null> {
+  // Inventory/stock decrement without a guard preventing it from going negative.
+  const hits = await codeSearch(
+    String.raw`(?:inventory|stock|quantity|qty|available|units)\b[^;\n]{0,50}(?:-=|decrement|\.dec\b|=\s*[\w.]+\s*-\s*)`
+  );
+  const safeRe = /(?:stock|inventory|quantity|qty|available)\s*>=?\s*|WHERE[^;]*(?:stock|quantity|inventory)\s*>=|Math\.max\s*\(\s*0|if\s*\([^)]*<\s*0|GREATEST\s*\(\s*0|CHECK\s*\([^)]*>=\s*0/i;
+  const unsafe = hits.filter((h) => !safeRe.test(h.preview));
+  if (!unsafe.length) return null;
+  return {
+    id: "BIZ_INVENTORY_UNDERFLOW",
+    title: "Inventory/stock decremented without a non-negative guard — oversell / negative stock (CWE-191 / CWE-362)",
+    severity: "HIGH",
+    sla: "7d",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    requiredActions: [
+      "Decrement stock with a conditional atomic update that refuses to go below zero, and reject the order when no row is affected.",
+      "CWE-191 / CWE-362 — an unguarded decrement lets concurrent orders drive stock negative, overselling inventory you cannot fulfill.",
+      "Fix: UPDATE product SET stock = stock - :qty WHERE id = :id AND stock >= :qty; if rowCount === 0 -> out of stock; or add a CHECK (stock >= 0) constraint."
+    ]
+  };
+}
+
+async function checkClientShippingPriceAmount(): Promise<Finding | null> {
+  // Shipping cost / line-item price / unit price taken from the client request
+  // and used to build the order without server-side recomputation.
+  const hits = await codeSearch(
+    String.raw`(?:shippingCost|shipping_cost|shippingPrice|unitPrice|unit_price|itemPrice|item_price|lineTotal|price)\s*[:=]\s*(?:req\.|body\.|params\.|query\.)\w+`
+  );
+  const safeRe = /lookup|catalog|priceList|db\.|prisma|await\s+get(?:Price|Product)|calculateShipping|computePrice|server|PRICE_TABLE|fromDatabase/i;
+  const unsafe = hits.filter((h) => !safeRe.test(h.preview));
+  if (!unsafe.length) return null;
+  return {
+    id: "BIZ_CLIENT_SHIPPING_PRICE",
+    title: "Shipping cost or item price taken from client without server-side validation — price tampering (CWE-602)",
+    severity: "HIGH",
+    sla: "7d",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    requiredActions: [
+      "Look up unit prices and compute shipping cost server-side from the product catalog and destination; never trust a price or shipping amount sent by the client.",
+      "CWE-602 — accepting client-supplied prices/shipping lets an attacker set them to arbitrary low values and underpay for the order.",
+      "Fix: const product = await db.product.findUnique({ where: { id } }); const lineTotal = product.price * qty; // ignore req.body.price"
+    ]
+  };
+}
+
 export async function checkBusinessLogic(_opts: { changedFiles: string[] }): Promise<Finding[]> {
   try {
     const [
@@ -831,6 +1069,16 @@ export async function checkBusinessLogic(_opts: { changedFiles: string[] }): Pro
       paginationAbuse,
       freeTrialAbuse,
       doubleSpendPayment,
+      paymentIdempotency,
+      walletNonAtomic,
+      refundWithoutPurchase,
+      bulkOpNotScoped,
+      couponSingleUse,
+      withdrawalLimitRace,
+      roleNotRevalidated,
+      permissionCacheNoTtl,
+      inventoryUnderflow,
+      clientShippingPrice,
     ] = await Promise.all([
       checkMassAssignment(),
       checkIdorDirect(),
@@ -860,6 +1108,16 @@ export async function checkBusinessLogic(_opts: { changedFiles: string[] }): Pro
       checkPaginationAbuse(),
       checkFreeTrialAbuse(),
       checkDoubleSpendPayment(),
+      checkPaymentIdempotency(),
+      checkWalletNonAtomicDecrement(),
+      checkRefundWithoutPurchase(),
+      checkBulkOpNotTenantScoped(),
+      checkCouponSingleUseReplay(),
+      checkWithdrawalLimitRace(),
+      checkRoleNotRevalidated(),
+      checkPermissionCacheNoTtl(),
+      checkInventoryUnderflow(),
+      checkClientShippingPriceAmount(),
     ]);
 
     const singles = [
@@ -870,6 +1128,9 @@ export async function checkBusinessLogic(_opts: { changedFiles: string[] }): Pro
       taxShippingParamTamper, clientTotalAmount, referralAbuse, emailNormalization,
       featureFlagBypass, apiVersionBypass, paginationAbuse,
       freeTrialAbuse, doubleSpendPayment,
+      paymentIdempotency, walletNonAtomic, refundWithoutPurchase, bulkOpNotScoped,
+      couponSingleUse, withdrawalLimitRace, roleNotRevalidated, permissionCacheNoTtl,
+      inventoryUnderflow, clientShippingPrice,
     ];
     return [
       ...singles.filter((f): f is Finding => f !== null),

@@ -466,6 +466,458 @@ async function checkMissingForwardSecrecy(): Promise<Finding[]> {
 	return findings;
 }
 
+async function checkStaticIvReused(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+
+	// Cipher usage that consumes an IV/nonce.
+	const cipherHits = await searchRepo({
+		query: String.raw`createCipheriv\s*\(|createDecipheriv\s*\(`,
+		isRegex: true,
+		maxMatches: 200
+	});
+	if (cipherHits.length === 0) return findings;
+	const cipherFiles = new Set(cipherHits.map((m) => m.file));
+
+	// Module-scope (unindented) const/let IV/nonce assigned once and reused across calls.
+	const moduleScopeIvHits = await searchRepo({
+		query: String.raw`^(?:const|let|var)\s+(?:iv|nonce|IV|NONCE)\b\s*=`,
+		isRegex: true,
+		maxMatches: 200
+	});
+	const staticInCipherFiles = moduleScopeIvHits.filter(
+		(m) => cipherFiles.has(m.file) && !/crypto\.randomBytes|randomFillSync|getRandomValues/i.test(m.preview)
+	);
+
+	if (staticInCipherFiles.length > 0) {
+		findings.push({
+			id: "CRYPTO_STATIC_IV_REUSED",
+			title: "IV/nonce defined at module scope and reused across every encryption — deterministic IV breaks confidentiality (CWE-329/CWE-323)",
+			severity: "CRITICAL",
+			evidence: staticInCipherFiles.slice(0, 10).map((m) => `${m.file}:${m.line}:${m.preview}`),
+			files: [...new Set(staticInCipherFiles.slice(0, 10).map((m) => m.file))],
+			sla: "24h",
+			requiredActions: [
+				"Generate a fresh IV/nonce per message inside the encryption function with crypto.randomBytes() and prepend it to the ciphertext.",
+				"CWE-329/CWE-323 — a constant IV means identical plaintexts encrypt to identical ciphertexts, and for CTR/GCM/stream modes IV+key reuse leaks the keystream entirely.",
+				"Fix: function encrypt(pt){ const iv = crypto.randomBytes(12); const c = crypto.createCipheriv('aes-256-gcm', key, iv); /* store iv with output */ }"
+			]
+		});
+	}
+
+	return findings;
+}
+
+async function checkStreamCipherNonceReuse(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+
+	// ChaCha20 / stream cipher usage.
+	const streamHits = await searchRepo({
+		query: String.raw`createCipheriv\s*\(\s*['"](?:chacha20-poly1305|chacha20|rc4|aes-128-ctr|aes-192-ctr|aes-256-ctr)['"]`,
+		isRegex: true,
+		maxMatches: 200
+	});
+	if (streamHits.length === 0) return findings;
+	const streamFiles = new Set(streamHits.map((m) => m.file));
+
+	// Static / non-random nonce in the same file: module-scope const, hardcoded buffer, or Buffer.alloc.
+	const staticNonceHits = await searchRepo({
+		query: String.raw`^(?:const|let|var)\s+(?:nonce|iv|counter)\b\s*=|(?:nonce|iv)\s*=\s*Buffer\.(?:from|alloc)\s*\(|(?:nonce|iv)\s*=\s*['"][0-9a-fA-F]{8,}['"]`,
+		isRegex: true,
+		maxMatches: 200
+	});
+	const reused = staticNonceHits.filter(
+		(m) => streamFiles.has(m.file) && !/crypto\.randomBytes|randomFillSync|getRandomValues/i.test(m.preview)
+	);
+
+	if (reused.length > 0) {
+		findings.push({
+			id: "CRYPTO_STREAM_NONCE_REUSE",
+			title: "ChaCha20/stream-cipher nonce appears static or reused with the same key — keystream reuse breaks the cipher (CWE-323)",
+			severity: "CRITICAL",
+			evidence: reused.slice(0, 10).map((m) => `${m.file}:${m.line}:${m.preview}`),
+			files: [...new Set(reused.slice(0, 10).map((m) => m.file))],
+			sla: "24h",
+			requiredActions: [
+				"Use a unique random nonce per message for ChaCha20/CTR/RC4-class ciphers with crypto.randomBytes(); never reuse a (key, nonce) pair.",
+				"CWE-323 — reusing a nonce with the same key produces the same keystream; XORing two ciphertexts then recovers both plaintexts and, for Poly1305, forges tags.",
+				"Fix: const nonce = crypto.randomBytes(12); const c = crypto.createCipheriv('chacha20-poly1305', key, nonce, { authTagLength: 16 });"
+			]
+		});
+	}
+
+	return findings;
+}
+
+async function checkAeadTagNotVerified(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+
+	// GCM/ChaCha-Poly decryption usage.
+	const decHits = await searchRepo({
+		query: String.raw`createDecipheriv\s*\(\s*['"](?:aes-(?:128|192|256)-gcm|chacha20-poly1305)['"]`,
+		isRegex: true,
+		maxMatches: 200
+	});
+	if (decHits.length === 0) return findings;
+
+	// setAuthTag must be present for the tag to be checked at all.
+	const setAuthTagHits = await searchRepo({
+		query: String.raw`setAuthTag\s*\(`,
+		isRegex: true,
+		maxMatches: 200
+	});
+	const tagVerifiedFiles = new Set(setAuthTagHits.map((m) => m.file));
+
+	const noTag = decHits.filter((m) => !tagVerifiedFiles.has(m.file));
+	if (noTag.length > 0) {
+		findings.push({
+			id: "CRYPTO_AEAD_TAG_NOT_VERIFIED",
+			title: "AEAD (GCM/ChaCha-Poly) decryption without setAuthTag — authentication tag never verified before using plaintext (CWE-347/CWE-354)",
+			severity: "CRITICAL",
+			evidence: noTag.slice(0, 10).map((m) => `${m.file}:${m.line}:${m.preview}`),
+			files: [...new Set(noTag.slice(0, 10).map((m) => m.file))],
+			sla: "24h",
+			requiredActions: [
+				"Call decipher.setAuthTag(tag) before final(), and treat the error thrown by final() as an authentication failure — never use plaintext that failed the tag check.",
+				"CWE-347/CWE-354 — without setAuthTag the GCM/Poly1305 tag is not checked, so an attacker can tamper with ciphertext and the app will act on forged plaintext (defeating AEAD entirely).",
+				"Fix: decipher.setAuthTag(tag); let pt; try { pt = Buffer.concat([decipher.update(ct), decipher.final()]); } catch { throw new Error('Auth failed'); }"
+			]
+		});
+	}
+
+	return findings;
+}
+
+async function checkInsecureRngForCryptoMaterial(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+
+	const mathRandomHits = await searchRepo({
+		query: String.raw`Math\.random\s*\(\s*\)`,
+		isRegex: true,
+		maxMatches: 200
+	});
+	if (mathRandomHits.length === 0) return findings;
+
+	// Require crypto-material context on the same line to keep FPs low.
+	const materialRe = /\biv\b|nonce|salt|\bkey\b|secret|token|seed|password/i;
+	const unsafe = mathRandomHits.filter((m) => materialRe.test(m.preview));
+	if (unsafe.length > 0) {
+		findings.push({
+			id: "CRYPTO_INSECURE_RNG_MATERIAL",
+			title: "Math.random() used to derive IV/nonce/salt/key/token — non-cryptographic RNG for keying material (CWE-338)",
+			severity: "CRITICAL",
+			evidence: unsafe.slice(0, 10).map((m) => `${m.file}:${m.line}:${m.preview}`),
+			files: [...new Set(unsafe.slice(0, 10).map((m) => m.file))],
+			sla: "24h",
+			requiredActions: [
+				"Replace Math.random() with crypto.randomBytes() (or crypto.getRandomValues in the browser) for all IVs, nonces, salts, keys, and tokens.",
+				"CWE-338 — Math.random() is a predictable PRNG whose internal state can be recovered from a few outputs, letting an attacker reconstruct the keying material.",
+				"Fix: const iv = crypto.randomBytes(12); const salt = crypto.randomBytes(16);"
+			]
+		});
+	}
+
+	return findings;
+}
+
+async function checkHardcodedSymmetricKey(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+
+	// AES/symmetric key assigned from a hex or base64 literal of key-plausible length.
+	const hexKeyHits = await searchRepo({
+		query: String.raw`(?:key|secretKey|encryptionKey|aesKey|symmetricKey)\s*[:=][^'"\n]{0,24}['"][0-9a-fA-F]{32,}['"]`,
+		isRegex: true,
+		maxMatches: 200
+	});
+	const b64KeyHits = await searchRepo({
+		query: String.raw`(?:key|secretKey|encryptionKey|aesKey|symmetricKey)\s*[:=][^'"\n]{0,24}['"][A-Za-z0-9+/]{40,}={0,2}['"]`,
+		isRegex: true,
+		maxMatches: 200
+	});
+	const combined = [
+		...hexKeyHits,
+		...b64KeyHits.filter((h) => !hexKeyHits.some((l) => l.file === h.file && l.line === h.line))
+	];
+	// Require symmetric-crypto context somewhere in the repo to reduce FPs on unrelated hex blobs.
+	const symCtxHits = await searchRepo({
+		query: String.raw`createCipheriv|createDecipheriv|createHmac|aes-(?:128|192|256)`,
+		isRegex: true,
+		maxMatches: 200
+	});
+	const symFiles = new Set(symCtxHits.map((m) => m.file));
+	const unsafe = combined.filter((m) => symFiles.has(m.file));
+
+	if (unsafe.length > 0) {
+		findings.push({
+			id: "CRYPTO_HARDCODED_SYMMETRIC_KEY",
+			title: "Symmetric encryption key hardcoded as a hex/base64 literal — key exposed in source (CWE-798/CWE-321)",
+			severity: "CRITICAL",
+			evidence: unsafe.slice(0, 10).map((m) => `${m.file}:${m.line}:${m.preview}`),
+			files: [...new Set(unsafe.slice(0, 10).map((m) => m.file))],
+			sla: "24h",
+			requiredActions: [
+				"Load symmetric keys from a KMS/secrets manager or an environment variable at runtime; never embed key bytes in source.",
+				"CWE-798/CWE-321 — a hardcoded key is recoverable from source, git history, and compiled bundles, so anyone with the code can decrypt all data protected by it.",
+				"Fix: const key = Buffer.from(process.env.AES_KEY_HEX!, 'hex'); // rotate the leaked key immediately"
+			]
+		});
+	}
+
+	return findings;
+}
+
+async function checkTruncatedHmac(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+
+	// HMAC digest sliced/substr'd to fewer than 16 bytes.
+	// Hex slice < 32 chars, or byte slice < 16 on an hmac digest.
+	const hmacHits = await searchRepo({
+		query: String.raw`createHmac\s*\(`,
+		isRegex: true,
+		maxMatches: 200
+	});
+	if (hmacHits.length === 0) return findings;
+	const hmacFiles = new Set(hmacHits.map((m) => m.file));
+
+	const sliceHits = await searchRepo({
+		query: String.raw`\.digest\s*\([^)]*\)\s*\.(?:slice|substring|substr)\s*\(\s*0\s*,\s*([0-9]|1[0-5]|2[0-9]|3[01])\s*\)|\.(?:slice|substring|substr)\s*\(\s*0\s*,\s*([0-9]|1[0-5])\s*\)[^\n]*hmac`,
+		isRegex: true,
+		maxMatches: 200
+	});
+	// Truncation is only weak when the resulting length is < 16 bytes. For hex output that is < 32 chars.
+	const unsafe = sliceHits.filter((m) => {
+		if (!hmacFiles.has(m.file) && !/hmac|digest/i.test(m.preview)) return false;
+		const nums = [...m.preview.matchAll(/\.(?:slice|substring|substr)\s*\(\s*0\s*,\s*(\d+)\s*\)/g)].map((x) => Number(x[1]));
+		if (!nums.length) return false;
+		const n = Math.min(...nums);
+		const isHex = /hex/i.test(m.preview);
+		// hex: < 32 chars = < 16 bytes; raw/byte: < 16
+		return isHex ? n < 32 : n < 16;
+	});
+
+	if (unsafe.length > 0) {
+		findings.push({
+			id: "CRYPTO_TRUNCATED_HMAC",
+			title: "HMAC output truncated to fewer than 16 bytes — reduced forgery resistance (CWE-328)",
+			severity: "MEDIUM",
+			evidence: unsafe.slice(0, 10).map((m) => `${m.file}:${m.line}:${m.preview}`),
+			files: [...new Set(unsafe.slice(0, 10).map((m) => m.file))],
+			sla: "30d",
+			requiredActions: [
+				"Keep at least 128 bits (16 bytes) of the HMAC output; use the full digest for authentication tags unless a standard specifies otherwise.",
+				"CWE-328 — truncating an HMAC below 128 bits lowers the effort to forge a valid tag and weakens the authentication guarantee.",
+				"Fix: const tag = crypto.createHmac('sha256', key).update(msg).digest(); // compare the full tag with timingSafeEqual"
+			]
+		});
+	}
+
+	return findings;
+}
+
+async function checkWeakEcdsaCurve(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+
+	const weakCurveHits = await searchRepo({
+		query: String.raw`secp192r1|prime192v1|namedCurve\s*[:=]\s*['"]P-192['"]|namedCurve\s*[:=]\s*['"]p192['"]|secp192k1|secp160r1`,
+		isRegex: true,
+		maxMatches: 200
+	});
+
+	if (weakCurveHits.length > 0) {
+		findings.push({
+			id: "CRYPTO_WEAK_ECDSA_CURVE",
+			title: "Weak elliptic curve (P-192/secp192r1 or smaller) — below the 128-bit security floor (CWE-326)",
+			severity: "HIGH",
+			evidence: weakCurveHits.slice(0, 10).map((m) => `${m.file}:${m.line}:${m.preview}`),
+			files: [...new Set(weakCurveHits.slice(0, 10).map((m) => m.file))],
+			sla: "7d",
+			requiredActions: [
+				"Use P-256 (prime256v1) at minimum, or P-384 for higher assurance; retire P-192 and smaller curves.",
+				"CWE-326 — a 192-bit curve provides only ~96 bits of security, below the 128-bit minimum required by NIST SP 800-131A Rev 2.",
+				"Fix: crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });"
+			]
+		});
+	}
+
+	return findings;
+}
+
+async function checkSignatureWithSha1(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+
+	// SHA-1 named explicitly in a signing/verification context (ECDSA/RSA).
+	const sha1SignHits = await searchRepo({
+		query: String.raw`createSign\s*\(\s*['"](?:sha1|RSA-SHA1|ecdsa-with-SHA1|SHA1)['"]|createVerify\s*\(\s*['"](?:sha1|RSA-SHA1|ecdsa-with-SHA1|SHA1)['"]|(?:signature|sign|hash)?[Aa]lgorithm\s*[:=]\s*['"](?:RSA-SHA1|ecdsa-with-SHA1|SHA1withRSA|SHA1withECDSA|sha1)['"]`,
+		isRegex: true,
+		maxMatches: 200
+	});
+
+	if (sha1SignHits.length > 0) {
+		findings.push({
+			id: "CRYPTO_SIGNATURE_SHA1",
+			title: "Digital signature (RSA/ECDSA) computed over SHA-1 — collision-based forgery (CWE-327/CWE-328)",
+			severity: "HIGH",
+			evidence: sha1SignHits.slice(0, 10).map((m) => `${m.file}:${m.line}:${m.preview}`),
+			files: [...new Set(sha1SignHits.slice(0, 10).map((m) => m.file))],
+			sla: "7d",
+			requiredActions: [
+				"Sign and verify with SHA-256 or stronger (e.g. 'sha256', 'RSA-SHA256', 'SHA256withECDSA').",
+				"CWE-327/CWE-328 — SHA-1 is broken for collision resistance (SHAttered), enabling forged signatures over crafted colliding messages.",
+				"Fix: crypto.createSign('sha256').update(data).sign(privateKey);"
+			]
+		});
+	}
+
+	return findings;
+}
+
+async function checkWeakKdfParameters(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+
+	// scrypt N (cost) <= 2^14 (16384).
+	const scryptHits = await searchRepo({
+		query: String.raw`scrypt(?:Sync)?\s*\([^)]*\bN\s*[:=]\s*(\d+)|scrypt(?:Sync)?\s*\([^,]+,[^,]+,[^,]+,\s*\{[^}]*\bN\s*:\s*(\d+)|scrypt(?:Sync)?\s*\([^,]+,[^,]+,[^,]+,\s*(\d+)`,
+		isRegex: true,
+		maxMatches: 200
+	});
+	const weakScrypt = scryptHits.filter((m) => {
+		const nums = [...m.preview.matchAll(/\bN\s*[:=]\s*(\d+)|,\s*(\d+)\s*[,)]/g)]
+			.map((x) => Number(x[1] ?? x[2]))
+			.filter((n) => Number.isFinite(n) && n > 1);
+		if (!nums.length) return false;
+		// Any explicit N at or below 2^14 is too low.
+		return nums.some((n) => n <= 16384);
+	});
+
+	// bcrypt rounds < 10 (cost factor in genSalt / hash).
+	const bcryptHits = await searchRepo({
+		query: String.raw`bcrypt\.(?:hash|hashSync)\s*\([^,]+,\s*([1-9])\s*[,)]|genSalt(?:Sync)?\s*\(\s*([1-9])\s*\)`,
+		isRegex: true,
+		maxMatches: 200
+	});
+
+	// argon2 with low memoryCost / timeCost.
+	const argonHits = await searchRepo({
+		query: String.raw`argon2|memoryCost\s*[:=]\s*(\d+)|timeCost\s*[:=]\s*([1-2])\b`,
+		isRegex: true,
+		maxMatches: 200
+	});
+	const weakArgon = argonHits.filter((m) => {
+		const mem = /memoryCost\s*[:=]\s*(\d+)/.exec(m.preview);
+		const time = /timeCost\s*[:=]\s*(\d+)/.exec(m.preview);
+		// OWASP argon2id: memory >= 19456 KiB (19 MiB), time >= 2. Flag memoryCost < 19456 or timeCost < 2.
+		if (mem && Number(mem[1]) < 19456) return true;
+		if (time && Number(time[1]) < 2) return true;
+		return false;
+	});
+
+	const combined = [
+		...weakScrypt,
+		...bcryptHits,
+		...weakArgon
+	];
+	const unique = combined.filter((m, i, arr) => arr.findIndex((x) => x.file === m.file && x.line === m.line) === i);
+
+	if (unique.length > 0) {
+		findings.push({
+			id: "CRYPTO_WEAK_KDF_PARAMETERS",
+			title: "Password KDF parameters below recommended minimums (argon2 memory/time, scrypt N ≤ 2^14, bcrypt rounds < 10) — cheap offline cracking (CWE-916)",
+			severity: "MEDIUM",
+			evidence: unique.slice(0, 10).map((m) => `${m.file}:${m.line}:${m.preview}`),
+			files: [...new Set(unique.slice(0, 10).map((m) => m.file))],
+			sla: "30d",
+			requiredActions: [
+				"Raise KDF work factors to OWASP 2023 minimums: argon2id memoryCost ≥ 19456 KiB and timeCost ≥ 2, scrypt N ≥ 2^17 (131072), bcrypt cost ≥ 10 (prefer 12).",
+				"CWE-916 — low work factors let an attacker with the hash database test billions of candidate passwords per second on commodity GPUs.",
+				"Fix: await argon2.hash(pw, { type: argon2.argon2id, memoryCost: 19456, timeCost: 2, parallelism: 1 }); // or bcrypt.hash(pw, 12)"
+			]
+		});
+	}
+
+	return findings;
+}
+
+async function checkTokenWithoutTtl(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+
+	// Fernet / symmetric token generation without a TTL/expiry.
+	const fernetHits = await searchRepo({
+		query: String.raw`[Ff]ernet\s*\(|\.encrypt\s*\(|generateToken|issueToken|createToken`,
+		isRegex: true,
+		maxMatches: 200
+	});
+	// Only consider Fernet/token context.
+	const tokenCtx = fernetHits.filter((m) => /fernet|token/i.test(m.preview));
+	if (tokenCtx.length === 0) return findings;
+
+	// Presence of any TTL/expiry handling anywhere in those files suppresses the finding.
+	const ttlHits = await searchRepo({
+		query: String.raw`ttl\b|TTL|max_age|maxAge|expires?(?:In|At|_at|_in)|decrypt\s*\([^)]*,\s*\d+|exp\b`,
+		isRegex: true,
+		maxMatches: 200
+	});
+	const ttlFiles = new Set(ttlHits.map((m) => m.file));
+	const unsafe = tokenCtx.filter((m) => !ttlFiles.has(m.file));
+
+	if (unsafe.length > 0) {
+		findings.push({
+			id: "CRYPTO_TOKEN_NO_TTL",
+			title: "Fernet/encrypted token issued or verified without a TTL/expiry — indefinitely valid tokens (CWE-613)",
+			severity: "HIGH",
+			evidence: unsafe.slice(0, 10).map((m) => `${m.file}:${m.line}:${m.preview}`),
+			files: [...new Set(unsafe.slice(0, 10).map((m) => m.file))],
+			sla: "7d",
+			requiredActions: [
+				"Enforce a TTL when decrypting/verifying tokens (e.g. Fernet.decrypt(token, ttl=SECONDS)) and embed an expiry claim you check on every use.",
+				"CWE-613 — a token with no expiry stays valid forever, so a single leaked token grants permanent access even after rotation or logout.",
+				"Fix (python): f.decrypt(token, ttl=3600) — raises on expiry; (node) verify an 'exp' field and reject expired tokens."
+			]
+		});
+	}
+
+	return findings;
+}
+
+async function checkMissingCertPinning(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+
+	// Outbound HTTPS client usage.
+	const clientHits = await searchRepo({
+		query: String.raw`https\.request\s*\(|https\.get\s*\(|new\s+https\.Agent\s*\(|axios\.create\s*\(|got\s*\(|node-fetch`,
+		isRegex: true,
+		maxMatches: 200
+	});
+	if (clientHits.length === 0) return findings;
+	const clientFiles = new Set(clientHits.map((m) => m.file));
+
+	// Pinning indicators anywhere in the repo/those files.
+	const pinningHits = await searchRepo({
+		query: String.raw`checkServerIdentity|pinnedPublicKey|pin-sha256|sslPinning|certificatePinning|fingerprint256|publicKeyPin|expectedFingerprint`,
+		isRegex: true,
+		maxMatches: 200
+	});
+	const pinnedFiles = new Set(pinningHits.map((m) => m.file));
+
+	// Only flag when no pinning appears at all in the codebase (keep it a single low-noise finding).
+	if (pinnedFiles.size === 0 && clientFiles.size > 0) {
+		const evidence = clientHits.slice(0, 10);
+		findings.push({
+			id: "CRYPTO_MISSING_CERT_PINNING",
+			title: "HTTPS client without certificate/public-key pinning — MITM via rogue or compromised CA (CWE-295)",
+			severity: "HIGH",
+			evidence: evidence.map((m) => `${m.file}:${m.line}:${m.preview}`),
+			files: [...new Set(evidence.map((m) => m.file))],
+			sla: "7d",
+			requiredActions: [
+				"Pin the server's certificate or public key (SPKI SHA-256) for high-value API endpoints via checkServerIdentity/fingerprint256, and fail closed on mismatch.",
+				"CWE-295 — relying only on the CA trust store means any mis-issued or compromised CA certificate lets an attacker transparently MITM the connection.",
+				"Fix: https.request({ ..., checkServerIdentity: (host, cert) => { if (cert.fingerprint256 !== PINNED_FP) throw new Error('Pin mismatch'); } });"
+			]
+		});
+	}
+
+	return findings;
+}
+
 export async function checkCrypto(_opts: { changedFiles: string[] }): Promise<Finding[]> {
 	const findings: Finding[] = [];
 
@@ -723,6 +1175,39 @@ export async function checkCrypto(_opts: { changedFiles: string[] }): Promise<Fi
 		// 18. Missing forward secrecy in TLS cipher config
 		const forwardSecrecyFindings = await checkMissingForwardSecrecy();
 		findings.push(...forwardSecrecyFindings);
+
+		// 19. Static IV reused across encryption calls
+		findings.push(...(await checkStaticIvReused()));
+
+		// 20. ChaCha20 / stream cipher nonce reuse with same key
+		findings.push(...(await checkStreamCipherNonceReuse()));
+
+		// 21. AEAD/GCM tag not verified before using decrypted data
+		findings.push(...(await checkAeadTagNotVerified()));
+
+		// 22. Insecure RNG (Math.random) for IV/nonce/salt/key/token
+		findings.push(...(await checkInsecureRngForCryptoMaterial()));
+
+		// 23. Hardcoded symmetric key literal
+		findings.push(...(await checkHardcodedSymmetricKey()));
+
+		// 24. Truncated HMAC (<16 bytes)
+		findings.push(...(await checkTruncatedHmac()));
+
+		// 25. Weak ECDSA curve (P-192/secp192r1)
+		findings.push(...(await checkWeakEcdsaCurve()));
+
+		// 26. ECDSA/RSA signature with SHA-1
+		findings.push(...(await checkSignatureWithSha1()));
+
+		// 27. Weak Argon2/scrypt/bcrypt KDF parameters
+		findings.push(...(await checkWeakKdfParameters()));
+
+		// 28. Fernet/token without TTL/expiry
+		findings.push(...(await checkTokenWithoutTtl()));
+
+		// 29. Missing certificate pinning in HTTPS clients
+		findings.push(...(await checkMissingCertPinning()));
 	} catch (err) {
 		console.warn("[checkCrypto] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));
 	}

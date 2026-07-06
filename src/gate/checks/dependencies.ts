@@ -390,6 +390,15 @@ export async function checkDependencies(_: { changedFiles: string[] }): Promise<
 	const maintainerRisk = await checkMaintainerRisk();
 	findings.push(...maintainerRisk);
 
+	const gitProtocolDeps = await checkGitProtocolDeps();
+	findings.push(...gitProtocolDeps);
+
+	const localOverrideDeps = await checkLocalOverrideDeps();
+	findings.push(...localOverrideDeps);
+
+	const gitignoreBypass = await checkGitignoreBypassSecret();
+	findings.push(...gitignoreBypass);
+
 	return findings;
 }
 
@@ -881,6 +890,155 @@ async function checkTyposquatting(): Promise<Finding[]> {
 }
 
 // ─── Go module integrity ────────────────────────────────────────────────────
+
+// Collect every dependency spec (name -> version/spec string) across all
+// package.json manifests in the repo, tagging the manifest path for evidence.
+async function collectAllDepSpecs(): Promise<{ file: string; name: string; spec: string }[]> {
+	const out: { file: string; name: string; spec: string }[] = [];
+	let manifests: string[] = [];
+	try {
+		manifests = await fg(["**/package.json"], {
+			dot: true,
+			ignore: ["**/node_modules/**", "**/dist/**", "**/.git/**"]
+		});
+	} catch {
+		return out;
+	}
+	for (const file of manifests) {
+		let raw: string;
+		try {
+			raw = await readFileSafe(file);
+		} catch {
+			continue;
+		}
+		let pkg: {
+			dependencies?: Record<string, string>;
+			devDependencies?: Record<string, string>;
+			optionalDependencies?: Record<string, string>;
+		};
+		try {
+			pkg = JSON.parse(raw);
+		} catch {
+			continue;
+		}
+		const all = { ...pkg.dependencies, ...pkg.devDependencies, ...pkg.optionalDependencies };
+		for (const [name, spec] of Object.entries(all)) {
+			if (typeof spec === "string") out.push({ file, name, spec });
+		}
+	}
+	return out;
+}
+
+// git+ssh:// / git+http(s):// / git:// dependency specs that are not pinned to
+// an immutable commit (no #<40-hex-sha> or #semver:...). Such a dep is fetched
+// from a moving ref with no integrity hash — a compromised branch = code exec.
+async function checkGitProtocolDeps(): Promise<Finding[]> {
+	try {
+		const specs = await collectAllDepSpecs();
+		const gitRe = /^(?:git\+ssh:\/\/|git\+https?:\/\/|git:\/\/|git\+file:)/i;
+		const shaPinRe = /#[0-9a-f]{40}\b/i;
+		const semverPinRe = /#semver:/i;
+		const hits = specs
+			.filter((s) => gitRe.test(s.spec))
+			.filter((s) => !shaPinRe.test(s.spec) && !semverPinRe.test(s.spec));
+		if (hits.length === 0) return [];
+		return [{
+			id: "DEP_GIT_PROTOCOL_UNPINNED",
+			title: "Dependency installed from a git+ssh/git+http(s) URL without a pinned commit SHA — fetched from a mutable ref with no integrity hash, so a compromised branch injects code (CWE-494)",
+			severity: "HIGH",
+			evidence: hits.slice(0, 12).map((h) => `${h.file}: ${h.name} -> ${h.spec}`),
+			files: [...new Set(hits.map((h) => h.file))].slice(0, 10),
+			requiredActions: [
+				"Pin every git-URL dependency to an immutable commit SHA (e.g. `user/repo#<40-char-sha>`), never a branch or tag.",
+				"Prefer publishing the package to a registry with a lockfile integrity hash instead of installing from git.",
+				"Use https with a verified host over git:// or git+http, and review the pinned commit before updating it."
+			],
+			sla: "7d"
+		}];
+	} catch (err) {
+		console.warn("[checkGitProtocolDeps] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));
+		return [];
+	}
+}
+
+// Local `link:` / `file:` dependency overrides (or a `resolutions`/`overrides`
+// entry pointing at a local path). These bypass the registry and lockfile
+// integrity, letting an on-disk/CI-injected module silently replace a package.
+async function checkLocalOverrideDeps(): Promise<Finding[]> {
+	try {
+		const specs = await collectAllDepSpecs();
+		const localRe = /^(?:link:|file:|portal:)/i;
+		const hits = specs.filter((s) => localRe.test(s.spec));
+		if (hits.length === 0) return [];
+		return [{
+			id: "DEP_LOCAL_PATH_OVERRIDE",
+			title: "Dependency resolved from a local path (link:/file:/portal:) — bypasses the registry and lockfile integrity, letting an on-disk or CI-injected module override a real package (CWE-427)",
+			severity: "HIGH",
+			evidence: hits.slice(0, 12).map((h) => `${h.file}: ${h.name} -> ${h.spec}`),
+			files: [...new Set(hits.map((h) => h.file))].slice(0, 10),
+			requiredActions: [
+				"Remove link:/file:/portal: specs from published manifests; depend on a versioned, registry-published package with a lockfile integrity hash.",
+				"If local development linking is required, keep it out of committed manifests (use workspaces or a local-only overrides file).",
+				"Audit CI for `npm link` / `yarn link` steps that swap in unvetted local modules at build time."
+			],
+			sla: "7d"
+		}];
+	} catch (err) {
+		console.warn("[checkLocalOverrideDeps] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));
+		return [];
+	}
+}
+
+// .gitignore lists a secret/.env file, but that file is actually tracked in git
+// (gitignore does not un-track already-committed files). The secret is committed
+// despite the operator's intent to exclude it.
+async function checkGitignoreBypassSecret(): Promise<Finding[]> {
+	try {
+		let gitignore = "";
+		try {
+			gitignore = await readFileSafe(".gitignore");
+		} catch {
+			return [];
+		}
+		const secretEntryRe = /(?:^|\/)(?:\.env(?:\.[\w.-]+)?|.*\.pem|.*\.key|.*\.p12|.*\.pfx|id_rsa|id_ed25519|.*secret.*|.*credential.*)$/i;
+		const candidates = gitignore
+			.split(/\r?\n/)
+			.map((l) => l.trim())
+			.filter((l) => l && !l.startsWith("#") && !l.startsWith("!"))
+			.map((l) => l.replace(/^\/+/, "").replace(/\/+$/, ""))
+			.filter((l) => secretEntryRe.test(l) && !l.includes("*") && !l.includes(" "));
+		if (candidates.length === 0) return [];
+
+		// Ask git which of these ignored-by-intent paths are actually tracked.
+		let tracked = "";
+		try {
+			const { stdout } = await execFileAsync("git", ["ls-files", "--", ...candidates], {
+				maxBuffer: 1024 * 1024
+			});
+			tracked = stdout;
+		} catch {
+			return [];
+		}
+		const committed = tracked.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+		if (committed.length === 0) return [];
+		return [{
+			id: "DEP_GITIGNORE_BYPASS_COMMITTED_SECRET",
+			title: ".gitignore lists a secret/.env file, but the file is committed anyway — .gitignore does not un-track already-added files, so the secret is in history (CWE-312)",
+			severity: "HIGH",
+			evidence: committed.slice(0, 12),
+			files: committed.slice(0, 10),
+			requiredActions: [
+				"Remove the file from tracking (`git rm --cached <file>`) and commit; .gitignore only blocks new, untracked files.",
+				"Rotate every credential in the committed file — it remains recoverable from Git history even after removal.",
+				"Purge the file from history (git filter-repo / BFG) if the repository is or was shared, then force-push and invalidate old clones."
+			],
+			sla: "24h"
+		}];
+	} catch (err) {
+		console.warn("[checkGitignoreBypassSecret] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));
+		return [];
+	}
+}
 
 async function checkGoSumMissing(): Promise<Finding[]> {
 	const findings: Finding[] = [];

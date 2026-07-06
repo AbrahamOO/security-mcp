@@ -144,6 +144,59 @@ const AUDIT_LOG_RE = /audit(?:Log|log|\.log)|logger\.(?:info|warn|security)|logE
 // ─── AI_EMBEDDING_INVERSION ───────────────────────────────────────────────────
 const EMBEDDING_EXPOSE_RE = /(?:embedding|embeddings|vector)\.(?:data|values)\s*[,;)][^\n]*(?:res\.json|res\.send|JSON\.stringify|localStorage|log\s*\()/i;
 
+// ─── AI_UNSAFE_MODEL_DESERIALIZATION ─────────────────────────────────────────
+// pickle.load / joblib.load / torch.load(weights_only=False) / numpy allow_pickle=True
+// on model/checkpoint files → arbitrary code execution on load (CWE-502).
+const MODEL_UNPICKLE_A_RE = /\b(?:pickle|cPickle|dill|joblib)\s*\.\s*loads?\s*\(/i;
+const MODEL_UNPICKLE_B_RE = /\btorch\s*\.\s*load\s*\([^)]*(?:weights_only\s*=\s*False|(?!.*weights_only))/i;
+const MODEL_UNPICKLE_C_RE = /(?:np|numpy)\s*\.\s*load\s*\([^)]*allow_pickle\s*=\s*True|allow_pickle\s*=\s*True/i;
+// Require a model/checkpoint/weights context so we don't flag generic pickle usage.
+const MODEL_ARTIFACT_RE = /\b(?:model|weights?|checkpoint|ckpt|\.pt\b|\.pth\b|\.pkl\b|\.bin\b|\.h5\b|\.joblib\b|\.safetensors\b|state_dict|from_pretrained|load_model|hub|huggingface|download)/i;
+
+// ─── AI_INSECURE_OUTPUT_HANDLING ─────────────────────────────────────────────
+// LLM output fed to eval/exec/JSON.parse/yaml.load/subprocess with no validation.
+const OUTPUT_SINK_A_RE = /(?:JSON\.parse|yaml\.(?:load|safe_load|unsafe_load)|yaml\.load\b)\s*\(\s*(?:await\s+)?[^)]*(?:response|completion|output|result|llm|model|message|content|answer|generated)/i;
+const OUTPUT_SINK_B_RE = /(?:subprocess\.(?:call|run|Popen|check_output)|os\.system|child_process\.\w+|new\s+Function)\s*\(\s*(?:await\s+)?[^)]*(?:response|completion|output|result|llm|model|message|generated)/i;
+const OUTPUT_VALIDATED_RE = /\.parse\s*\(|safeParse|z\.object|ajv\.|schema\.validate|validateOutput|sanitize/i;
+
+// ─── AI_TOOL_DISPATCH_SUBSTITUTION ───────────────────────────────────────────
+// LLM output used to select/dispatch a tool by name/id (tool-call substitution).
+const TOOL_DISPATCH_A_RE = /(?:tools?|toolMap|handlers?|registry|toolRegistry|functions?)\s*\[\s*(?:[^\]]*(?:response|completion|output|llm|model|toolName|tool_name|functionName|function_name|args\.name)[^\]]*)\]/i;
+const TOOL_DISPATCH_B_RE = /(?:getToolBy(?:Id|Name)|resolveTool|dispatchTool|lookupTool|selectTool|invokeTool|callTool)\s*\(\s*(?:[^)]*(?:response|completion|output|llm|model|toolName|tool_name|functionName|function_name|args\.name)[^)]*)\)/i;
+const TOOL_ALLOWLIST_RE = /allowlist|allowedTools|ALLOWED_TOOLS|permittedTools|tool_whitelist|isToolAllowed|TOOL_ALLOW/i;
+
+// ─── AI_CONFUSED_DEPUTY ──────────────────────────────────────────────────────
+// Tool output passed to a privileged external API/DB call without re-authorization.
+const TOOL_OUTPUT_SRC_RE = /(?:toolResult|tool_result|toolOutput|tool_output|functionResult|action_result|observation)\b/i;
+const PRIVILEGED_SINK_RE = /(?:fetch|axios\.(?:get|post|put|delete)|db\.query|prisma\.\w+|knex\(|\.execute\s*\(|stripe\.|sendMail|\.transfer\s*\(|\.delete\s*\(|adminClient|serviceRole)/i;
+const REAUTHZ_RE = /authorize|checkPermission|hasAccess|enforceAuth|verifyOwner|assertOwner|scope|acl|policy\.check/i;
+
+// ─── AI_RAG_TENANT_FILTER_MISSING ────────────────────────────────────────────
+// Vector query with no access-control / tenant filter argument.
+const RAG_QUERY_RE = /\.(?:query|search|similaritySearch|similarity_search|asRetriever|retrieve)\s*\([^)]*(?:embedding|vector|queryVector|topK|top_k|k\s*[:=])/i;
+const RAG_FILTER_RE = /filter\s*[:=]|where\s*[:=]|namespace\s*[:=]|tenantId|tenant_id|orgId|org_id|userId|user_id|metadata\s*[:=]/i;
+
+// ─── AI_PROMPT_INJECTION_NO_DELIMITER ────────────────────────────────────────
+// Prompt built by string concat with untrusted input + no delimiter/defense.
+const PROMPT_UNTRUSTED_CONCAT_RE = /(?:prompt|userMessage|userContent|question|query)\s*(?:\+=?|=[^=])[^;\n]*(?:req\.(?:body|query|params)|input\.|body\.|userInput|externalContent|retrieved|fetchedText|emailBody|documentText)/i;
+const PROMPT_DELIMITER_RE = /<\/?(?:user_input|untrusted|data|context|document)>|"""|```|===\s*(?:user|input|data)|BEGIN\s+(?:USER|UNTRUSTED)|delimit|escapeBraces|sanitizePrompt/i;
+
+// ─── AI_PROMPT_CACHE_CROSS_USER ──────────────────────────────────────────────
+// LLM response cached with a shared key across users (prompt-cache cross-user leak).
+const CACHE_LLM_RE = /(?:cache|redis|memcached|lru)\.(?:set|put|write|store)\s*\([^)]*(?:completion|response|answer|llmResult|generation)/i;
+const CACHE_KEY_USER_RE = /userId|tenantId|orgId|sessionId|user_id|tenant_id|:\$\{user|hash\([^)]*user/i;
+
+// ─── AI_REMOTE_MODEL_UNPINNED_HASH ───────────────────────────────────────────
+// from_pretrained / hub download from remote hub without pinned revision/hash.
+const REMOTE_MODEL_RE = /from_pretrained\s*\(|hf_hub_download\s*\(|snapshot_download\s*\(|AutoModel\w*\.from_pretrained|pipeline\s*\(/i;
+const REMOTE_MODEL_REVISION_RE = /revision\s*=|commit_hash|@[0-9a-f]{7,40}\b/i;
+
+// ─── AI_MISSING_SAFETY_GUARDRAIL ─────────────────────────────────────────────
+// User-facing LLM call with no system prompt AND no output filter.
+const USER_FACING_LLM_RE = /(?:chat\.completions\.create|messages\.create|generateContent|\.invoke\s*\(|\.generate\s*\()/i;
+const SYSTEM_PROMPT_RE = /role\s*['"]?\s*[:=]\s*['"]system['"]|system\s*[:=]\s*['"`]|systemPrompt|system_prompt|systemInstruction/i;
+const OUTPUT_FILTER_RE = /moderat|content.?filter|guardrail|shield|\.moderations|safetyFilter|toxicity|refusal/i;
+
 // ─── Glob ignore list ─────────────────────────────────────────────────────────
 const GLOB_IGNORE = [
   "**/node_modules/**",
@@ -190,6 +243,15 @@ type FileEvidence = {
   streamChunkInjectionFiles: string[];
   aiGeneratedCodeNoAuditFiles: string[];
   embeddingInversionFiles: string[];
+  unsafeModelDeserFiles: string[];
+  insecureOutputHandlingFiles: string[];
+  toolDispatchSubstFiles: string[];
+  confusedDeputyFiles: string[];
+  ragTenantFilterMissingFiles: string[];
+  promptInjectionNoDelimFiles: string[];
+  promptCacheCrossUserFiles: string[];
+  remoteModelUnpinnedFiles: string[];
+  missingSafetyGuardrailFiles: string[];
   schemaDetected: boolean;
 };
 
@@ -228,6 +290,15 @@ function makeEvidence(): FileEvidence {
     streamChunkInjectionFiles: [],
     aiGeneratedCodeNoAuditFiles: [],
     embeddingInversionFiles: [],
+    unsafeModelDeserFiles: [],
+    insecureOutputHandlingFiles: [],
+    toolDispatchSubstFiles: [],
+    confusedDeputyFiles: [],
+    ragTenantFilterMissingFiles: [],
+    promptInjectionNoDelimFiles: [],
+    promptCacheCrossUserFiles: [],
+    remoteModelUnpinnedFiles: [],
+    missingSafetyGuardrailFiles: [],
     schemaDetected: false
   };
 }
@@ -385,6 +456,64 @@ function scanNewAiThreats(file: string, text: string, lines: string[], ev: FileE
   }
 }
 
+// AI/LLM context signal — used to gate lower-signal sinks so we don't flag
+// generic (non-AI) pickle/cache/query code.
+const AI_CONTEXT_RE = /openai|anthropic|\bllm\b|langchain|llama.?index|completion|\bprompt\b|embedding|\bmodel\b|\bagent\b|\btool_call|chat\.completions|messages\.create|from_pretrained|huggingface|transformers|vectorStore|pinecone|qdrant|weaviate|chroma|milvus/i;
+
+function scanModelSecurityThreats(file: string, text: string, lines: string[], ev: FileEvidence): void {
+  const aiCtx = AI_CONTEXT_RE.test(text);
+
+  // AI_UNSAFE_MODEL_DESERIALIZATION: untrusted deserialization of model artifacts (RCE).
+  const unpickle = MODEL_UNPICKLE_A_RE.test(text) || MODEL_UNPICKLE_B_RE.test(text) || MODEL_UNPICKLE_C_RE.test(text);
+  if (unpickle && MODEL_ARTIFACT_RE.test(text)) {
+    ev.unsafeModelDeserFiles.push(file);
+  }
+
+  // AI_INSECURE_OUTPUT_HANDLING: LLM output to eval/JSON.parse/yaml.load/subprocess w/o validation.
+  if ((OUTPUT_SINK_A_RE.test(text) || OUTPUT_SINK_B_RE.test(text)) && !OUTPUT_VALIDATED_RE.test(text)) {
+    ev.insecureOutputHandlingFiles.push(file);
+  }
+
+  // AI_TOOL_DISPATCH_SUBSTITUTION: LLM output selects/dispatches a tool by name/id.
+  if ((TOOL_DISPATCH_A_RE.test(text) || TOOL_DISPATCH_B_RE.test(text)) && !TOOL_ALLOWLIST_RE.test(text)) {
+    ev.toolDispatchSubstFiles.push(file);
+  }
+
+  // AI_CONFUSED_DEPUTY: tool output → privileged sink with no re-authorization.
+  if (
+    TOOL_OUTPUT_SRC_RE.test(text) &&
+    windowMatch(lines, TOOL_OUTPUT_SRC_RE, PRIVILEGED_SINK_RE, 8) &&
+    !windowMatch(lines, TOOL_OUTPUT_SRC_RE, REAUTHZ_RE, 8)
+  ) {
+    ev.confusedDeputyFiles.push(file);
+  }
+
+  // AI_RAG_TENANT_FILTER_MISSING: vector query with no access-control/tenant filter.
+  if (aiCtx && RAG_QUERY_RE.test(text) && !windowMatch(lines, RAG_QUERY_RE, RAG_FILTER_RE, 6)) {
+    ev.ragTenantFilterMissingFiles.push(file);
+  }
+
+  // AI_PROMPT_INJECTION_NO_DELIMITER: untrusted input concatenated into prompt w/o delimiter/defense.
+  if (PROMPT_UNTRUSTED_CONCAT_RE.test(text) && !PROMPT_DELIMITER_RE.test(text)) {
+    ev.promptInjectionNoDelimFiles.push(file);
+  }
+
+  // AI_PROMPT_CACHE_CROSS_USER: LLM response cached under a shared (non per-user) key.
+  if (CACHE_LLM_RE.test(text) && aiCtx && !windowMatch(lines, CACHE_LLM_RE, CACHE_KEY_USER_RE, 6)) {
+    ev.promptCacheCrossUserFiles.push(file);
+  }
+
+  // AI_REMOTE_MODEL_UNPINNED_HASH: remote hub model load without pinned revision/hash.
+  if (aiCtx && REMOTE_MODEL_RE.test(text) && !windowMatch(lines, REMOTE_MODEL_RE, REMOTE_MODEL_REVISION_RE, 4)) {
+    ev.remoteModelUnpinnedFiles.push(file);
+  }
+
+  // AI_MISSING_SAFETY_GUARDRAIL: user-facing LLM call with no system prompt and no output filter.
+  if (USER_FACING_LLM_RE.test(text) && !SYSTEM_PROMPT_RE.test(text) && !OUTPUT_FILTER_RE.test(text)) {
+    ev.missingSafetyGuardrailFiles.push(file);
+  }
+}
+
 /** Single-pass per-file scanner — delegates to focused helpers. */
 function scanFile(file: string, text: string, ev: FileEvidence): void {
   const lines = text.split("\n");
@@ -394,6 +523,7 @@ function scanFile(file: string, text: string, ev: FileEvidence): void {
   scanContextAndLoop(file, text, lines, ev);
   scanModelsAndSupply(file, text, lines, ev);
   scanNewAiThreats(file, text, lines, ev);
+  scanModelSecurityThreats(file, text, lines, ev);
 }
 
 // ─── Finding builders (split to keep checkAi cognitive complexity low) ─────────
@@ -843,6 +973,135 @@ function buildNewAiThreatFindings(ev: FileEvidence, findings: Finding[]): void {
   }
 }
 
+function buildModelSecurityFindings(ev: FileEvidence, findings: Finding[]): void {
+  if (ev.unsafeModelDeserFiles.length > 0) {
+    findings.push({
+      id: "AI_UNSAFE_MODEL_DESERIALIZATION",
+      title: "Untrusted model artifact deserialized via pickle/joblib/torch.load/numpy allow_pickle — arbitrary code execution on load",
+      severity: "CRITICAL",
+      evidence: ev.unsafeModelDeserFiles,
+      sla: "24h",
+      requiredActions: [
+        "Never load model weights/checkpoints with pickle.load, joblib.load, torch.load(weights_only=False), or numpy allow_pickle=True from untrusted sources — deserialization executes attacker code (CWE-502, MITRE ATLAS AML.T0010).",
+        "Use safetensors for weights, or torch.load(..., weights_only=True), and verify a SHA-256 checksum/signature of the artifact before loading.",
+        "Load only from a private, access-controlled model registry with provenance; scan third-party model files (e.g. picklescan, modelscan) before ingestion."
+      ]
+    });
+  }
+  if (ev.insecureOutputHandlingFiles.length > 0) {
+    findings.push({
+      id: "AI_INSECURE_OUTPUT_HANDLING",
+      title: "LLM output passed to eval/exec/JSON.parse/yaml.load/subprocess without validation — insecure output handling",
+      severity: "CRITICAL",
+      evidence: ev.insecureOutputHandlingFiles,
+      sla: "24h",
+      requiredActions: [
+        "Treat all LLM output as untrusted input: never feed it to yaml.load/unsafe_load, subprocess, os.system, new Function, or unchecked JSON.parse (OWASP LLM02, CWE-94/CWE-502).",
+        "Parse structured output through a strict schema (Zod .parse / safeParse, Pydantic, ajv) and reject anything non-conforming before use.",
+        "Use yaml.safe_load, avoid dynamic code execution entirely, and sandbox any unavoidable execution of model-derived content."
+      ]
+    });
+  }
+  if (ev.toolDispatchSubstFiles.length > 0) {
+    findings.push({
+      id: "AI_TOOL_DISPATCH_SUBSTITUTION",
+      title: "LLM output used to select/dispatch a tool by name or id without an allowlist — tool-call substitution",
+      severity: "CRITICAL",
+      evidence: ev.toolDispatchSubstFiles,
+      sla: "24h",
+      requiredActions: [
+        "Never index a tool/handler map or call getToolById/dispatchTool directly with raw model output — a poisoned completion can invoke an unintended privileged tool (OWASP LLM07, MITRE ATLAS AML.T0053, CWE-470).",
+        "Validate the requested tool name against a static allowlist and reject anything not explicitly permitted for the current user/context before dispatch.",
+        "Bind each tool to a required permission and enforce it at dispatch time; require human approval for high-impact tools."
+      ]
+    });
+  }
+  if (ev.confusedDeputyFiles.length > 0) {
+    findings.push({
+      id: "AI_CONFUSED_DEPUTY",
+      title: "Tool output passed to a privileged external API/DB call without re-authorization — confused deputy",
+      severity: "HIGH",
+      evidence: ev.confusedDeputyFiles,
+      sla: "7d",
+      requiredActions: [
+        "Re-authorize every privileged action (external API, DB write/delete, payment, email) using the end-user's identity — never act on tool/model output with the agent's ambient privileges (CWE-441, OWASP LLM08).",
+        "Pass the authenticated principal through to the sink and enforce object-level authorization there; do not trust IDs or targets chosen by the model.",
+        "Apply least privilege to the agent's service credentials so a confused-deputy call cannot exceed the user's own permissions."
+      ]
+    });
+  }
+  if (ev.ragTenantFilterMissingFiles.length > 0) {
+    findings.push({
+      id: "AI_RAG_TENANT_FILTER_MISSING",
+      title: "RAG vector query issued without an access-control / tenant filter — cross-tenant document leak",
+      severity: "HIGH",
+      evidence: ev.ragTenantFilterMissingFiles,
+      sla: "7d",
+      requiredActions: [
+        "Attach a mandatory tenant/user filter (namespace, metadata filter, or WHERE clause) to every vector query so retrieval is scoped to the requesting principal (CWE-285, OWASP LLM06).",
+        "Enforce isolation in the vector store (per-tenant namespaces / collections / payload filters), not only in application code.",
+        "Add an integration test proving a query from tenant A can never return tenant B's documents."
+      ]
+    });
+  }
+  if (ev.promptInjectionNoDelimFiles.length > 0) {
+    findings.push({
+      id: "AI_PROMPT_INJECTION_NO_DELIMITER",
+      title: "Prompt built by concatenating untrusted input with no delimiter or injection defense",
+      severity: "HIGH",
+      evidence: ev.promptInjectionNoDelimFiles,
+      sla: "7d",
+      requiredActions: [
+        "Wrap all untrusted/retrieved/external content in explicit delimiters (e.g. <untrusted>…</untrusted>) and instruct the model to treat delimited content as data, never instructions (OWASP LLM01, MITRE ATLAS AML.T0051).",
+        "Escape or neutralize delimiter/control sequences in user content before insertion so it cannot break out of its boundary.",
+        "Keep user content in a separate user-role message rather than concatenating it into the system prompt."
+      ]
+    });
+  }
+  if (ev.promptCacheCrossUserFiles.length > 0) {
+    findings.push({
+      id: "AI_PROMPT_CACHE_CROSS_USER",
+      title: "LLM response cached under a shared key across users — prompt-cache cross-user leak",
+      severity: "MEDIUM",
+      evidence: ev.promptCacheCrossUserFiles,
+      sla: "30d",
+      requiredActions: [
+        "Include the userId/tenantId (or a hash of it) in every LLM response cache key so one user's completion can never be served to another (CWE-524).",
+        "Never cache responses derived from user-specific or sensitive context under a global/shared key.",
+        "Set a short TTL and scope cache namespaces per tenant to limit blast radius."
+      ]
+    });
+  }
+  if (ev.remoteModelUnpinnedFiles.length > 0) {
+    findings.push({
+      id: "AI_REMOTE_MODEL_UNPINNED_HASH",
+      title: "Model loaded from a remote hub without a pinned revision/commit hash",
+      severity: "MEDIUM",
+      evidence: ev.remoteModelUnpinnedFiles,
+      sla: "30d",
+      requiredActions: [
+        "Pass revision='<commit-sha>' to from_pretrained / hf_hub_download / snapshot_download so the exact model artifact is pinned (supply-chain integrity, MITRE ATLAS AML.T0010, CWE-494).",
+        "Verify the downloaded artifact's checksum/signature before loading and mirror it into a controlled registry.",
+        "Fail closed if the pinned revision cannot be resolved rather than silently pulling latest."
+      ]
+    });
+  }
+  if (ev.missingSafetyGuardrailFiles.length > 0) {
+    findings.push({
+      id: "AI_MISSING_SAFETY_GUARDRAIL",
+      title: "User-facing LLM call with no system/safety prompt and no output filter",
+      severity: "MEDIUM",
+      evidence: ev.missingSafetyGuardrailFiles,
+      sla: "30d",
+      requiredActions: [
+        "Add a system prompt that sets role, scope, and safety constraints for every user-facing LLM call (OWASP LLM01/LLM05).",
+        "Pass responses through an output moderation/guardrail layer (moderations API, safety classifier, or refusal filter) before returning them to users.",
+        "Define an output policy (refuse/truncate/warn) and log guardrail decisions for audit."
+      ]
+    });
+  }
+}
+
 // ─── Main export ───────────────────────────────────────────────────────────────
 export async function checkAi(_: { changedFiles: string[] }): Promise<Finding[]> {
   const findings: Finding[] = [];
@@ -884,6 +1143,7 @@ export async function checkAi(_: { changedFiles: string[] }): Promise<Finding[]>
   buildRuntimeFindings(ev, findings);
   buildSupplyChainFindings(ev, findings);
   buildNewAiThreatFindings(ev, findings);
+  buildModelSecurityFindings(ev, findings);
 
   return findings;
 }

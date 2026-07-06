@@ -1293,6 +1293,137 @@ function checkCrdOperatorMisc(ctx: K8sContext): Finding[] {
 	return findings;
 }
 
+/**
+ * Cluster-level auth & admission depth — default-SA token automounting, external
+ * admission webhooks, PodSecurity exemptions / seccomp annotation overrides, and
+ * NetworkPolicies that select every namespace. These are cluster/namespace-scope
+ * controls not covered by the per-pod checks above.
+ */
+function checkClusterAuthAndAdmission(ctx: K8sContext): Finding[] {
+	const findings: Finding[] = [];
+
+	// 1. The built-in `default` ServiceAccount that does not disable automounting.
+	//    Every pod without an explicit serviceAccountName uses `default`; if that
+	//    SA (or the namespace it lives in) auto-mounts its token, every workload
+	//    silently ships an API credential. This is distinct from a named SA
+	//    (K8S_SA_DEFAULT_AUTOMOUNT) — here we key on the `default` SA specifically.
+	const defaultSaAutomountFiles = ctx.files
+		.filter((f) => {
+			const c = ctx.contents.get(f) ?? "";
+			return (
+				/kind:\s*ServiceAccount/.test(c) &&
+				/name:\s*["']?default["']?\s*(?:\n|#|$)/m.test(c) &&
+				!/automountServiceAccountToken:\s*false/.test(c)
+			);
+		})
+		.slice(0, 10);
+	if (defaultSaAutomountFiles.length > 0) {
+		findings.push({
+			id: "K8S_DEFAULT_SA_TOKEN_AUTOMOUNT",
+			title: "The 'default' ServiceAccount does not disable automountServiceAccountToken",
+			severity: "CRITICAL",
+			files: defaultSaAutomountFiles,
+			requiredActions: [
+				"Every pod that omits serviceAccountName runs as the namespace 'default' SA; if it automounts its token, a compromised pod immediately holds a Kubernetes API credential it never needed.",
+				"Patch the default ServiceAccount in each namespace to set automountServiceAccountToken: false:",
+				"  apiVersion: v1",
+				"  kind: ServiceAccount",
+				"  metadata: { name: default, namespace: <ns> }",
+				"  automountServiceAccountToken: false",
+				"Then opt back in per-pod (automountServiceAccountToken: true) only for workloads that genuinely call the API, using a dedicated least-privilege SA."
+			]
+		});
+	}
+
+	// 2. Admission webhook (Mutating/Validating) whose clientConfig points at a
+	//    raw external `url:` instead of an in-cluster `service:` reference. An
+	//    external endpoint can be MITM'd or repointed and sees/alters every
+	//    admitted object (including Secrets), a cluster-wide compromise path.
+	const externalWebhookFiles = ctx.files
+		.filter((f) => {
+			const c = ctx.contents.get(f) ?? "";
+			return (
+				/kind:\s*(?:Mutating|Validating)WebhookConfiguration/.test(c) &&
+				/url:\s*["']?https?:\/\//.test(c)
+			);
+		})
+		.slice(0, 10);
+	if (externalWebhookFiles.length > 0) {
+		findings.push({
+			id: "K8S_ADMISSION_WEBHOOK_EXTERNAL_URL",
+			title: "Admission webhook clientConfig uses an external url instead of an in-cluster service reference",
+			severity: "CRITICAL",
+			files: externalWebhookFiles,
+			requiredActions: [
+				"A Mutating/Validating webhook targeting an external URL intercepts every admitted object (Pods, Secrets, RBAC) and can be MITM'd, repointed, or made to fail-open — a cluster-wide integrity and confidentiality risk.",
+				"Point clientConfig at an in-cluster Service backed by RBAC and TLS, not a raw url:",
+				"  clientConfig:",
+				"    service: { name: webhook-svc, namespace: security, path: /validate }",
+				"    caBundle: <base64 CA>",
+				"Set failurePolicy: Fail (never Ignore), pin caBundle, and scope namespaceSelector/objectSelector so the webhook only sees the objects it must.",
+				"If an external endpoint is unavoidable, require HTTPS with a pinned CA and restrict egress to that host via NetworkPolicy."
+			]
+		});
+	}
+
+	// 3. PodSecurity Admission exemptions, or a legacy seccomp annotation that
+	//    overrides / weakens the enforced restricted profile.
+	const psaExemptionFiles = ctx.files
+		.filter((f) => {
+			const c = ctx.contents.get(f) ?? "";
+			// AdmissionConfiguration with a PodSecurity `exemptions:` block, or a
+			// namespace/pod carrying the deprecated seccomp annotation set to unconfined.
+			return (
+				(/kind:\s*PodSecurityConfiguration/.test(c) || /PodSecurity[\s\S]{0,200}exemptions:/.test(c)) ||
+				/seccomp\.security\.alpha\.kubernetes\.io\/[^\n]*:\s*["']?unconfined/.test(c) ||
+				/container\.seccomp\.security\.alpha\.kubernetes\.io\/[^\n]*:\s*["']?unconfined/.test(c)
+			);
+		})
+		.slice(0, 10);
+	if (psaExemptionFiles.length > 0) {
+		findings.push({
+			id: "K8S_PSA_EXEMPTION_OR_SECCOMP_OVERRIDE",
+			title: "PodSecurity exemption or legacy seccomp annotation bypasses the restricted profile",
+			severity: "HIGH",
+			files: psaExemptionFiles,
+			requiredActions: [
+				"A PodSecurity `exemptions:` entry (by username, runtimeClass, or namespace) lets exempt workloads run privileged/hostPath/root even where enforce: restricted is set — an attacker who lands in an exempt namespace or SA bypasses pod security entirely.",
+				"Remove exemptions from the PodSecurityConfiguration, or restrict them to specific trusted system namespaces only, and re-audit anything currently exempt.",
+				"Delete the deprecated seccomp.security.alpha.kubernetes.io/*: unconfined annotation and set the modern field instead: securityContext.seccompProfile.type: RuntimeDefault.",
+				"Enforce with pod-security.kubernetes.io/enforce: restricted plus a Kyverno/Gatekeeper policy that blocks Unconfined seccomp profiles."
+			]
+		});
+	}
+
+	// 4. NetworkPolicy whose ingress/egress peer uses an empty namespaceSelector
+	//    ({}), which selects ALL namespaces — an "allow from anywhere in the
+	//    cluster" rule that defeats namespace isolation.
+	const emptyNsSelectorFiles = ctx.files
+		.filter((f) => {
+			const c = ctx.contents.get(f) ?? "";
+			return /kind:\s*NetworkPolicy/.test(c) && /namespaceSelector:\s*\{\s*\}/.test(c);
+		})
+		.slice(0, 10);
+	if (emptyNsSelectorFiles.length > 0) {
+		findings.push({
+			id: "K8S_NETPOL_EMPTY_NAMESPACE_SELECTOR",
+			title: "NetworkPolicy peer uses an empty namespaceSelector {} — allows traffic from every namespace",
+			severity: "MEDIUM",
+			files: emptyNsSelectorFiles,
+			requiredActions: [
+				"An empty namespaceSelector ({}) matches ALL namespaces, so this rule allows traffic from every workload in the cluster — including other tenants — defeating namespace isolation.",
+				"Scope the selector with explicit labels so only intended namespaces match:",
+				"  from:",
+				"    - namespaceSelector:",
+				"        matchLabels: { network-tier: frontend }",
+				"Combine with a podSelector to further narrow the peer, and keep a default-deny NetworkPolicy in the namespace so only these explicit rules open traffic."
+			]
+		});
+	}
+
+	return findings;
+}
+
 export async function checkKubernetes(_opts: { changedFiles: string[] }): Promise<Finding[]> {
 	try {
 		const ctx = await loadK8sManifests();
@@ -1313,7 +1444,8 @@ export async function checkKubernetes(_opts: { changedFiles: string[] }): Promis
 			...checkNetworkExposureDepth(ctx),
 			...checkSecretsConfig(ctx),
 			...checkAdmissionAndComponents(ctx),
-			...checkCrdOperatorMisc(ctx)
+			...checkCrdOperatorMisc(ctx),
+			...checkClusterAuthAndAdmission(ctx)
 		];
 	} catch (err) {
 		console.warn("[checkKubernetes] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));

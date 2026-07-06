@@ -1012,6 +1012,453 @@ async function checkFlutterSharedPrefs(): Promise<Finding[]> {
 }
 
 // ---------------------------------------------------------------------------
+// Sub-checker: WebView loadUrl/evaluateJavascript/loadData with user input
+// MASVS-PLATFORM-7 / CWE-79 / CWE-749
+// ---------------------------------------------------------------------------
+
+async function checkWebViewUserControlledLoad(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+	// A WebView sink taking a variable arg that is not a constant string literal.
+	const sinkRe = /\.(loadUrl|evaluateJavascript|loadData|loadDataWithBaseURL)\s*\(\s*([A-Za-z_$][\w$.]*)/;
+	// Indicators that the argument is user/attacker controlled.
+	const taintRe = /getIntent|intent\.data|getQueryParameter|getStringExtra|getData\(\)|savedInstanceState|bundle\.get|Uri\.parse|deeplink|deepLink|input|userInput|params?\b/i;
+
+	const files: string[] = [];
+	const evidence: string[] = [];
+
+	for (const src of await findSourceFiles()) {
+		const code = await readFileSafe(src).catch(() => "");
+		if (!code) continue;
+		if (!/\.(loadUrl|evaluateJavascript|loadData|loadDataWithBaseURL)\s*\(/.test(code)) continue;
+		if (!taintRe.test(code)) continue;
+
+		const lines = code.split("\n");
+		const hits: string[] = [];
+		for (let i = 0; i < lines.length; i++) {
+			const m = sinkRe.exec(lines[i]);
+			if (!m) continue;
+			// Skip obvious constant-string literals passed directly.
+			if (/\(\s*["']/.test(lines[i])) continue;
+			// Require a taint indicator on the same line or within a small window.
+			const windowText = lines.slice(Math.max(0, i - 6), i + 2).join("\n");
+			if (!taintRe.test(windowText)) continue;
+			hits.push(lines[i].trim().slice(0, 200));
+		}
+		if (hits.length > 0) {
+			files.push(src);
+			evidence.push(...hits.slice(0, 5).map(l => `${src}: ${l}`));
+		}
+	}
+
+	if (files.length > 0) {
+		findings.push({
+			id: "ANDROID_WEBVIEW_USER_CONTROLLED_LOAD",
+			title: "WebView loadUrl/evaluateJavascript/loadData fed user-controlled input — JS injection / arbitrary navigation (MASVS-PLATFORM-7)",
+			severity: "CRITICAL",
+			files: [...new Set(files)],
+			evidence: evidence.slice(0, 8),
+			sla: "24h",
+			requiredActions: [
+				"Never pass intent/deep-link/query-parameter values directly to loadUrl, evaluateJavascript, or loadData.",
+				"Validate URLs against a strict scheme+host allowlist and reject javascript:, data:, and file: schemes.",
+				"For evaluateJavascript, JSON-encode all interpolated values and avoid building script strings from external input.",
+				"See MASVS-PLATFORM-7, CWE-79, CWE-749 and OWASP M1."
+			]
+		});
+	}
+
+	return findings;
+}
+
+// ---------------------------------------------------------------------------
+// Sub-checker: Exported intent-filter with wildcard MIME type */*
+// MASVS-PLATFORM-1 / CWE-926
+// ---------------------------------------------------------------------------
+
+async function checkWildcardMimeIntentFilter(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+	// Component that is exported (or has an intent-filter, which implies exported)
+	// and declares a wildcard MIME data type.
+	const componentRe = /<(activity|service|receiver|provider)[^>]*>[\s\S]*?<\/\1>/gi;
+	const files: string[] = [];
+	const evidence: string[] = [];
+
+	for (const m of await findManifests()) {
+		const xml = await readFileSafe(m).catch(() => "");
+		if (!xml) continue;
+
+		let match: RegExpExecArray | null;
+		componentRe.lastIndex = 0;
+		while ((match = componentRe.exec(xml)) !== null) {
+			const block = match[0];
+			if (!/android:mimeType\s*=\s*["']\*\/\*["']/i.test(block)) continue;
+			if (!/<intent-filter/i.test(block)) continue;
+			// Exported: explicit true, or implicit via intent-filter with no exported=false.
+			const explicitFalse = /android:exported\s*=\s*"false"/i.test(block);
+			if (explicitFalse) continue;
+			files.push(m);
+			evidence.push(...grepLinesRe(block, /android:mimeType\s*=\s*["']\*\/\*["']/i, 2).map(l => `${m}: ${l.slice(0, 200)}`));
+		}
+	}
+
+	if (files.length > 0) {
+		findings.push({
+			id: "ANDROID_WILDCARD_MIME_INTENT_FILTER",
+			title: 'Exported intent-filter with android:mimeType="*/*" — accepts arbitrary file types for potential arbitrary file access (MASVS-PLATFORM-1)',
+			severity: "CRITICAL",
+			files: [...new Set(files)],
+			evidence: evidence.slice(0, 8),
+			sla: "24h",
+			requiredActions: [
+				'Replace android:mimeType="*/*" with the specific MIME type(s) the component actually handles.',
+				'Set android:exported="false" on components that do not need to receive external intents.',
+				"Validate the content URI, its authority, and the resolved MIME type before opening any incoming stream.",
+				"See MASVS-PLATFORM-1, CWE-926 and OWASP M1."
+			]
+		});
+	}
+
+	return findings;
+}
+
+// ---------------------------------------------------------------------------
+// Sub-checker: ContentProvider getFile/openFile with unvalidated path
+// MASVS-PLATFORM-1 / CWE-22
+// ---------------------------------------------------------------------------
+
+async function checkProviderOpenFileTraversal(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+	// openFile/getFile override that builds a File from the incoming Uri without normalization.
+	const overrideRe = /(?:public|override|fun)\s+[\w<>., ]*\b(openFile|getFile)\s*\(/;
+	const uriToPathRe = /uri\.(?:getPath|getLastPathSegment|getEncodedPath)|getPath\(\)|getLastPathSegment\(\)/i;
+	const sanitizeRe = /getCanonicalPath|canonicalFile|normalize|startsWith|contains\s*\(\s*["']\.\.|validate|allowlist|whitelist/i;
+
+	const files: string[] = [];
+	const evidence: string[] = [];
+
+	for (const src of await findSourceFiles()) {
+		const code = await readFileSafe(src).catch(() => "");
+		if (!code) continue;
+		if (!overrideRe.test(code)) continue;
+		// Only ContentProvider-style files that build files from the uri.
+		if (!/ContentProvider|ParcelFileDescriptor|openFileHelper/.test(code)) continue;
+		if (!uriToPathRe.test(code) && !/new\s+File\s*\([^)]*uri/i.test(code)) continue;
+		// Suppress when the file already canonicalizes / validates the resolved path.
+		if (sanitizeRe.test(code)) continue;
+
+		files.push(src);
+		evidence.push(
+			...grepLinesRe(code, /\b(openFile|getFile)\s*\(|new\s+File\s*\(/, 4).map(l => `${src}: ${l}`)
+		);
+	}
+
+	if (files.length > 0) {
+		findings.push({
+			id: "ANDROID_PROVIDER_PATH_TRAVERSAL",
+			title: "ContentProvider openFile/getFile builds a File from the incoming Uri without canonical-path validation — path traversal on an exported provider (MASVS-PLATFORM-1)",
+			severity: "CRITICAL",
+			files: [...new Set(files)],
+			evidence: evidence.slice(0, 8),
+			sla: "24h",
+			requiredActions: [
+				"Canonicalize the resolved file (File.getCanonicalPath) and verify it is inside the intended base directory before returning a descriptor.",
+				"Reject any path containing '..' or absolute path segments; map Uri path segments through a fixed allowlist instead of using them directly.",
+				"Prefer FileProvider with a constrained res/xml paths declaration over a custom openFile implementation.",
+				"See MASVS-PLATFORM-1, CWE-22 and OWASP M1."
+			]
+		});
+	}
+
+	return findings;
+}
+
+// ---------------------------------------------------------------------------
+// Sub-checker: openFileOutput MODE_WORLD_READABLE/WRITEABLE
+// MASVS-STORAGE-1 / CWE-732
+// ---------------------------------------------------------------------------
+
+async function checkOpenFileOutputWorldMode(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+	// openFileOutput / openOrCreateDatabase with a world mode. (SharedPreferences world
+	// mode is already covered separately; here we target file/database sinks.)
+	const worldFileRe = /(?:openFileOutput|openOrCreateDatabase|getDir)\s*\([^)]*MODE_WORLD_(?:READABLE|WRITEABLE)/;
+	const files: string[] = [];
+	const evidence: string[] = [];
+
+	for (const src of await findSourceFiles()) {
+		const code = await readFileSafe(src).catch(() => "");
+		if (!code) continue;
+		if (!worldFileRe.test(code)) continue;
+		files.push(src);
+		evidence.push(...grepLinesRe(code, worldFileRe, 3).map(l => `${src}: ${l}`));
+	}
+
+	if (files.length > 0) {
+		findings.push({
+			id: "ANDROID_OPENFILEOUTPUT_WORLD_MODE",
+			title: "openFileOutput/openOrCreateDatabase opened with MODE_WORLD_READABLE/WRITEABLE — file readable or writable by any app on the device (MASVS-STORAGE-1)",
+			severity: "HIGH",
+			files: [...new Set(files)],
+			evidence: evidence.slice(0, 8),
+			sla: "7d",
+			requiredActions: [
+				"Replace MODE_WORLD_READABLE / MODE_WORLD_WRITEABLE with MODE_PRIVATE for all openFileOutput and openOrCreateDatabase calls.",
+				"These modes are deprecated since API 17 and throw SecurityException on API 24+; a world-writable file also enables data-injection attacks.",
+				"If cross-app sharing is required, expose the data through a permission-protected ContentProvider or FileProvider grant instead.",
+				"See MASVS-STORAGE-1, CWE-732 and OWASP M2."
+			]
+		});
+	}
+
+	return findings;
+}
+
+// ---------------------------------------------------------------------------
+// Sub-checker: Exported Service/Receiver with guessable action, no permission
+// MASVS-PLATFORM-1 / CWE-926
+// ---------------------------------------------------------------------------
+
+async function checkExportedGuessableAction(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+	const blockRe = /<(service|receiver)\b[\s\S]*?<\/\1>/gi;
+	const files: string[] = [];
+	const evidence: string[] = [];
+
+	for (const m of await findManifests()) {
+		const xml = await readFileSafe(m).catch(() => "");
+		if (!xml) continue;
+
+		let match: RegExpExecArray | null;
+		blockRe.lastIndex = 0;
+		while ((match = blockRe.exec(xml)) !== null) {
+			const block = match[0];
+			// Has an intent-filter with a custom (app-namespaced) action string.
+			const actionMatch = /<action[^>]*android:name\s*=\s*"([^"]+)"/i.exec(block);
+			if (!actionMatch) continue;
+			const action = actionMatch[1];
+			// Ignore standard platform actions — only flag custom, guessable ones.
+			if (/^android\.(intent|net|bluetooth|media|provider|app)\./i.test(action)) continue;
+			// Must be exported (explicit true or implicit via intent-filter) and lack a permission.
+			if (/android:exported\s*=\s*"false"/i.test(block)) continue;
+			if (/android:permission\s*=/.test(block)) continue;
+			files.push(m);
+			evidence.push(`${m}: ${actionMatch[0].slice(0, 200)}`);
+		}
+	}
+
+	if (files.length > 0) {
+		findings.push({
+			id: "ANDROID_EXPORTED_GUESSABLE_ACTION",
+			title: "Exported Service/Receiver responds to a guessable custom action with no android:permission — any app can trigger it (MASVS-PLATFORM-1)",
+			severity: "HIGH",
+			files: [...new Set(files)],
+			evidence: evidence.slice(0, 8),
+			sla: "7d",
+			requiredActions: [
+				"Add android:permission with a signature-level custom permission to every exported Service and Receiver that declares an intent-filter.",
+				'Set android:exported="false" for components that are only invoked from within the app.',
+				"Validate the caller (Binder.getCallingUid / sending package) and all intent extras inside onStartCommand / onReceive.",
+				"See MASVS-PLATFORM-1, CWE-926 and OWASP M1."
+			]
+		});
+	}
+
+	return findings;
+}
+
+// ---------------------------------------------------------------------------
+// Sub-checker: BiometricPrompt fallback to device credential w/o CryptoObject
+// MASVS-AUTH-2 / CWE-287
+// ---------------------------------------------------------------------------
+
+async function checkBiometricDeviceCredentialFallback(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+	// Fallback to device PIN/pattern via setDeviceCredentialAllowed or
+	// DEVICE_CREDENTIAL authenticator, without binding to a Keystore CryptoObject.
+	const fallbackRe = /setDeviceCredentialAllowed\s*\(\s*true\s*\)|DEVICE_CREDENTIAL|setAllowedAuthenticators/;
+	const cryptoRe = /CryptoObject/;
+	const files: string[] = [];
+	const evidence: string[] = [];
+
+	for (const src of await findSourceFiles()) {
+		const code = await readFileSafe(src).catch(() => "");
+		if (!code) continue;
+		if (!code.includes("BiometricPrompt")) continue;
+		if (!fallbackRe.test(code)) continue;
+		if (cryptoRe.test(code)) continue;
+		files.push(src);
+		evidence.push(...grepLinesRe(code, fallbackRe, 3).map(l => `${src}: ${l}`));
+	}
+
+	if (files.length > 0) {
+		findings.push({
+			id: "ANDROID_BIOMETRIC_DEVICE_CREDENTIAL_FALLBACK",
+			title: "BiometricPrompt allows device-credential (PIN/pattern) fallback without binding to a Keystore CryptoObject — auth result not cryptographically enforced and not rate-limited (MASVS-AUTH-2)",
+			severity: "HIGH",
+			files: [...new Set(files)],
+			evidence: evidence.slice(0, 8),
+			sla: "7d",
+			requiredActions: [
+				"Bind biometric authentication to a Keystore key by passing a CryptoObject to BiometricPrompt.authenticate() so the operation only succeeds on genuine confirmation.",
+				"Create the key with setUserAuthenticationRequired(true) and a bounded setUserAuthenticationValidityDurationSeconds so device-credential fallback is rate-limited by the Keystore.",
+				"Do not treat a plain onAuthenticationSucceeded callback (without a CryptoObject) as proof of a fresh unlock.",
+				"See MASVS-AUTH-2, CWE-287 and Android BiometricPrompt best practices."
+			]
+		});
+	}
+
+	return findings;
+}
+
+// ---------------------------------------------------------------------------
+// Sub-checker: WebView setAllowFileAccess / allowUniversalAccessFromFileURLs
+// MASVS-PLATFORM-7 / CWE-200
+// ---------------------------------------------------------------------------
+
+async function checkWebViewFileAccess(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+	const fileAccessRe = /setAllowFileAccess\s*\(\s*true\s*\)|setAllowUniversalAccessFromFileURLs\s*\(\s*true\s*\)|setAllowFileAccessFromFileURLs\s*\(\s*true\s*\)/;
+	const files: string[] = [];
+	const evidence: string[] = [];
+
+	for (const src of await findSourceFiles()) {
+		const code = await readFileSafe(src).catch(() => "");
+		if (!code) continue;
+		if (!fileAccessRe.test(code)) continue;
+		files.push(src);
+		evidence.push(...grepLinesRe(code, fileAccessRe, 4).map(l => `${src}: ${l}`));
+	}
+
+	if (files.length > 0) {
+		findings.push({
+			id: "ANDROID_WEBVIEW_FILE_ACCESS",
+			title: "WebView enables setAllowFileAccess(true) / allowUniversalAccessFromFileURLs(true) — file:// content can read local files and cross-origin resources (MASVS-PLATFORM-7)",
+			severity: "HIGH",
+			files: [...new Set(files)],
+			evidence: evidence.slice(0, 8),
+			sla: "7d",
+			requiredActions: [
+				"Call setAllowFileAccess(false), setAllowFileAccessFromFileURLs(false), and setAllowUniversalAccessFromFileURLs(false) on every WebSettings instance.",
+				"Serve local assets through WebViewAssetLoader (https://appassets.androidplatform.net) instead of enabling raw file:// access.",
+				"Never combine file:// access with a JavaScript bridge or remote content in the same WebView.",
+				"See MASVS-PLATFORM-7, CWE-200 and OWASP M1."
+			]
+		});
+	}
+
+	return findings;
+}
+
+// ---------------------------------------------------------------------------
+// Sub-checker: Android Keystore alias reuse / overwrite
+// MASVS-CRYPTO-1 / CWE-323
+// ---------------------------------------------------------------------------
+
+async function checkKeystoreAliasReuse(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+	// A hardcoded key alias literal used across generation and lookup, generated on
+	// every run without an existing-key guard (containsAlias).
+	const generateRe = /generateKey\s*\(|generateKeyPair\s*\(|setKeyEntry\s*\(|KeyGenParameterSpec\.Builder/;
+	const aliasRe = /setKeyEntry\s*\(\s*["'][^"']+["']|KeyGenParameterSpec\.Builder\s*\(\s*["'][^"']+["']|"alias"|KEY_ALIAS/;
+	const guardRe = /containsAlias/;
+	const files: string[] = [];
+	const evidence: string[] = [];
+
+	for (const src of await findSourceFiles()) {
+		const code = await readFileSafe(src).catch(() => "");
+		if (!code) continue;
+		if (!/AndroidKeyStore|KeyGenParameterSpec|KeyStore\.getInstance/.test(code)) continue;
+		if (!generateRe.test(code)) continue;
+		if (!aliasRe.test(code)) continue;
+		// Suppress when the code guards against clobbering an existing alias.
+		if (guardRe.test(code)) continue;
+		files.push(src);
+		evidence.push(...grepLinesRe(code, /KeyGenParameterSpec\.Builder|setKeyEntry|KEY_ALIAS/, 3).map(l => `${src}: ${l}`));
+	}
+
+	if (files.length > 0) {
+		findings.push({
+			id: "ANDROID_KEYSTORE_ALIAS_REUSE",
+			title: "Keystore key generated under a fixed alias without a containsAlias guard — re-running overwrites the existing key, silently invalidating data encrypted under the old key (MASVS-CRYPTO-1)",
+			severity: "MEDIUM",
+			files: [...new Set(files)],
+			evidence: evidence.slice(0, 8),
+			sla: "30d",
+			requiredActions: [
+				"Guard key generation with keyStore.containsAlias(alias) and only generate when the alias does not already exist.",
+				"Use distinct, versioned aliases when intentionally rotating keys, and migrate ciphertext before deleting the old key.",
+				"Never regenerate a key under an in-use alias on every app launch — it destroys the ability to decrypt previously stored data.",
+				"See MASVS-CRYPTO-1 and CWE-323."
+			]
+		});
+	}
+
+	return findings;
+}
+
+// ---------------------------------------------------------------------------
+// Sub-checker: Cleartext traffic allowed (manifest or NSC permits http)
+// MASVS-NETWORK-1 / CWE-319
+//
+// Distinct from ANDROID_CLEARTEXT / ANDROID_NSC_WEAK: flags the *combination* of
+// an explicit cleartext opt-in AND actual http:// endpoints in source, and the
+// implicit-cleartext-by-default case for pre-28 targets that lack an NSC.
+// ---------------------------------------------------------------------------
+
+async function checkCleartextTrafficAllowed(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+	const files: string[] = [];
+	const evidence: string[] = [];
+
+	let manifestPermits = false;
+	for (const m of await findManifests()) {
+		const xml = await readFileSafe(m).catch(() => "");
+		if (!xml) continue;
+		if (/android:usesCleartextTraffic\s*=\s*"true"/i.test(xml)) {
+			manifestPermits = true;
+			files.push(m);
+			evidence.push(...grepLinesRe(xml, /android:usesCleartextTraffic\s*=\s*"true"/i, 2).map(l => `${m}: ${l.slice(0, 200)}`));
+		}
+	}
+
+	for (const nsc of await findNetworkSecurityConfigs()) {
+		const xml = await readFileSafe(nsc).catch(() => "");
+		if (!xml) continue;
+		if (/cleartextTrafficPermitted\s*=\s*"true"/i.test(xml)) {
+			manifestPermits = true;
+			files.push(nsc);
+			evidence.push(...grepLinesRe(xml, /cleartextTrafficPermitted\s*=\s*"true"/i, 3).map(l => `${nsc}: ${l.slice(0, 200)}`));
+		}
+	}
+
+	if (!manifestPermits) return findings;
+
+	// Corroborate with an actual http:// endpoint in source to keep FPs low.
+	const httpHits = await searchRepo({ query: String.raw`"http://[^"']+"`, isRegex: true, maxMatches: 5 });
+	const httpEvidence = httpHits
+		.filter(h => !/http:\/\/(?:localhost|127\.0\.0\.1|schemas\.android|www\.w3\.org|xmlns)/i.test(h.preview))
+		.slice(0, 3);
+	for (const h of httpEvidence) evidence.push(`${h.file}:${h.line}:${h.preview.slice(0, 160)}`);
+
+	findings.push({
+		id: "ANDROID_CLEARTEXT_TRAFFIC_ALLOWED",
+		title: "Cleartext HTTP traffic explicitly permitted (usesCleartextTraffic / cleartextTrafficPermitted true) — network data exposed to interception and injection (MASVS-NETWORK-1)",
+		severity: "HIGH",
+		files: [...new Set(files)],
+		evidence: evidence.slice(0, 8),
+		sla: "7d",
+		requiredActions: [
+			'Set android:usesCleartextTraffic="false" and remove any cleartextTrafficPermitted="true" from network_security_config.xml.',
+			"Migrate all http:// endpoints to https:// with TLS 1.2+; if a legacy host is unavoidable, scope a per-domain-config exception with pinning and a removal deadline.",
+			"For apps targeting API 28+ the platform blocks cleartext by default — do not re-enable it globally.",
+			"See MASVS-NETWORK-1, CWE-319 and OWASP M3."
+		]
+	});
+
+	return findings;
+}
+
+// ---------------------------------------------------------------------------
 // Orchestrator — runs all sub-checkers and merges results
 // ---------------------------------------------------------------------------
 
@@ -1030,7 +1477,16 @@ export async function checkMobileAndroid(_: { changedFiles: string[] }): Promise
 		deepLinkTraversalFindings,
 		sharedPrefsWorldFindings,
 		contentProviderPermFindings,
-		flutterSharedPrefsFindings
+		flutterSharedPrefsFindings,
+		webViewUserLoadFindings,
+		wildcardMimeFindings,
+		providerTraversalFindings,
+		openFileWorldFindings,
+		guessableActionFindings,
+		biometricFallbackFindings,
+		webViewFileAccessFindings,
+		keystoreAliasFindings,
+		cleartextAllowedFindings
 	] = await Promise.all([
 		checkManifests(),
 		checkNetworkSecurityConfig(),
@@ -1045,7 +1501,16 @@ export async function checkMobileAndroid(_: { changedFiles: string[] }): Promise
 		checkDeepLinkTraversal(),
 		checkSharedPrefsWorldMode(),
 		checkContentProviderPermissions(),
-		checkFlutterSharedPrefs()
+		checkFlutterSharedPrefs(),
+		checkWebViewUserControlledLoad(),
+		checkWildcardMimeIntentFilter(),
+		checkProviderOpenFileTraversal(),
+		checkOpenFileOutputWorldMode(),
+		checkExportedGuessableAction(),
+		checkBiometricDeviceCredentialFallback(),
+		checkWebViewFileAccess(),
+		checkKeystoreAliasReuse(),
+		checkCleartextTrafficAllowed()
 	]);
 
 	const findings = [
@@ -1062,7 +1527,16 @@ export async function checkMobileAndroid(_: { changedFiles: string[] }): Promise
 		...deepLinkTraversalFindings,
 		...sharedPrefsWorldFindings,
 		...contentProviderPermFindings,
-		...flutterSharedPrefsFindings
+		...flutterSharedPrefsFindings,
+		...webViewUserLoadFindings,
+		...wildcardMimeFindings,
+		...providerTraversalFindings,
+		...openFileWorldFindings,
+		...guessableActionFindings,
+		...biometricFallbackFindings,
+		...webViewFileAccessFindings,
+		...keystoreAliasFindings,
+		...cleartextAllowedFindings
 	];
 
 	// String resource check may augment the ANDROID_HARDCODED_SECRET finding already in the list

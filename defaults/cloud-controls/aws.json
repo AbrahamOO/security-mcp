@@ -10707,6 +10707,94 @@
       "requiredActions": [
         "Remove plaintext PASSWORD from the aws_glue_connection connection_properties and use Secrets Manager"
       ]
+    },
+    {
+      "ruleId": "AWS_IAM_POLICY_NO_PASSROLE_WILDCARD",
+      "threat": "An inline/managed policy granting iam:PassRole on Resource \"*\" lets the holder pass ANY role (including admin roles) to a service it controls (EC2/Lambda/Glue), escalating to that role privilege — a classic IAM privilege-escalation primitive.",
+      "frameworks": [
+        "AWS IAM Best Practices",
+        "CIS AWS Foundations Benchmark 1.16"
+      ],
+      "severity": "CRITICAL",
+      "title": "IAM policy must not grant iam:PassRole with a wildcard Resource",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_iam_policy",
+        "forbid": "\"iam:PassRole\"[\\s\\S]{0,120}\"Resource\"\\s*:\\s*\"\\*\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Scope iam:PassRole to specific role ARNs and add a condition { StringEquals { iam:PassedToService = \"ec2.amazonaws.com\" } } so only the intended service can receive the role."
+      },
+      "requiredActions": [
+        "Replace \"Resource\": \"*\" on the iam:PassRole statement with the exact role ARNs that may be passed, and add an iam:PassedToService condition restricting which service can assume the passed role, so a compromised principal cannot pass an admin role to a service it controls."
+      ]
+    },
+    {
+      "ruleId": "AWS_IAM_POLICY_NO_CREATE_POLICY_VERSION",
+      "threat": "iam:CreatePolicyVersion (or iam:SetDefaultPolicyVersion) lets a principal author and activate a new version of a managed policy attached to itself, rewriting its own permissions to full admin — a direct IAM privilege-escalation path.",
+      "frameworks": [
+        "AWS IAM Best Practices",
+        "MITRE ATT&CK T1078.004"
+      ],
+      "severity": "CRITICAL",
+      "title": "IAM policy must not grant iam:CreatePolicyVersion / SetDefaultPolicyVersion",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_iam_policy",
+        "forbid": "\"iam:(?:CreatePolicyVersion|SetDefaultPolicyVersion)\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Remove iam:CreatePolicyVersion and iam:SetDefaultPolicyVersion unless the principal is a trusted IAM-admin identity, and scope any legitimate grant to specific non-privileged policy ARNs via Resource."
+      },
+      "requiredActions": [
+        "Remove iam:CreatePolicyVersion and iam:SetDefaultPolicyVersion from the policy, or restrict them to specific non-self policy ARNs, so a principal cannot rewrite its own attached policy to grant itself administrator access."
+      ]
+    },
+    {
+      "ruleId": "AWS_IAM_ROLE_POLICY_NO_PASSROLE_WILDCARD",
+      "threat": "An inline role policy granting iam:PassRole on \"*\" lets the role pass any other role (including admin) to a service, escalating privilege beyond its intended scope.",
+      "frameworks": [
+        "AWS IAM Best Practices",
+        "CIS AWS Foundations Benchmark 1.16"
+      ],
+      "severity": "CRITICAL",
+      "title": "Inline IAM role policy must not grant iam:PassRole with a wildcard Resource",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_iam_role_policy",
+        "forbid": "\"iam:PassRole\"[\\s\\S]{0,120}\"Resource\"\\s*:\\s*\"\\*\""
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Scope iam:PassRole to specific role ARNs with an iam:PassedToService condition."
+      },
+      "requiredActions": [
+        "Replace \"Resource\": \"*\" on the iam:PassRole statement with explicit role ARNs and add an iam:PassedToService condition, so the role cannot pass a more privileged role to a service it controls."
+      ]
+    },
+    {
+      "ruleId": "AWS_LAMBDA_NO_PLAINTEXT_ENV_SECRET",
+      "threat": "A hardcoded password / API key / token in a Lambda function environment{} block is stored (and shown in the console and get-function-configuration) in plaintext, so anyone with lambda:GetFunctionConfiguration — or read access to state/source — harvests the credential.",
+      "frameworks": [
+        "AWS FSBP Lambda",
+        "CWE-798"
+      ],
+      "severity": "HIGH",
+      "title": "Lambda environment must not contain a plaintext secret literal",
+      "detect": {
+        "target": "terraform",
+        "resourceType": "aws_lambda_function",
+        "forbid": "(?:PASSWORD|SECRET|API_?KEY|TOKEN|PRIVATE_KEY)[A-Z_]*\\s*=\\s*\"[^\"$\\s{][^\"\\n]{3}"
+      },
+      "remediate": {
+        "strategy": "manual",
+        "snippet": "Move the value out of environment{}: store it in Secrets Manager / SSM Parameter Store (SecureString) and fetch it at runtime, or reference it via a KMS-encrypted parameter. Set kms_key_arn on the function for envelope encryption of remaining variables."
+      },
+      "requiredActions": [
+        "Remove the plaintext credential from the aws_lambda_function environment variables and rotate it. Store it in AWS Secrets Manager or SSM Parameter Store (SecureString) and retrieve it at runtime with the function role, and set kms_key_arn on the function so any remaining environment variables are encrypted with a customer-managed key."
+      ]
     }
   ]
 }

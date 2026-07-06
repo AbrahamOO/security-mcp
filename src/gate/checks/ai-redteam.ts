@@ -27,6 +27,18 @@ const PATTERNS = {
 // PII patterns in prompt templates
 const PII_TEMPLATE_RE = /(?:`[^`]*\$\{[^}]*(?:ssn|socialSecurity|cardNumber|cvv|password|secret)[^}]*\}[^`]*`)/i;
 
+// Unsafe model deserialization (RCE on load). Require a model/weights context.
+const MODEL_DESER_RE = /\b(?:pickle|cPickle|dill|joblib)\s*\.\s*loads?\s*\(|torch\s*\.\s*load\s*\([^)]*weights_only\s*=\s*False|(?:np|numpy)\s*\.\s*load\s*\([^)]*allow_pickle\s*=\s*True|allow_pickle\s*=\s*True/i;
+const MODEL_CTX_RE = /\b(?:model|weights?|checkpoint|ckpt|state_dict|from_pretrained|load_model)\b|\.(?:pt|pth|pkl|bin|h5|joblib|safetensors)\b/i;
+
+// Insecure output handling: LLM output to JSON.parse/yaml.load/subprocess without validation.
+const INSECURE_OUTPUT_RE = /(?:JSON\.parse|yaml\.(?:load|safe_load|unsafe_load)|subprocess\.(?:call|run|Popen)|os\.system|new\s+Function)\s*\(\s*(?:await\s+)?[^)]*(?:response|completion|output|result|llm|model|message|generated)/i;
+const OUTPUT_VALIDATED_RE = /\.(?:safe)?[Pp]arse\s*\(|z\.object|ajv\.|schema\.validate|validateOutput/i;
+
+// Tool-call substitution: LLM output selects/dispatches a tool by name/id.
+const TOOL_SUBST_RE = /(?:tools?|toolMap|handlers?|registry|functions?)\s*\[\s*[^\]]*(?:response|completion|output|llm|model|toolName|tool_name|functionName)[^\]]*\]|(?:getToolBy(?:Id|Name)|resolveTool|dispatchTool|selectTool|invokeTool)\s*\([^)]*(?:response|completion|output|llm|model|toolName|tool_name)/i;
+const TOOL_ALLOWLIST_RE = /allowlist|allowedTools|ALLOWED_TOOLS|permittedTools|tool_whitelist|isToolAllowed|TOOL_ALLOW/i;
+
 async function isBinaryFile(filePath: string): Promise<boolean> {
   try {
     const { readFile: rf } = await import("node:fs/promises");
@@ -60,6 +72,9 @@ async function runStaticAnalysis(changedFiles: string[]): Promise<Finding[]> {
   const piiEvidence: string[] = [];
   const rateLimitEvidence: string[] = [];
   const agencyEvidence: string[] = [];
+  const modelDeserEvidence: string[] = [];
+  const insecureOutputEvidence: string[] = [];
+  const toolSubstEvidence: string[] = [];
 
   // Files with AI usage
   const aiFiles: string[] = [];
@@ -86,6 +101,9 @@ async function runStaticAnalysis(changedFiles: string[]): Promise<Finding[]> {
     if (PATTERNS.excessiveAgency.test(text)) agencyEvidence.push(file);
     if (PATTERNS.outputUnvalidated.test(text)) aiFiles.push(file);
     if (PATTERNS.ragAuthz.test(text)) ragFiles.push(file);
+    if (MODEL_DESER_RE.test(text) && MODEL_CTX_RE.test(text)) modelDeserEvidence.push(file);
+    if (INSECURE_OUTPUT_RE.test(text) && !OUTPUT_VALIDATED_RE.test(text)) insecureOutputEvidence.push(file);
+    if (TOOL_SUBST_RE.test(text) && !TOOL_ALLOWLIST_RE.test(text)) toolSubstEvidence.push(file);
     if (PATTERNS.hasSchemaValidation.test(text)) globalSchemaDetected = true;
     if (PATTERNS.hasAllowlist.test(text)) globalAllowlistDetected = true;
   }
@@ -113,6 +131,48 @@ async function runStaticAnalysis(changedFiles: string[]): Promise<Finding[]> {
         "Use structured message roles to separate system prompt from user content.",
         "Never concatenate user-supplied data directly into system prompt strings.",
         "Apply prompt injection defenses: input sanitization, content isolation, output validation."
+      ]
+    });
+  }
+
+  if (modelDeserEvidence.length > 0) {
+    findings.push({
+      id: "AI_UNSAFE_MODEL_DESERIALIZATION",
+      title: "Untrusted model artifact deserialized (pickle/joblib/torch.load/numpy allow_pickle) — RCE on load",
+      severity: "CRITICAL",
+      files: modelDeserEvidence.slice(0, 10),
+      requiredActions: [
+        "Never deserialize model weights/checkpoints from untrusted sources with pickle/joblib/torch.load(weights_only=False)/numpy allow_pickle=True — loading runs attacker code (CWE-502, MITRE ATLAS AML.T0010).",
+        "Use safetensors or torch.load(weights_only=True); verify a SHA-256 checksum/signature before loading.",
+        "Restrict loading to a private, provenance-tracked model registry and scan artifacts (picklescan/modelscan) first."
+      ]
+    });
+  }
+
+  if (insecureOutputEvidence.length > 0) {
+    findings.push({
+      id: "AI_INSECURE_OUTPUT_HANDLING",
+      title: "LLM output passed to JSON.parse/yaml.load/subprocess without validation — insecure output handling",
+      severity: "CRITICAL",
+      files: insecureOutputEvidence.slice(0, 10),
+      requiredActions: [
+        "Treat model output as untrusted: never feed it to yaml.load/unsafe_load, subprocess, os.system, new Function, or unchecked JSON.parse (OWASP LLM02, CWE-94).",
+        "Validate structured output through a strict schema (Zod/Pydantic/ajv) and reject non-conforming responses.",
+        "Use safe_load and avoid dynamic execution of model-derived content; sandbox any unavoidable execution."
+      ]
+    });
+  }
+
+  if (toolSubstEvidence.length > 0) {
+    findings.push({
+      id: "AI_TOOL_DISPATCH_SUBSTITUTION",
+      title: "LLM output used to select/dispatch a tool by name/id without an allowlist — tool-call substitution",
+      severity: "CRITICAL",
+      files: toolSubstEvidence.slice(0, 10),
+      requiredActions: [
+        "Never index a tool/handler map or call getToolById/dispatchTool with raw model output — a poisoned completion can invoke an unintended privileged tool (OWASP LLM07, MITRE ATLAS AML.T0053, CWE-470).",
+        "Validate the requested tool name against a static allowlist scoped to the current user before dispatch.",
+        "Bind each tool to a required permission enforced at dispatch; require approval for high-impact tools."
       ]
     });
   }

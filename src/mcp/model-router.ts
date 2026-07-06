@@ -33,7 +33,8 @@ import { z } from "zod";
 // ---------------------------------------------------------------------------
 
 export const HAIKU_MODEL = "claude-haiku-4-5-20251001";
-export const SONNET_MODEL = "claude-sonnet-4-6";
+export const SONNET_MODEL = "claude-sonnet-5";
+export const OPUS_MODEL = "claude-opus-4-8";
 
 const MEMORY_DIR = join(".mcp", "memory");
 const USAGE_FILE = join(MEMORY_DIR, "model-usage.json");
@@ -43,6 +44,26 @@ const POLICY_FILE = join(".mcp", "policies", "security-policy.json");
 const DEFAULT_BUDGET_USD = 5;
 const CIRCUIT_BREAKER_THRESHOLD = 3;   // failures before circuit opens
 const CIRCUIT_BREAKER_COOLDOWN_MS = 60_000; // 60 seconds
+
+// Budget safety valve — the ONLY mechanism allowed to reduce an agent below full
+// power. When spend utilization crosses this threshold, NON-critical tasks may be
+// downgraded advanced→standard. The protected set (see PROTECTED_MAX_POWER_TASKS)
+// is NEVER downgraded regardless of budget.
+const DEFAULT_DOWNGRADE_THRESHOLD_PCT = 80;
+
+// Tasks that must ALWAYS run at their full advanced-tier capability — the budget
+// circuit-breaker may never downgrade these. This is the security-critical core:
+// active exploitation, adversarial AI, cryptography, authentication, and the
+// threat-model/remediation reasoning that everything else depends on.
+const PROTECTED_MAX_POWER_TASKS: ReadonlySet<TaskType> = new Set<TaskType>([
+  "exploit_chain",
+  "pentest",
+  "ai_redteam",
+  "crypto_analysis",
+  "auth_analysis",
+  "threat_model",
+  "remediation"
+]);
 
 // ---------------------------------------------------------------------------
 // Rate limiting — recordProviderFailure to prevent circuit-breaker manipulation
@@ -111,12 +132,12 @@ export const MODEL_REGISTRY: ProviderModel[] = [
     label: "Claude Haiku 4.5"
   },
   {
-    modelId: "claude-sonnet-4-6",
+    modelId: "claude-sonnet-5",
     provider: "anthropic",
     capabilityTier: "standard",
     inputPer1M: 3,
     outputPer1M: 15,
-    label: "Claude Sonnet 4.6"
+    label: "Claude Sonnet 5"
   },
 
   // OpenAI — GPT
@@ -173,7 +194,9 @@ export const MODEL_REGISTRY: ProviderModel[] = [
     label: "Command R+"
   },
 
-  // Anthropic — Claude Opus (advanced tier, opt-in via advanced_task_preference in policy)
+  // Anthropic — Claude Opus (advanced tier). Max-power-by-default: security-critical
+  // reasoning tasks prefer this tier automatically. Downgrade is opt-OUT via
+  // model_budget.force_standard_tier_for and the budget safety valve only.
   {
     modelId: "claude-opus-4-8",
     provider: "anthropic",
@@ -252,8 +275,17 @@ export type TaskType =
   | "risk_scoring"
   | "report_generation";
 
-/** Minimum capability tier required per task. */
+/**
+ * Minimum capability tier required per task — MAX-POWER-BY-DEFAULT posture.
+ *
+ * Security-critical reasoning tasks default to "advanced" so every agent runs at
+ * its fullest capability out of the box. Genuinely light, mechanical tasks stay at
+ * "light"; report/summary style tasks stay at "standard". Downgrade of an advanced
+ * task only ever happens via the budget safety valve (spend >= threshold) and never
+ * for the PROTECTED_MAX_POWER_TASKS set.
+ */
 export const TASK_CAPABILITY_MAP: Record<TaskType, CapabilityTier> = {
+  // Light — read-only, mechanical, no reasoning required.
   pattern_match: "light",
   manifest_scan: "light",
   evidence_collection: "light",
@@ -262,17 +294,19 @@ export const TASK_CAPABILITY_MAP: Record<TaskType, CapabilityTier> = {
   config_read: "light",
   dependency_scan: "light",
   secret_scan: "light",
-  code_review: "standard",
-  remediation: "standard",
-  threat_model: "standard",
-  compliance_analysis: "standard",
-  exploit_chain: "standard",
-  ai_redteam: "standard",
-  pentest: "standard",
-  crypto_analysis: "standard",
-  auth_analysis: "standard",
-  incident_response: "standard",
-  risk_scoring: "standard",
+  // Advanced — security-critical reasoning; full power by default.
+  code_review: "advanced",
+  remediation: "advanced",
+  threat_model: "advanced",
+  compliance_analysis: "advanced",
+  exploit_chain: "advanced",
+  ai_redteam: "advanced",
+  pentest: "advanced",
+  crypto_analysis: "advanced",
+  auth_analysis: "advanced",
+  incident_response: "advanced",
+  risk_scoring: "advanced",
+  // Standard — report/summary generation.
   report_generation: "standard"
 };
 
@@ -382,11 +416,25 @@ type SecurityPolicy = {
     preferred_providers?: Provider[];
     fallback_on_budget_exceeded?: string;
     /**
-     * Task types that should prefer the advanced capability tier (e.g. Opus 4.8) when
-     * a healthy advanced-tier model is available. Falls back to standard tier silently
-     * if no advanced model is configured or healthy — zero impact for users without Opus.
+     * LEGACY (opt-IN) — kept for backward compatibility only. Task types that should
+     * prefer the advanced capability tier. The DEFAULT posture is now max-power:
+     * advanced-tier tasks (per TASK_CAPABILITY_MAP) already prefer advanced without
+     * appearing in this list. Entries here are simply unioned in as extra advanced
+     * preferences and never reduce power.
      */
     advanced_task_preference?: TaskType[];
+    /**
+     * OPT-OUT list. Task types named here are forced DOWN to standard tier regardless
+     * of the max-power default. Empty by default so every advanced task runs at full
+     * power. Tasks in PROTECTED_MAX_POWER_TASKS ignore this list and always run advanced.
+     */
+    force_standard_tier_for?: TaskType[];
+    /**
+     * Budget safety valve threshold (percent, 0–100). When spend utilization reaches
+     * or exceeds this value, NON-critical advanced tasks may be downgraded to standard.
+     * Defaults to DEFAULT_DOWNGRADE_THRESHOLD_PCT (80). Protected tasks are never downgraded.
+     */
+    downgrade_threshold_pct?: number;
   };
 };
 
@@ -458,6 +506,29 @@ async function loadAdvancedTaskPreferences(): Promise<TaskType[]> {
   }
 }
 
+/** Opt-out list: task types forced down to standard tier. Never crashes on missing files. */
+async function loadForceStandardTierFor(): Promise<TaskType[]> {
+  try {
+    const raw = await readFile(POLICY_FILE, "utf-8");
+    const policy = JSON.parse(raw) as SecurityPolicy;
+    return policy.model_budget?.force_standard_tier_for ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/** Budget safety-valve threshold (percent). Never crashes on missing files. */
+async function loadDowngradeThresholdPct(): Promise<number> {
+  try {
+    const raw = await readFile(POLICY_FILE, "utf-8");
+    const policy = JSON.parse(raw) as SecurityPolicy;
+    const pct = policy.model_budget?.downgrade_threshold_pct;
+    return typeof pct === "number" && pct >= 0 && pct <= 100 ? pct : DEFAULT_DOWNGRADE_THRESHOLD_PCT;
+  } catch {
+    return DEFAULT_DOWNGRADE_THRESHOLD_PCT;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Circuit breaker helpers
 // ---------------------------------------------------------------------------
@@ -483,6 +554,39 @@ function combinedCost(model: ProviderModel): number {
   return model.inputPer1M * 0.8 + model.outputPer1M * 0.2;
 }
 
+/**
+ * Capability/power ranking used to pick the MOST capable model within the advanced
+ * tier for security-critical reasoning. This is the core of the "fullest power"
+ * mandate: for advanced tasks we optimise for capability first and treat cost only
+ * as a tiebreak, so flagship security reasoning is never silently downgraded to a
+ * cheaper-but-weaker advanced model (e.g. a small "flash" reasoning model) just
+ * because it prices lower. Higher = more capable.
+ */
+const MODEL_POWER_RANK: Record<string, number> = {
+  "claude-opus-4-8": 100,
+  o1: 92,
+  "claude-sonnet-5": 78,
+  "gpt-4o": 70,
+  "gemini-2.0-flash-thinking-exp": 62
+};
+
+function powerRank(model: ProviderModel): number {
+  if (model.modelId in MODEL_POWER_RANK) return MODEL_POWER_RANK[model.modelId];
+  // Unknown model: rank by tier so advanced > standard > light, with a small
+  // Anthropic bias to prefer the security-tuned frontier family on ties.
+  const tierBase = { light: 10, standard: 40, advanced: 80 }[model.capabilityTier];
+  return tierBase + (model.provider === "anthropic" ? 5 : 0);
+}
+
+/**
+ * Order advanced-tier candidates for maximum capability: highest power rank first,
+ * cheapest as the tiebreak among equally capable models.
+ */
+function byPowerThenCost(a: ProviderModel, b: ProviderModel): number {
+  const dp = powerRank(b) - powerRank(a);
+  return dp !== 0 ? dp : combinedCost(a) - combinedCost(b);
+}
+
 function legacyTier(capTier: CapabilityTier): ModelTier {
   return capTier === "light" ? "haiku" : "sonnet";
 }
@@ -499,32 +603,46 @@ function legacyTier(capTier: CapabilityTier): ModelTier {
  * @param health          Current provider health store.
  * @param preferred       Optional ordered list of preferred providers.
  * @param preferAdvanced  If true, try advanced-tier models first, fall back to standard.
+ * @param taskType        Task type — used only for the degradation audit log.
  * @returns               [chosen model, failoverUsed]
  */
 function selectModel(
   requiredTier: CapabilityTier,
   health: ProviderHealthStore,
   preferred: Provider[] | null,
-  preferAdvanced = false
+  preferAdvanced = false,
+  taskType?: TaskType
 ): [ProviderModel, boolean] {
   // If advanced is preferred, try advanced-tier models first. Fall back gracefully to
-  // standard if none are healthy or registered — zero impact for users without Opus/o1.
+  // standard if none are healthy or registered rather than failing the routing call.
   if (preferAdvanced) {
     const advancedCandidates = MODEL_REGISTRY.filter((m) => m.capabilityTier === "advanced");
     const healthyAdvanced = advancedCandidates.filter(
       (m) => !isCircuitOpen(health.providers[m.provider])
     );
     if (healthyAdvanced.length > 0) {
+      // FULLEST POWER: within the advanced tier, choose the most capable model
+      // (Opus 4.8 first), not the cheapest. Preferred providers still win ties.
       const pool = preferred
         ? [
-            ...healthyAdvanced.filter((m) => preferred.includes(m.provider)),
-            ...healthyAdvanced.filter((m) => !preferred.includes(m.provider))
+            ...healthyAdvanced.filter((m) => preferred.includes(m.provider)).sort(byPowerThenCost),
+            ...healthyAdvanced.filter((m) => !preferred.includes(m.provider)).sort(byPowerThenCost)
           ]
-        : healthyAdvanced;
-      pool.sort((a, b) => combinedCost(a) - combinedCost(b));
+        : [...healthyAdvanced].sort(byPowerThenCost);
       if (pool.length > 0) return [pool[0], false];
     }
-    // No advanced model available — fall through to standard selection silently.
+    // No advanced model available/healthy — degrade gracefully to standard and emit a
+    // structured audit line so operators can see when full power was unavailable.
+    console.warn(JSON.stringify({
+      event: "MODEL_ADVANCED_UNAVAILABLE",
+      timestamp: new Date().toISOString(),
+      taskType: taskType ?? null,
+      reason: advancedCandidates.length === 0
+        ? "NO_ADVANCED_MODEL_REGISTERED"
+        : "ALL_ADVANCED_PROVIDERS_CIRCUIT_OPEN",
+      degradedTo: "standard",
+      severity: "MEDIUM"
+    }));
   }
 
   // Candidates: all models meeting the capability floor.
@@ -567,21 +685,71 @@ export async function getModelForTask(taskType: TaskType, _opts?: {
   agentName?: string;
   agentRunId?: string;
 }): Promise<ModelAssignment> {
-  const [store, health, maxBudget, preferred, advancedPrefs] = await Promise.all([
+  const [store, health, maxBudget, preferred, advancedPrefs, forceStandardFor, downgradeThresholdPct] = await Promise.all([
     loadUsageStore(),
     loadHealthStore(),
     loadMaxBudget(),
     loadPreferredProviders(),
-    loadAdvancedTaskPreferences()
+    loadAdvancedTaskPreferences(),
+    loadForceStandardTierFor(),
+    loadDowngradeThresholdPct()
   ]);
 
-  const requiredTier = TASK_CAPABILITY_MAP[taskType];
-  const preferAdvanced = advancedPrefs.includes(taskType);
-  const [chosen, failoverUsed] = selectModel(requiredTier, health, preferred, preferAdvanced);
+  // Base tier from the max-power-by-default map.
+  let requiredTier = TASK_CAPABILITY_MAP[taskType];
 
   const spent = store.totalSpentUsd;
   const remaining = maxBudget - spent;
   const utilizationPct = maxBudget > 0 ? (spent / maxBudget) * 100 : 0;
+
+  // ── MAX-POWER-BY-DEFAULT posture ─────────────────────────────────────────
+  // Advanced-tier tasks prefer advanced automatically. The legacy opt-IN list is
+  // still honored (union) but never reduces power. This is the DEFAULT for an
+  // empty policy.
+  const isProtected = PROTECTED_MAX_POWER_TASKS.has(taskType);
+  const baseIsAdvanced = requiredTier === "advanced";
+
+  // ── OPT-OUT downgrade ────────────────────────────────────────────────────
+  // A task explicitly listed in force_standard_tier_for is dropped to standard —
+  // unless it is in the protected set, which always runs at full power.
+  let downgradeReason: "policy_opt_out" | "budget_valve" | null = null;
+  if (baseIsAdvanced && !isProtected && forceStandardFor.includes(taskType)) {
+    requiredTier = "standard";
+    downgradeReason = "policy_opt_out";
+  }
+
+  // ── BUDGET SAFETY VALVE ──────────────────────────────────────────────────
+  // When spend utilization reaches the configured threshold, non-critical advanced
+  // tasks are downgraded to standard to preserve the remaining budget. The protected
+  // set is NEVER downgraded — those agents always run at full power.
+  const budgetValveTripped =
+    requiredTier === "advanced" &&
+    !isProtected &&
+    maxBudget > 0 &&
+    utilizationPct >= downgradeThresholdPct;
+  if (budgetValveTripped) {
+    requiredTier = "standard";
+    downgradeReason = "budget_valve";
+    console.warn(JSON.stringify({
+      event: "MODEL_BUDGET_DOWNGRADE",
+      timestamp: new Date().toISOString(),
+      taskType,
+      utilizationPct: Math.round(utilizationPct),
+      remainingUsd: Math.round(Math.max(0, remaining) * 10000) / 10000,
+      thresholdPct: downgradeThresholdPct,
+      degradedTo: "standard",
+      severity: "MEDIUM"
+    }));
+  }
+
+  // preferAdvanced is true whenever the (possibly-downgraded) required tier is still
+  // advanced, or the legacy opt-in list names this task. Protected tasks are always
+  // advanced. This keeps full power on by default.
+  const preferAdvanced =
+    requiredTier === "advanced" || isProtected || advancedPrefs.includes(taskType);
+  if (isProtected) requiredTier = "advanced"; // protected tasks can never be dropped below advanced
+
+  const [chosen, failoverUsed] = selectModel(requiredTier, health, preferred, preferAdvanced, taskType);
 
   let budgetStatus: "ok" | "warning" | "exceeded";
   if (remaining <= 0) {
@@ -591,6 +759,7 @@ export async function getModelForTask(taskType: TaskType, _opts?: {
   } else {
     budgetStatus = "ok";
   }
+  void downgradeReason; // retained for future telemetry; downgrade already logged above
 
   const rationale = buildRationale(taskType, requiredTier, chosen, failoverUsed, preferred);
 
@@ -599,11 +768,14 @@ export async function getModelForTask(taskType: TaskType, _opts?: {
   const allCircuitsOpen = allProviders.every((p) => isCircuitOpen(health.providers[p]));
 
   // ISO 42001 §9.1 — emit structured audit log for every routing decision.
-  let routingReason: "circuit_open_fallback" | "capability_match" | "cost_optimized";
+  let routingReason: "circuit_open_fallback" | "capability_match" | "max_power_advanced" | "cost_optimized";
   if (allCircuitsOpen) {
     routingReason = "circuit_open_fallback";
   } else if (failoverUsed) {
     routingReason = "capability_match";
+  } else if (chosen.capabilityTier === "advanced") {
+    // Advanced tasks are selected capability-first (Opus 4.8 preferred), not by cost.
+    routingReason = "max_power_advanced";
   } else {
     routingReason = "cost_optimized";
   }
@@ -882,9 +1054,13 @@ export const GetModelForTaskParams = {
   taskType: z
     .enum(TASK_TYPE_VALUES)
     .describe(
-      "Task type to route. Read-only/pattern tasks → cheapest light-tier model. " +
-      "Reasoning/remediation → cheapest standard-tier model. " +
-      "Routing picks the cheapest healthy provider meeting the capability floor."
+      "Task type to route. Max-power-by-default: security-critical reasoning tasks " +
+      "(remediation, threat_model, exploit_chain, ai_redteam, pentest, crypto_analysis, " +
+      "auth_analysis, code_review, etc.) route to the advanced tier automatically. " +
+      "Read-only/pattern tasks → cheapest light-tier model. Report generation → standard. " +
+      "Within a tier, routing picks the cheapest healthy provider meeting the floor. " +
+      "The budget safety valve may downgrade NON-protected advanced tasks to standard when " +
+      "spend crosses the threshold."
     ),
   agentName: z.string().min(1).max(128).optional().describe("Optional agent name for usage tracking."),
   agentRunId: z.string().optional().describe("Optional agent run ID for correlating usage to a run.")
@@ -893,7 +1069,7 @@ export const GetModelForTaskSchema = z.object(GetModelForTaskParams);
 
 export const TrackUsageParams = {
   taskType: z.enum(TASK_TYPE_VALUES).describe("Task type that was executed."),
-  model: z.string().describe("Model ID used (e.g. claude-sonnet-4-6, gpt-4o, gemini-1.5-pro)."),
+  model: z.string().describe("Model ID used (e.g. claude-opus-4-8, claude-sonnet-5, gpt-4o, gemini-1.5-pro)."),
   provider: z
     .enum(["anthropic", "openai", "google", "cohere", "local"] as [Provider, ...Provider[]])
     .describe("Provider that handled the call."),

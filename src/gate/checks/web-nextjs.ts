@@ -658,6 +658,394 @@ async function checkMissingSri(): Promise<Finding[]> {
 }
 
 // ---------------------------------------------------------------------------
+// 20. WEB_CLIENT_ENV_LEAK — non-NEXT_PUBLIC env var used in a client component
+// ---------------------------------------------------------------------------
+
+async function checkClientEnvLeak(): Promise<Finding[]> {
+  // Files that declare "use client" and reference a non-NEXT_PUBLIC env var.
+  const useClientHits = await searchRepo({
+    query: '"use client"',
+    isRegex: false,
+    maxMatches: 200
+  });
+  if (useClientHits.length === 0) return [];
+
+  const clientFiles = [...new Set(useClientHits.map((m) => m.file))];
+  const offenders: string[] = [];
+
+  for (const file of clientFiles) {
+    const content = await readFileSafe(file).catch(() => "");
+    // Match process.env.FOO where FOO does not start with NEXT_PUBLIC_ and is not NODE_ENV.
+    const re = /process\.env\.([A-Z0-9_]+)/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(content)) !== null) {
+      const name = m[1];
+      if (name !== "NODE_ENV" && !name.startsWith("NEXT_PUBLIC_")) {
+        offenders.push(`${file}: process.env.${name} referenced in a "use client" component`);
+        break;
+      }
+    }
+  }
+
+  if (offenders.length === 0) return [];
+  return [
+    {
+      id: "WEB_CLIENT_ENV_LEAK",
+      title: "Non-NEXT_PUBLIC_ environment variable referenced inside a client component — bundled into browser JS or resolves to undefined",
+      severity: "CRITICAL",
+      sla: "24h",
+      evidence: offenders.slice(0, 15),
+      requiredActions: [
+        "Never reference a server-only env var (no NEXT_PUBLIC_ prefix) in a \"use client\" component — at build time its value is either inlined into the client bundle or silently undefined.",
+        "Read secrets only in Server Components, route handlers, or Server Actions and pass non-sensitive derived values to the client as props.",
+        "Rotate any secret that was ever inlined into a client bundle — treat it as compromised."
+      ]
+    }
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// 21. WEB_MIDDLEWARE_MATCHER_GAP — middleware auth not covering protected routes
+// ---------------------------------------------------------------------------
+
+async function checkMiddlewareMatcherGap(): Promise<Finding[]> {
+  const middlewareFiles = await fg(
+    ["middleware.ts", "middleware.tsx", "src/middleware.ts", "src/middleware.tsx"],
+    { dot: true }
+  );
+  if (middlewareFiles.length === 0) return [];
+
+  const combined = (
+    await Promise.all(middlewareFiles.map((f) => readFileSafe(f).catch(() => "")))
+  ).join("\n");
+
+  // Only relevant if the middleware actually performs auth.
+  const doesAuth = /auth|session|getToken|withAuth|getServerSession|jwt|clerk|next-auth/i.test(combined);
+  if (!doesAuth) return [];
+
+  // Extract the matcher config.
+  const matcherMatch = combined.match(/matcher\s*:\s*(\[[^\]]*\]|['"][^'"]*['"])/);
+  if (!matcherMatch) {
+    // Auth middleware with no matcher runs on every request by default — acceptable; skip.
+    return [];
+  }
+  const matcher = matcherMatch[1];
+
+  // Discover protected-looking route folders.
+  const protectedRoutes = await fg(
+    [
+      "**/app/**/(admin|dashboard|account|settings|billing)/**/page.tsx",
+      "**/app/**/(admin|dashboard|account|settings|billing)/**/route.ts",
+      "**/pages/**/(admin|dashboard|account|settings|billing)/**"
+    ],
+    { dot: true }
+  );
+  if (protectedRoutes.length === 0) return [];
+
+  // Heuristic: matcher references none of the protected segment names.
+  const segments = ["admin", "dashboard", "account", "settings", "billing", "api"];
+  const covered = segments.some((seg) => matcher.includes(seg)) || matcher.includes("/(.*)") || matcher.includes(":path*");
+  if (covered) return [];
+
+  return [
+    {
+      id: "WEB_MIDDLEWARE_MATCHER_GAP",
+      title: "Auth middleware matcher does not cover protected route segments — routes bypass authentication",
+      severity: "HIGH",
+      sla: "7d",
+      evidence: [
+        `matcher: ${matcher}`,
+        ...protectedRoutes.slice(0, 10).map((f) => `${f}: protected route not matched by middleware`)
+      ],
+      requiredActions: [
+        "Ensure the middleware `matcher` (or its route logic) covers every protected segment (admin, dashboard, account, settings, billing, and protected API routes).",
+        "Prefer a deny-by-default matcher that runs on all routes and explicitly allowlists public paths, rather than an allowlist of protected paths that is easy to leave incomplete.",
+        "Add an integration test that requests each protected route unauthenticated and asserts a redirect/401."
+      ]
+    }
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// 22. WEB_IMAGE_REMOTE_WILDCARD — next/image remotePatterns/domains wildcard
+// ---------------------------------------------------------------------------
+
+async function checkImageRemoteWildcard(): Promise<Finding[]> {
+  const configFiles = await fg(["next.config.js", "next.config.mjs", "next.config.ts"], { dot: true });
+  if (configFiles.length === 0) return [];
+
+  const offenders: string[] = [];
+  for (const file of configFiles) {
+    const content = await readFileSafe(file).catch(() => "");
+    if (!/images\s*:/.test(content)) continue;
+    // Wildcard hostname in remotePatterns or a "**" domain.
+    if (
+      /hostname\s*:\s*['"]\*\*?['"]/.test(content) ||
+      /hostname\s*:\s*['"][^'"]*\*\*[^'"]*['"]/.test(content) ||
+      /domains\s*:\s*\[[^\]]*['"]\*['"]/.test(content) ||
+      /remotePatterns\s*:\s*\[\s*\{\s*protocol[^}]*hostname\s*:\s*['"]\*/.test(content)
+    ) {
+      offenders.push(`${file}: next/image remotePatterns/domains use a wildcard hostname`);
+    }
+  }
+
+  if (offenders.length === 0) return [];
+  return [
+    {
+      id: "WEB_IMAGE_REMOTE_WILDCARD",
+      title: "next/image remotePatterns/domains use a wildcard hostname — image optimizer can be abused as an SSRF/proxy",
+      severity: "HIGH",
+      sla: "7d",
+      evidence: offenders.slice(0, 15),
+      requiredActions: [
+        "Replace wildcard image hostnames with an explicit allowlist of exact hostnames you control or trust.",
+        "A wildcard remotePattern lets an attacker make the Next.js image optimizer fetch arbitrary URLs (SSRF, internal-network probing, bandwidth abuse).",
+        "Pin protocol to https and constrain pathname where possible."
+      ]
+    }
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// 23. WEB_UNSAFE_URI_SCHEME — redirect/router to data:/javascript: or unvalidated URL
+// ---------------------------------------------------------------------------
+
+async function checkUnsafeUriScheme(): Promise<Finding[]> {
+  // data:/javascript: URIs flowing into a redirect or client navigation.
+  const schemeHits = await searchRepo({
+    query: String.raw`(?:redirect|router\.(?:push|replace)|res\.redirect|location\.href\s*=)\s*\(?[^)\n]*(?:javascript:|data:)`,
+    isRegex: true,
+    maxMatches: 200
+  });
+
+  // User-controlled URL flowing into navigation without an allowlist check on the same line.
+  const userUrlHits = await searchRepo({
+    query: String.raw`(?:router\.(?:push|replace)|location\.href\s*=)\s*\(?\s*(?:req\.(?:query|body)|searchParams\.get\([^)]*\)|params\.\w+|props\.\w*url)`,
+    isRegex: true,
+    maxMatches: 200
+  });
+  const suspiciousUserUrl = userUrlHits.filter(
+    (m) => !/allowlist|allowList|startsWith\(['"]\/|new URL|isSafeUrl|validateUrl/.test(m.preview)
+  );
+
+  const all = [...schemeHits, ...suspiciousUserUrl];
+  const unique = all.filter(
+    (hit, idx, arr) => arr.findIndex((h) => h.file === hit.file && h.line === hit.line) === idx
+  );
+  if (unique.length === 0) return [];
+
+  return [
+    {
+      id: "WEB_UNSAFE_URI_SCHEME",
+      title: "Navigation/redirect to a data:/javascript: URI or an unvalidated user-controlled URL — XSS / open redirect",
+      severity: "HIGH",
+      sla: "7d",
+      evidence: unique.slice(0, 15).map((m) => `${m.file}:${m.line}:${m.preview}`),
+      requiredActions: [
+        "Reject javascript: and data: URIs before redirecting or navigating — allow only http(s) and same-origin relative paths.",
+        "Validate user-supplied destinations against an allowlist, or require them to be relative paths beginning with a single '/' (and not '//').",
+        "Parse candidate URLs with `new URL()` and check the protocol/host explicitly rather than string-matching."
+      ]
+    }
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// 24. WEB_SSR_FETCH_USER_INPUT — SSR/route handler fetches a user-controlled URL
+// ---------------------------------------------------------------------------
+
+async function checkSsrFetchUserInput(): Promise<Finding[]> {
+  // fetch()/axios() whose argument is built from user input, in an SSR context.
+  const hits = await searchRepo({
+    query: String.raw`(?:fetch|axios(?:\.(?:get|post))?|got|undici\.request)\s*\(\s*[^)]*(?:req\.(?:query|body|params)|searchParams\.get\(|params\.\w+|context\.query|ctx\.query)`,
+    isRegex: true,
+    maxMatches: 200
+  });
+
+  // Restrict to files that are server-rendered (getServerSideProps / route handler / server component).
+  const suspicious: typeof hits = [];
+  const cache: Record<string, string> = {};
+  for (const h of hits) {
+    let content = cache[h.file];
+    if (content === undefined) {
+      content = await readFileSafe(h.file).catch(() => "");
+      cache[h.file] = content;
+    }
+    const ssrContext =
+      /getServerSideProps|getStaticProps|route\.tsx?$/.test(h.file) ||
+      /getServerSideProps|export\s+async\s+function\s+(?:GET|POST|PUT|DELETE|PATCH)\b/.test(content) ||
+      !/["']use client["']/.test(content);
+    const guarded = /allowlist|allowList|new URL\(|isSafeUrl|validateUrl|SSRF/i.test(content);
+    if (ssrContext && !guarded) suspicious.push(h);
+  }
+
+  if (suspicious.length === 0) return [];
+  return [
+    {
+      id: "WEB_SSR_FETCH_USER_INPUT",
+      title: "Server-side fetch built from user input in getServerSideProps/route handler — SSRF and path traversal",
+      severity: "HIGH",
+      sla: "7d",
+      evidence: suspicious.slice(0, 15).map((m) => `${m.file}:${m.line}:${m.preview}`),
+      requiredActions: [
+        "Never pass req.query/req.body/searchParams straight into a server-side fetch() URL.",
+        "Resolve the target with `new URL()` and enforce an allowlist of permitted hosts; block localhost, private IP ranges, and 169.254.169.254 (cloud metadata).",
+        "For path segments, validate against an allowlist and reject '..' / encoded traversal before composing the URL."
+      ]
+    }
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// 25. WEB_ISR_REVALIDATE_WEAK_SECRET — on-demand ISR revalidate secret weak/hardcoded
+// ---------------------------------------------------------------------------
+
+async function checkIsrRevalidateSecret(): Promise<Finding[]> {
+  // Revalidation endpoints compare a secret token from the request.
+  const revalidateHits = await searchRepo({
+    query: String.raw`res\.revalidate\s*\(|revalidatePath\s*\(|revalidateTag\s*\(|['"]x-revalidate|revalidate.*secret|REVALIDATE_(?:TOKEN|SECRET)`,
+    isRegex: true,
+    maxMatches: 200
+  });
+  if (revalidateHits.length === 0) return [];
+
+  const files = [...new Set(revalidateHits.map((m) => m.file))];
+  const offenders: string[] = [];
+  for (const file of files) {
+    const content = await readFileSafe(file).catch(() => "");
+    if (!/revalidate/i.test(content)) continue;
+    // A secret compared against a string literal (hardcoded) rather than process.env.
+    const hardcoded =
+      /(?:secret|token)\s*(?:===|==|!==|!=)\s*['"][^'"]{1,32}['"]/i.test(content) ||
+      /(?:query|searchParams[^\n]*get\([^)]*)\.?secret\s*(?:===|==)\s*['"][^'"]+['"]/i.test(content);
+    // Weak: short/guessable literal or no env reference around a revalidate secret check.
+    const usesEnv = /process\.env\.[A-Z0-9_]*REVALIDAT|process\.env\.[A-Z0-9_]*SECRET/i.test(content);
+    const checksSecret = /(?:secret|token)/i.test(content);
+    if (hardcoded || (checksSecret && !usesEnv && /revalidate/i.test(content) && /['"][A-Za-z0-9]{1,16}['"]/.test(content))) {
+      offenders.push(`${file}: on-demand revalidation secret appears hardcoded or weak`);
+    }
+  }
+
+  if (offenders.length === 0) return [];
+  return [
+    {
+      id: "WEB_ISR_REVALIDATE_WEAK_SECRET",
+      title: "On-demand ISR revalidation endpoint protected by a weak or hardcoded secret",
+      severity: "HIGH",
+      sla: "7d",
+      evidence: offenders.slice(0, 15),
+      requiredActions: [
+        "Load the revalidation secret from an environment variable (process.env.REVALIDATE_SECRET), never a string literal in source.",
+        "Use a long, high-entropy random token and compare it in constant time (crypto.timingSafeEqual).",
+        "Rotate any revalidation secret that was ever committed to source control.",
+        "Return 401 for missing/invalid tokens before triggering any cache invalidation."
+      ]
+    }
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// 26. WEB_COOKIE_SAMESITE_MISSING — sensitive cookie without SameSite Strict/Lax
+// ---------------------------------------------------------------------------
+
+async function checkCookieSameSite(): Promise<Finding[]> {
+  // Explicit cookie writes for sensitive names.
+  const hits = await searchRepo({
+    query: String.raw`(?:cookies\(\)\.set|res\.cookie|response\.cookies\.set|setCookie|Set-Cookie)\s*\(?[^)]*(?:session|token|auth|jwt|sid|refresh)`,
+    isRegex: true,
+    maxMatches: 200
+  });
+  if (hits.length === 0) return [];
+
+  const files = [...new Set(hits.map((m) => m.file))];
+  const offenders: string[] = [];
+  for (const file of files) {
+    const content = await readFileSafe(file).catch(() => "");
+    // Look at each sensitive cookie set; flag if no SameSite Strict/Lax nearby.
+    const sensitiveSet = /(?:cookies\(\)\.set|res\.cookie|response\.cookies\.set|setCookie)\s*\(?[^)]*(?:session|token|auth|jwt|sid|refresh)/i.test(content);
+    if (!sensitiveSet) continue;
+    const hasSameSite = /sameSite\s*:\s*['"]?(?:strict|lax)['"]?/i.test(content) || /SameSite=(?:Strict|Lax)/i.test(content);
+    if (!hasSameSite) {
+      offenders.push(`${file}: sensitive cookie set without SameSite=Strict/Lax`);
+    }
+  }
+
+  if (offenders.length === 0) return [];
+  return [
+    {
+      id: "WEB_COOKIE_SAMESITE_MISSING",
+      title: "Sensitive cookie (session/token/auth) set without SameSite=Strict or Lax",
+      severity: "MEDIUM",
+      sla: "30d",
+      evidence: offenders.slice(0, 15),
+      requiredActions: [
+        "Set SameSite: 'strict' (or at minimum 'lax') on all session/auth/token cookies to mitigate CSRF and cross-site leakage.",
+        "Also set httpOnly: true and secure: true on the same cookies.",
+        "Use SameSite=None only for cookies that genuinely must be sent cross-site, and always pair it with Secure."
+      ]
+    }
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// 27. WEB_CATCHALL_ROUTE_OVERRIDE — catch-all [...slug] shadowing protected routes
+// ---------------------------------------------------------------------------
+
+async function checkCatchAllRouteOverride(): Promise<Finding[]> {
+  // Catch-all / optional catch-all route files.
+  const catchAllFiles = await fg(
+    [
+      "**/app/**/[[...*]]/**/route.ts",
+      "**/app/**/[[...*]]/**/page.tsx",
+      "**/app/**/[...*]/**/route.ts",
+      "**/app/**/[...*]/**/page.tsx",
+      "**/pages/**/[[...*]].tsx",
+      "**/pages/**/[[...*]].ts",
+      "**/pages/**/[...*].tsx",
+      "**/pages/**/[...*].ts"
+    ],
+    { dot: true }
+  );
+  if (catchAllFiles.length === 0) return [];
+
+  // Protected route segments that could be shadowed by a broad catch-all.
+  const protectedRoutes = await fg(
+    [
+      "**/app/**/(admin|dashboard|account|billing)/**/page.tsx",
+      "**/app/**/(admin|dashboard|account|billing)/**/route.ts"
+    ],
+    { dot: true }
+  );
+
+  // Flag catch-all handlers that don't themselves enforce auth.
+  const offenders: string[] = [];
+  for (const file of catchAllFiles) {
+    const content = await readFileSafe(file).catch(() => "");
+    const enforcesAuth = /auth\(|getServerSession|currentUser|requireAuth|session\(/.test(content);
+    if (!enforcesAuth) offenders.push(`${file}: catch-all route without an auth guard`);
+  }
+
+  if (offenders.length === 0 || protectedRoutes.length === 0) return [];
+  return [
+    {
+      id: "WEB_CATCHALL_ROUTE_OVERRIDE",
+      title: "Catch-all route ([...slug]) without auth may shadow or expose protected routes",
+      severity: "MEDIUM",
+      sla: "30d",
+      evidence: [
+        ...offenders.slice(0, 10),
+        ...protectedRoutes.slice(0, 5).map((f) => `${f}: protected route in a tree also served by a catch-all`)
+      ],
+      requiredActions: [
+        "Ensure catch-all routes ([...slug] / [[...slug]]) enforce the same authentication/authorization as the specific protected routes they can shadow.",
+        "Validate the resolved slug against an allowlist and return 404 for anything that maps to a protected or non-public resource.",
+        "Add tests confirming the catch-all cannot serve or leak protected paths to unauthenticated users."
+      ]
+    }
+  ];
+}
+
+// ---------------------------------------------------------------------------
 // Main export
 // ---------------------------------------------------------------------------
 
@@ -681,6 +1069,14 @@ export async function checkWebNextjs(_: { changedFiles: string[] }): Promise<Fin
     checkDanglingMarkup,
     checkPostMessageWildcard,
     checkCachePoisoningHeaders,
-    checkMissingSri
+    checkMissingSri,
+    checkClientEnvLeak,
+    checkMiddlewareMatcherGap,
+    checkImageRemoteWildcard,
+    checkUnsafeUriScheme,
+    checkSsrFetchUserInput,
+    checkIsrRevalidateSecret,
+    checkCookieSameSite,
+    checkCatchAllRouteOverride
   ]);
 }

@@ -134,6 +134,18 @@ export type AgentRecord = {
   completedAt: string | null;
   findingsPath: string | null;
   summary: string | null;
+  /**
+   * Number of times this agent has transitioned to "failed". Used by the failure
+   * escalation logic in updateAgentStatus: an agent is requeued as "pending" for up
+   * to 2 retries (intended to re-run at the advanced tier); beyond that the gate is
+   * forced to FAIL. Optional for backward compatibility with pre-existing manifests.
+   */
+  failureCount?: number;
+  /**
+   * Set true once an agent has exhausted its retries and requires escalation. When
+   * set, mergeAgentFindings forces the gate to FAIL. Optional/backward-compatible.
+   */
+  escalationRequired?: boolean;
 };
 
 // ---------------------------------------------------------------------------

@@ -1020,6 +1020,323 @@ async function checkBcryptCostFactor(): Promise<Finding | null> {
   };
 }
 
+async function checkJwtKidLoadWithoutAllowlist(): Promise<Finding | null> {
+  // kid header value flowing into a key load from path / DB / URL, without an allowlist gate.
+  const kidHits = await codeSearch(
+    String.raw`(?:header\.kid|\.header\.kid|decoded\.kid|jwtHeader\.kid|token\.kid|payload\.kid)`
+  );
+  // Require a key-loading sink on the same line and a JWT/key-loading context.
+  const sinkRe = /readFile|readFileSync|createReadStream|path\.join|path\.resolve|fetch\s*\(|axios|https?\.get|SELECT|findOne|findUnique|query\s*\(|getKey|loadKey|keyStore|\.get\s*\(/i;
+  const allowlistRe = /allowlist|allowList|ALLOWED_KIDS?|allowedKids|KEY_MAP|keyMap\b|keysById|KEYS\[|whitelist/i;
+  const unsafe = kidHits.filter((h) => sinkRe.test(h.preview) && !allowlistRe.test(h.preview));
+  if (!unsafe.length) return null;
+  return {
+    id: "JWT_KID_KEY_LOAD_NO_ALLOWLIST",
+    title: "JWT kid header used to load signing key from path/DB/URL without an allowlist — key injection (CWE-347/CWE-290)",
+    severity: "CRITICAL",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    sla: "24h",
+    requiredActions: [
+      "Resolve the kid only through a fixed allowlist map (kid -> known public key); reject any kid not present in it.",
+      "CWE-347/CWE-290 — loading the key named by the attacker-controlled kid (from disk, DB, or a URL) lets an attacker supply their own key and forge valid signatures.",
+      "Fix: const key = ALLOWED_KEYS[decoded.header.kid]; if (!key) throw new Error('Unknown kid'); jwt.verify(token, key, { algorithms: ['RS256'] });"
+    ]
+  };
+}
+
+async function checkJwtAlgListContainsNone(): Promise<Finding | null> {
+  // algorithms array that mixes a real algorithm with 'none' (e.g. ['HS256','none']).
+  const hits = await codeSearch(
+    String.raw`algorithms\s*:\s*\[[^\]]*['"](?:HS|RS|ES|PS)(?:256|384|512)['"][^\]]*['"]none['"]|algorithms\s*:\s*\[[^\]]*['"]none['"][^\]]*['"](?:HS|RS|ES|PS)(?:256|384|512)['"]`
+  );
+  if (!hits.length) return null;
+  return {
+    id: "JWT_ALG_LIST_INCLUDES_NONE",
+    title: "JWT algorithms array lists a real algorithm alongside 'none' — unsigned tokens accepted (CWE-327)",
+    severity: "CRITICAL",
+    evidence: toEvidence(hits),
+    files: toFiles(hits),
+    sla: "24h",
+    requiredActions: [
+      "Remove 'none' from the algorithms array; it must contain only the real algorithm(s) you actually issue.",
+      "CWE-327 — an attacker sets the token header alg to 'none', strips the signature, and the verifier still accepts it because 'none' is allowlisted.",
+      "Fix: jwt.verify(token, key, { algorithms: ['HS256'] }) // never ['HS256','none']"
+    ]
+  };
+}
+
+async function checkOidcNonceNotValidated(): Promise<Finding | null> {
+  // OIDC flow present (nonce sent in the authorize request) but nonce never compared/validated on the id_token.
+  const oidcHits = await codeSearch(
+    String.raw`(?:openid|id_token|idToken|oidc|OIDC)`
+  );
+  if (!oidcHits.length) return null;
+  const nonceSentHits = await codeSearch(String.raw`nonce\s*[:=]`);
+  if (!nonceSentHits.length) return null;
+  // Look for evidence the nonce is actually validated against the stored value.
+  const nonceValidatedHits = await codeSearch(
+    String.raw`(?:claims|payload|idToken|decoded|id_token)\.nonce\s*(?:===|==|!==|!=)|nonce\s*(?:===|==|!==|!=)\s*(?:session|stored|expected|req\.session)|validateNonce|verifyNonce|checkNonce`
+  );
+  if (nonceValidatedHits.length) return null;
+  const evidence = nonceSentHits.filter((h) => /openid|id_token|idToken|oidc/i.test(h.preview) || true).slice(0, 10);
+  return {
+    id: "OIDC_NONCE_NOT_VALIDATED",
+    title: "OIDC nonce sent but never validated against the id_token — token replay / injection (CWE-287)",
+    severity: "HIGH",
+    evidence: toEvidence(evidence),
+    files: toFiles(evidence),
+    sla: "7d",
+    requiredActions: [
+      "Store the nonce in the user's session before redirecting to the IdP, then compare it to the id_token's nonce claim after exchange.",
+      "CWE-287 / OIDC Core §3.1.2.7 — without nonce validation an attacker can replay or inject an id_token obtained in a different session.",
+      "Fix: if (idToken.nonce !== req.session.oidcNonce) throw new Error('Invalid nonce');"
+    ]
+  };
+}
+
+async function checkOauthCodeReuse(): Promise<Finding | null> {
+  // Authorization-code exchange present, but the code is not invalidated/consumed after the token exchange.
+  const exchangeHits = await codeSearch(
+    String.raw`grant_type\s*[:=]\s*['"]authorization_code['"]|getToken\s*\(|exchangeCode|\.exchange\s*\(|tokenEndpoint|\/token['"]`
+  );
+  if (!exchangeHits.length) return null;
+  const unsafe = exchangeHits.filter(
+    (h) =>
+      !/delete|revoke|invalidate|consume|markUsed|usedAt|codeUsed|once\b|single.?use/i.test(h.preview)
+  );
+  if (!unsafe.length) return null;
+  return {
+    id: "OAUTH_CODE_REUSE",
+    title: "OAuth authorization code exchanged without being invalidated — code replay / reuse (CWE-294)",
+    severity: "HIGH",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    sla: "7d",
+    requiredActions: [
+      "Invalidate (delete/mark used) the authorization code atomically at exchange time and reject any subsequent presentation of it.",
+      "CWE-294 / RFC 6749 §4.1.2 — authorization codes MUST be single-use; a replayed code lets an attacker mint a second set of tokens.",
+      "Fix: const rec = await db.authCodes.findUnique({ where: { code } }); if (!rec || rec.usedAt) throw new Error('Invalid code'); await db.authCodes.update({ where: { code }, data: { usedAt: new Date() } });"
+    ]
+  };
+}
+
+async function checkSamlAssertionXxe(): Promise<Finding | null> {
+  // XML parse of a SAML assertion/response without XXE hardening.
+  const samlXmlHits = await codeSearch(
+    String.raw`(?:DOMParser|libxmljs|xml2js|@xmldom\/xmldom|new\s+DOMParser|parseFromString|parseXml|xmldom)`
+  );
+  // Require SAML context in the same file to keep FPs low.
+  const samlContextHits = await codeSearch(
+    String.raw`SAMLResponse|saml2|passport-saml|@node-saml|samlify|Assertion|<saml`
+  );
+  const samlFiles = new Set(samlContextHits.map((h) => h.file));
+  const inSaml = samlXmlHits.filter((h) => samlFiles.has(h.file));
+  if (!inSaml.length) return null;
+  // Suppress if XXE hardening is present anywhere (noent/entity disabling).
+  const hardeningHits = await codeSearch(
+    String.raw`noent\s*:\s*false|resolveExternalEntities\s*:\s*false|DOCTYPE.*false|disallowDoctype|noblanks|FEATURE_SECURE_PROCESSING|nonet\s*:\s*true|noExternalEntities`
+  );
+  const hardenedFiles = new Set(hardeningHits.map((h) => h.file));
+  const unsafe = inSaml.filter((h) => !hardenedFiles.has(h.file));
+  if (!unsafe.length) return null;
+  return {
+    id: "SAML_ASSERTION_XXE",
+    title: "SAML assertion XML parsed without XXE hardening — XML External Entity injection (CWE-611)",
+    severity: "CRITICAL",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    sla: "24h",
+    requiredActions: [
+      "Parse SAML XML with external entities and DOCTYPE processing disabled (noent:false / resolveExternalEntities:false / disallow DOCTYPE).",
+      "CWE-611 — an attacker-supplied SAMLResponse containing an external entity can read local files (file:///etc/passwd) or perform SSRF during signature processing.",
+      "Fix: use a hardened parser, e.g. libxmljs2 parseXml(xml, { noent: false, nonet: true, dtdload: false }) or a SAML library configured to reject DOCTYPE."
+    ]
+  };
+}
+
+async function checkPredictableSessionId(): Promise<Finding | null> {
+  // Session/token id generated from a predictable source (Math.random / Date.now / sequential counter).
+  const hits = await codeSearch(
+    String.raw`(?:sessionId|session_id|sessionToken|session_token|sid|token|authToken|auth_token)\s*[:=][^;\n]*(?:Math\.random\s*\(|Date\.now\s*\(|new\s+Date\s*\(|performance\.now\s*\(|\+\+|counter\b|sequence\b|incrementId)`
+  );
+  const unsafe = hits.filter(
+    (h) => !/crypto\.randomBytes|crypto\.randomUUID|randomUUID|uuidv4|nanoid|getRandomValues/i.test(h.preview)
+  );
+  if (!unsafe.length) return null;
+  return {
+    id: "PREDICTABLE_SESSION_ID",
+    title: "Session/token identifier derived from Math.random / Date.now / sequential counter — predictable session ID (CWE-330/CWE-340)",
+    severity: "CRITICAL",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    sla: "24h",
+    requiredActions: [
+      "Generate session and token identifiers with a CSPRNG: crypto.randomBytes(32).toString('hex') or crypto.randomUUID().",
+      "CWE-330/CWE-340 — Math.random(), Date.now(), and incrementing counters are predictable, letting an attacker guess or enumerate valid session IDs and hijack sessions.",
+      "Fix: const sessionId = crypto.randomBytes(32).toString('hex');"
+    ]
+  };
+}
+
+async function checkPostLoginOpenRedirect(): Promise<Finding | null> {
+  // Post-login/post-auth redirect using a user-supplied param without allowlisting.
+  const hits = await codeSearch(
+    String.raw`res\.redirect\s*\(\s*(?:req\.query\.(?:returnTo|redirect|redirectUrl|redirect_uri|next|url|returnUrl|dest|continue|callback)|req\.body\.(?:returnTo|redirect|redirectUrl|next|url|returnUrl|dest|continue)|returnTo\b|redirectUrl\b|nextUrl\b)`
+  );
+  const unsafe = hits.filter(
+    (h) =>
+      !/allowlist|allowList|whitelist|isAllowed|startsWith\s*\(\s*['"]\/['"]|new\s+URL|validateRedirect|safeRedirect|ALLOWED_REDIRECTS?/i.test(h.preview)
+  );
+  if (!unsafe.length) return null;
+  return {
+    id: "POST_LOGIN_OPEN_REDIRECT",
+    title: "Post-login redirect to a user-supplied URL without allowlisting — open redirect / credential phishing (CWE-601)",
+    severity: "HIGH",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    sla: "7d",
+    requiredActions: [
+      "Validate the post-login redirect target against an allowlist of relative paths or registered hosts; default to a fixed internal URL otherwise.",
+      "CWE-601 — an attacker crafts a login link with ?returnTo=https://evil.com so the victim is redirected off-site (with tokens/session) immediately after authenticating.",
+      "Fix: const dest = ALLOWED_REDIRECTS.has(req.query.returnTo) ? req.query.returnTo : '/dashboard'; res.redirect(dest);"
+    ]
+  };
+}
+
+async function checkOidcDiscoveryUnpinned(): Promise<Finding | null> {
+  // .well-known/openid-configuration fetched without pinning/trust anchoring.
+  const hits = await codeSearch(
+    String.raw`\.well-known\/openid-configuration|openid-configuration|discoveryEndpoint|issuer\.discover|Issuer\.discover`
+  );
+  const unsafe = hits.filter(
+    (h) =>
+      !/pin|allowlist|allowList|expectedIssuer|EXPECTED_ISSUER|ca\s*:|checkServerIdentity|trustedIssuers?|process\.env\.(?:OIDC|ISSUER)/i.test(h.preview)
+  );
+  if (!unsafe.length) return null;
+  return {
+    id: "OIDC_DISCOVERY_UNPINNED",
+    title: "OIDC discovery document fetched without issuer pinning / trust anchoring — malicious IdP metadata (CWE-295/CWE-346)",
+    severity: "HIGH",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    sla: "7d",
+    requiredActions: [
+      "Pin the expected issuer and validate the discovery document's issuer against it; fetch it only over TLS with certificate verification enabled.",
+      "CWE-295/CWE-346 — if an attacker can influence the discovery URL or MITM the fetch, they control the jwks_uri and authorization/token endpoints, enabling full token forgery.",
+      "Fix: const issuer = await Issuer.discover(process.env.OIDC_ISSUER!); if (issuer.issuer !== EXPECTED_ISSUER) throw new Error('Untrusted issuer');"
+    ]
+  };
+}
+
+async function checkGraphqlAliasAuthBypass(): Promise<Finding | null> {
+  // Field-level @auth / authorization applied to resolvers that can be renamed via GraphQL aliases,
+  // where the auth decision keys off the alias/field name rather than the resolver.
+  const graphqlHits = await codeSearch(
+    String.raw`(?:info\.fieldName|fieldNodes|info\.path\.key|\.alias\b|selectionSet)`
+  );
+  // Require an auth decision in the same file that references the field/alias name.
+  const authNameHits = graphqlHits.filter((h) =>
+    /auth|permission|requireAuth|@auth|isAuthorized|denyIf|allowIf|role/i.test(h.preview)
+  );
+  const unsafe = authNameHits.filter(
+    (h) => !/directive|resolver.*wrap|middleware.*resolve|shield|rule\s*\(/i.test(h.preview)
+  );
+  if (!unsafe.length) return null;
+  return {
+    id: "GRAPHQL_ALIAS_AUTH_BYPASS",
+    title: "GraphQL field authorization keyed on field/alias name — auth bypass via query aliases (CWE-863)",
+    severity: "CRITICAL",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    sla: "24h",
+    requiredActions: [
+      "Enforce authorization on the resolver/type itself (schema directive, graphql-shield rule, or wrapped resolver), never by string-matching info.fieldName or the response alias.",
+      "CWE-863 — a client can alias a protected field (e.g. `secret: sensitiveField`) so any name-based auth check misses it while the resolver still runs.",
+      "Fix: apply auth in the resolver via a directive/shield rule tied to the field's resolver, so it fires regardless of the alias the client chooses."
+    ]
+  };
+}
+
+async function checkBasicAuthOverHttp(): Promise<Finding | null> {
+  // Basic auth accepted/sent without requiring HTTPS.
+  const basicHits = await codeSearch(
+    String.raw`(?:Authorization['"]?\s*[:,]\s*['"]?Basic\s|['"]Basic\s+['"]\s*\+|basic-auth|basicAuth|auth\s*:\s*\{[^}]*user)`
+  );
+  const httpUrlHits = await codeSearch(String.raw`['"]http:\/\/[^'"]`);
+  const httpFiles = new Set(httpUrlHits.map((h) => h.file));
+  // Flag Basic auth where either an explicit http:// URL is in the same file, or the line itself
+  // shows Basic auth without any https/TLS guard.
+  const unsafe = basicHits.filter(
+    (h) =>
+      (httpFiles.has(h.file) || /http:\/\//i.test(h.preview)) &&
+      !/req\.secure|x-forwarded-proto|forceHttps|requireHttps|https:\/\//i.test(h.preview)
+  );
+  if (!unsafe.length) return null;
+  return {
+    id: "BASIC_AUTH_OVER_HTTP",
+    title: "HTTP Basic authentication used over a non-HTTPS channel — credentials sent in cleartext (CWE-319/CWE-522)",
+    severity: "HIGH",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    sla: "7d",
+    requiredActions: [
+      "Only accept/transmit Basic auth over TLS; reject Basic credentials when req.secure is false (or X-Forwarded-Proto is not https).",
+      "CWE-319/CWE-522 — Basic auth base64-encodes (does not encrypt) credentials, so over HTTP they are trivially recovered by any network observer.",
+      "Fix: if (!req.secure) return res.status(400).send('HTTPS required'); // and change all http:// client base URLs to https://"
+    ]
+  };
+}
+
+async function checkImplicitFlowInProduction(): Promise<Finding | null> {
+  // response_type=token (implicit) present in code that looks production-bound.
+  const hits = await codeSearch(
+    String.raw`response_type\s*[:=]\s*['"]token['"]|responseType\s*[:=]\s*['"]token['"]|response_type=token`
+  );
+  // Keep this distinct from the existing OAUTH_IMPLICIT_FLOW by requiring a production/non-test context.
+  const testRe = /test|spec|mock|fixture|example|localhost|127\.0\.0\.1/i;
+  const unsafe = hits.filter((h) => !testRe.test(h.file) && !testRe.test(h.preview));
+  if (!unsafe.length) return null;
+  return {
+    id: "OAUTH_IMPLICIT_FLOW_PRODUCTION",
+    title: "OAuth implicit flow (response_type=token) configured in production code — access tokens exposed in URL (CWE-319)",
+    severity: "HIGH",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    sla: "7d",
+    requiredActions: [
+      "Disable the implicit grant for production clients; use authorization code flow with PKCE (response_type=code, code_challenge_method=S256).",
+      "OAuth 2.0 Security BCP (RFC 9700) — the implicit flow is deprecated; access tokens in the URL fragment leak via history, Referer, and logs.",
+      "Fix: response_type=code with PKCE; exchange the code for tokens on the token endpoint."
+    ]
+  };
+}
+
+async function checkAccountLinkingNoReauth(): Promise<Finding | null> {
+  // Account linking (adding a federated identity to an existing account) without a re-authentication step.
+  const hits = await codeSearch(
+    String.raw`(?:linkAccount|link_account|linkIdentity|linkProvider|connectAccount|mergeIdentity|addProvider|linkSocial)`
+  );
+  const unsafe = hits.filter(
+    (h) =>
+      !/reauth|re-auth|reauthenticate|requirePassword|verifyPassword|confirmPassword|recentLogin|stepUp|step-up|mfa|reAuthenticated/i.test(h.preview)
+  );
+  if (!unsafe.length) return null;
+  return {
+    id: "ACCOUNT_LINKING_NO_REAUTH",
+    title: "Account/identity linking without re-authentication — account takeover via forced linking (CWE-306/CWE-287)",
+    severity: "HIGH",
+    evidence: toEvidence(unsafe),
+    files: toFiles(unsafe),
+    sla: "7d",
+    requiredActions: [
+      "Require a fresh re-authentication (password re-entry, recent login, or MFA/step-up) before linking any new federated identity to an existing account.",
+      "CWE-306/CWE-287 — without re-auth, a CSRF or a hijacked session can attach an attacker-controlled IdP identity, giving the attacker a permanent alternate login.",
+      "Fix: if (!req.session.reauthenticatedAt || Date.now() - req.session.reauthenticatedAt > 5*60*1000) return res.status(403).send('Re-authentication required'); // then link"
+    ]
+  };
+}
+
 export async function checkAuthDeep(_opts: { changedFiles: string[] }): Promise<Finding[]> {
   try {
     const [
@@ -1055,6 +1372,18 @@ export async function checkAuthDeep(_opts: { changedFiles: string[] }): Promise<
       passwordResetSingleUse,
       accountEnumeration,
       bcryptCostFactor,
+      jwtKidLoadNoAllowlist,
+      jwtAlgListContainsNone,
+      oidcNonceNotValidated,
+      oauthCodeReuse,
+      samlAssertionXxe,
+      predictableSessionId,
+      postLoginOpenRedirect,
+      oidcDiscoveryUnpinned,
+      graphqlAliasAuthBypass,
+      basicAuthOverHttp,
+      implicitFlowInProduction,
+      accountLinkingNoReauth,
     ] = await Promise.all([
       checkJwtAlgNone(),
       checkSessionFixation(),
@@ -1088,6 +1417,18 @@ export async function checkAuthDeep(_opts: { changedFiles: string[] }): Promise<
       checkPasswordResetSingleUse(),
       checkAccountEnumeration(),
       checkBcryptCostFactor(),
+      checkJwtKidLoadWithoutAllowlist(),
+      checkJwtAlgListContainsNone(),
+      checkOidcNonceNotValidated(),
+      checkOauthCodeReuse(),
+      checkSamlAssertionXxe(),
+      checkPredictableSessionId(),
+      checkPostLoginOpenRedirect(),
+      checkOidcDiscoveryUnpinned(),
+      checkGraphqlAliasAuthBypass(),
+      checkBasicAuthOverHttp(),
+      checkImplicitFlowInProduction(),
+      checkAccountLinkingNoReauth(),
     ]);
 
     const singleFindings = [
@@ -1116,6 +1457,18 @@ export async function checkAuthDeep(_opts: { changedFiles: string[] }): Promise<
       passwordResetSingleUse,
       accountEnumeration,
       bcryptCostFactor,
+      jwtKidLoadNoAllowlist,
+      jwtAlgListContainsNone,
+      oidcNonceNotValidated,
+      oauthCodeReuse,
+      samlAssertionXxe,
+      predictableSessionId,
+      postLoginOpenRedirect,
+      oidcDiscoveryUnpinned,
+      graphqlAliasAuthBypass,
+      basicAuthOverHttp,
+      implicitFlowInProduction,
+      accountLinkingNoReauth,
     ].filter((f): f is Finding => f !== null);
 
     return [

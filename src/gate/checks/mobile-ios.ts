@@ -802,6 +802,237 @@ function checkCertificateTransparency(ctx: ScanContext): Finding | null {
 	};
 }
 
+/** CHECK 30: WKWebView custom scheme handler or message handler reachable from injected JS / file:// load. MASVS-PLATFORM-5 / CWE-749 */
+function checkWebviewCustomSchemeHandler(ctx: ScanContext): Finding | null {
+	// A WKURLSchemeHandler or script message handler combined with a file:// load or
+	// injected user script means attacker-controlled JS can reach native handlers.
+	const SCHEME_HANDLER_RE = /setURLSchemeHandler|WKURLSchemeHandler|WKScriptMessageHandlerWithReply|addScriptMessageHandler/;
+	const REACHABLE_RE = /loadFileURL|allowingReadAccessTo|baseURL\s*:\s*URL\(fileURLWithPath|WKUserScript|addUserScript|file:\/\//;
+	const files = filesWithMatch(ctx.allNativeSources, SCHEME_HANDLER_RE).filter(
+		(f) => REACHABLE_RE.test(ctx.allNativeSources.get(f) ?? "")
+	);
+	if (files.length === 0) return null;
+	return {
+		id: "IOS_WEBVIEW_CUSTOM_SCHEME_HANDLER",
+		title: "WKWebView custom URL-scheme / message handler reachable from injected JS or a file:// load — XSS or a malicious local page can drive native code (MASVS-PLATFORM-5)",
+		severity: "CRITICAL",
+		files: files.slice(0, 10),
+		evidence: evidenceLines(ctx.allNativeSources, SCHEME_HANDLER_RE),
+		sla: "24h",
+		requiredActions: [
+			"Do not load remote or untrusted content in a WKWebView that registers a WKURLSchemeHandler or script message handler.",
+			"When loading local content with loadFileURL(_:allowingReadAccessTo:), scope read access to the narrowest directory — never the app bundle or Documents root.",
+			"Strictly validate every message name and payload in userContentController(_:didReceive:) and expose no sensitive native API through the bridge.",
+			"MASVS-PLATFORM-5 / CWE-749: a bridged handler reachable from injected JS is equivalent to native RCE."
+		]
+	};
+}
+
+/** CHECK 31: kSecAttrSynchronizable on a keychain item — item syncs to iCloud Keychain. MASVS-STORAGE-1 / CWE-311 */
+function checkKeychainSynchronizable(ctx: ScanContext): Finding | null {
+	const SYNC_RE = /kSecAttrSynchronizable/;
+	const files = filesWithMatch(ctx.allNativeSources, SYNC_RE).filter((f) => {
+		const content = ctx.allNativeSources.get(f) ?? "";
+		// Only flag when it is enabled (true / kCFBooleanTrue) and the item looks sensitive.
+		const enabled = /kSecAttrSynchronizable[^\n]*(?:true|kCFBooleanTrue|kSecAttrSynchronizableAny)/.test(content);
+		const sensitive = /password|token|secret|credential|privateKey|apiKey|refreshToken/i.test(content);
+		return enabled && sensitive;
+	});
+	if (files.length === 0) return null;
+	return {
+		id: "IOS_KEYCHAIN_SYNCHRONIZABLE",
+		title: "Keychain item marked kSecAttrSynchronizable — sensitive secret syncs to iCloud Keychain across the user's devices and Apple servers (MASVS-STORAGE-1)",
+		severity: "CRITICAL",
+		files: files.slice(0, 10),
+		evidence: evidenceLines(ctx.allNativeSources, SYNC_RE),
+		sla: "24h",
+		requiredActions: [
+			"Remove kSecAttrSynchronizable (or set it to false) for high-value, device-bound secrets such as auth tokens, private keys, and refresh tokens.",
+			"Pair the item with kSecAttrAccessibleWhenUnlockedThisDeviceOnly so it can never be synced or migrated off the device.",
+			"Only synchronize items that are explicitly designed to roam and are safe to store in iCloud Keychain.",
+			"MASVS-STORAGE-1 / CWE-311: synchronizable items leave the Secure Enclave boundary and are replicated to iCloud."
+		]
+	};
+}
+
+/** CHECK 32: UIPasteboard.general read/write of sensitive data without a user gesture. MASVS-PLATFORM-4 / CWE-200 */
+function checkPasteboardNoGesture(ctx: ScanContext): Finding | null {
+	// Distinct from IOS_PASTEBOARD_SENSITIVE: targets programmatic reads/writes of
+	// sensitive-looking values with no surrounding user-action / IBAction context.
+	const PB_ACCESS_RE = /UIPasteboard\.general\.(?:string|strings|setItems|items|setValue|url|image)/;
+	const SENSITIVE_RE = /password|token|secret|otp|code|card|cvv|iban|account|pin\b/i;
+	const GESTURE_RE = /@IBAction|@objc\s+func|UITapGestureRecognizer|touchesBegan|sender:\s*Any|buttonTapped|didTapCopy/i;
+	const files = filesWithMatch(ctx.allNativeSources, PB_ACCESS_RE).filter((f) => {
+		const content = ctx.allNativeSources.get(f) ?? "";
+		return SENSITIVE_RE.test(content) && !GESTURE_RE.test(content);
+	});
+	if (files.length === 0) return null;
+	return {
+		id: "IOS_PASTEBOARD_NO_GESTURE",
+		title: "UIPasteboard.general reads/writes sensitive data with no user-gesture context — silent clipboard access leaks to all installed apps (MASVS-PLATFORM-4)",
+		severity: "HIGH",
+		files: files.slice(0, 10),
+		evidence: evidenceLines(ctx.allNativeSources, PB_ACCESS_RE),
+		sla: "7d",
+		requiredActions: [
+			"Only write sensitive values to the pasteboard in direct response to an explicit user action (e.g. a Copy button @IBAction), never automatically.",
+			"For sensitive copies, set an expiry: pasteboard.setItems([...], options: [.expirationDate: Date().addingTimeInterval(30)]) and mark them .localOnly.",
+			"Avoid reading UIPasteboard.general on launch/foreground — iOS surfaces a privacy notification and other apps can observe the content.",
+			"MASVS-PLATFORM-4 / CWE-200: the general pasteboard is world-readable by every installed app."
+		]
+	};
+}
+
+/** CHECK 33: Objective-C method swizzling in production. MASVS-RESILIENCE-4 / CWE-913 */
+function checkMethodSwizzling(ctx: ScanContext): Finding | null {
+	const SWIZZLE_RE = /method_exchangeImplementations|class_replaceMethod|method_setImplementation/;
+	// Only flag when not guarded behind a DEBUG compile-time gate.
+	const files = filesWithMatch(ctx.allNativeSources, SWIZZLE_RE).filter((f) => {
+		const content = ctx.allNativeSources.get(f) ?? "";
+		return !/#if\s+DEBUG[\s\S]*?(?:method_exchangeImplementations|class_replaceMethod|method_setImplementation)[\s\S]*?#endif/.test(content);
+	});
+	if (files.length === 0) return null;
+	return {
+		id: "IOS_METHOD_SWIZZLING",
+		title: "Objective-C runtime method swizzling (method_exchangeImplementations/class_replaceMethod) in production code — fragile, hard to audit, and a hooking primitive (MASVS-RESILIENCE-4)",
+		severity: "HIGH",
+		files: files.slice(0, 10),
+		evidence: evidenceLines(ctx.allNativeSources, SWIZZLE_RE),
+		sla: "7d",
+		requiredActions: [
+			"Remove runtime swizzling from production paths — prefer subclassing, delegation, or composition to alter behavior.",
+			"If swizzling is unavoidable (e.g. analytics), guard it behind #if DEBUG or an explicit, reviewed allowlist and never swizzle security-sensitive methods.",
+			"Swizzling security or networking selectors can silently disable certificate pinning or auth checks and mirrors attacker hooking techniques.",
+			"MASVS-RESILIENCE-4 / CWE-913: unrestricted runtime modification undermines code-integrity guarantees."
+		]
+	};
+}
+
+/** CHECK 34: Sensitive views without filterTouchesWhenObscured / overlay protection (tapjacking). MASVS-PLATFORM-4 / CWE-1021 */
+function checkTapjackingUnprotected(ctx: ScanContext): Finding | null {
+	if (ctx.allNativeSources.size === 0) return null;
+	// Presence of sensitive/confirmation UI that performs a privileged action…
+	const SENSITIVE_UI_RE = /(?:confirm|approve|pay|transfer|authorize|grant|delete|purchase)[\w]*\s*\(|isSecureTextEntry|PaymentViewController|AuthorizationViewController/i;
+	const sensitiveFiles = filesWithMatch(ctx.allNativeSources, SENSITIVE_UI_RE);
+	if (sensitiveFiles.length === 0) return null;
+	// …without any anti-overlay / obscured-touch protection anywhere in the codebase.
+	const PROTECTION_RE = /filterTouchesWhenObscured|isMultipleTouchEnabled\s*=\s*false|UIAccessibilityIsGuidedAccessEnabled|window\.isHidden|hitTest[\s\S]*?return\s+nil/;
+	if (filesWithMatch(ctx.allNativeSources, PROTECTION_RE).length > 0) return null;
+	return {
+		id: "IOS_TAPJACKING_UNPROTECTED",
+		title: "Sensitive confirmation/payment UI with no obscured-touch (tapjacking) protection — a malicious overlay can trick the user into privileged actions (MASVS-PLATFORM-4)",
+		severity: "HIGH",
+		files: sensitiveFiles.slice(0, 10),
+		evidence: evidenceLines(ctx.allNativeSources, SENSITIVE_UI_RE),
+		sla: "7d",
+		requiredActions: [
+			"For privileged confirmations, ignore touches that arrive while the view is obscured — override hitTest/point(inside:) or verify the event window is key and unobscured before acting.",
+			"Detect and refuse interaction when screen recording/mirroring or an overlay is active (UIScreen.isCaptured), and require an explicit, in-app re-confirmation for money movement or authorization.",
+			"Do not perform irreversible actions from a single tap that could be delivered by a transparent overlay.",
+			"MASVS-PLATFORM-4 / CWE-1021: overlay/tapjacking attacks redirect user intent to attacker-chosen actions."
+		]
+	};
+}
+
+/** CHECK 35: Core Data / persistent store with an empty or hardcoded encryption key. MASVS-STORAGE-1 / CWE-321 */
+function checkCoreDataHardcodedKey(ctx: ScanContext): Finding | null {
+	// Persistent store / SQLCipher usage where the passphrase is empty or a literal.
+	const STORE_RE = /NSPersistentStoreCoordinator|NSPersistentContainer|EncryptedStore|sqlite3_key|PRAGMA\s+key/;
+	const storeFiles = filesWithMatch(ctx.allNativeSources, STORE_RE);
+	if (storeFiles.length === 0) return null;
+	const HARDCODED_KEY_RE = /(?:passphrase|encryptionKey|databaseKey|EncryptedStorePassphraseKey|sqlite3_key)\s*[:=]\s*["'][^"']*["']|PRAGMA\s+key\s*=\s*['"][^'"]*['"]/i;
+	const EMPTY_KEY_RE = /(?:passphrase|encryptionKey|databaseKey)\s*[:=]\s*["']\s*["']/i;
+	const files = storeFiles.filter((f) => {
+		const content = ctx.allNativeSources.get(f) ?? "";
+		return HARDCODED_KEY_RE.test(content) || EMPTY_KEY_RE.test(content);
+	});
+	if (files.length === 0) return null;
+	return {
+		id: "IOS_CORE_DATA_HARDCODED_KEY",
+		title: "Core Data / encrypted persistent store initialized with an empty or hardcoded encryption key — store contents are effectively unprotected (MASVS-STORAGE-1)",
+		severity: "HIGH",
+		files: files.slice(0, 10),
+		evidence: evidenceLines(ctx.allNativeSources, HARDCODED_KEY_RE),
+		sla: "7d",
+		requiredActions: [
+			"Never ship an empty or literal database passphrase — a hardcoded key is extractable from the binary and protects nothing.",
+			"Derive the key from a user secret plus a device-bound Keychain value (kSecAttrAccessibleWhenUnlockedThisDeviceOnly) using PBKDF2/Argon2, or use NSPersistentStoreFileProtectionKey = complete with a Keychain-stored key.",
+			"Rotate and re-encrypt any store that was shipped with a static key.",
+			"MASVS-STORAGE-1 / CWE-321: use of a hardcoded cryptographic key."
+		]
+	};
+}
+
+/** CHECK 36: kSecAttrAccessible set to AlwaysThisDeviceOnly / Always (accessible when locked). MASVS-STORAGE-1 / CWE-311 */
+function checkKeychainAccessibleWhenLocked(ctx: ScanContext): Finding | null {
+	// Note: IOS_KEYCHAIN_WEAK_ACCESS already flags the constant; this check is scoped
+	// to the kSecAttrAccessible *assignment* context to surface the exact attribute
+	// mapping and give a locked-state-specific remediation with an SLA.
+	const ACCESSIBLE_RE = /kSecAttrAccessible\s*(?:as\s+String)?\s*[:=]\s*kSecAttrAccessibleAlways(?:ThisDeviceOnly)?/;
+	const files = filesWithMatch(ctx.allNativeSources, ACCESSIBLE_RE);
+	if (files.length === 0) return null;
+	return {
+		id: "IOS_KEYCHAIN_ACCESSIBLE_WHEN_LOCKED",
+		title: "Keychain kSecAttrAccessible set to Always / AlwaysThisDeviceOnly — item is readable while the device is locked (MASVS-STORAGE-1)",
+		severity: "HIGH",
+		files: files.slice(0, 10),
+		evidence: evidenceLines(ctx.allNativeSources, ACCESSIBLE_RE),
+		sla: "7d",
+		requiredActions: [
+			"Set kSecAttrAccessible to kSecAttrAccessibleWhenUnlockedThisDeviceOnly (or kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly for the highest-value secrets).",
+			"kSecAttrAccessibleAlways and kSecAttrAccessibleAlwaysThisDeviceOnly are deprecated and keep the item readable when the device is locked or seized.",
+			"Re-store existing items with the stronger accessibility class during your next migration.",
+			"MASVS-STORAGE-1 / CWE-311."
+		]
+	};
+}
+
+/** CHECK 37: Overbroad Bluetooth / location usage without justification. MASVS-PLATFORM-1 / privacy */
+function checkOverbroadBluetoothLocation(ctx: ScanContext): Finding | null {
+	// Always-on location or Bluetooth central usage where the Info.plist purpose
+	// string is missing or a trivial placeholder.
+	const usesAlwaysLocation = ctx.infoPlistEntries.some(([, t]) => /NSLocationAlwaysAndWhenInUseUsageDescription|NSLocationAlwaysUsageDescription/.test(t)) ||
+		filesWithMatch(ctx.allNativeSources, /requestAlwaysAuthorization|allowsBackgroundLocationUpdates\s*=\s*true|startMonitoringSignificantLocationChanges/).length > 0;
+	const usesBluetooth = ctx.infoPlistEntries.some(([, t]) => /NSBluetoothAlwaysUsageDescription|NSBluetoothPeripheralUsageDescription/.test(t)) ||
+		filesWithMatch(ctx.allNativeSources, /CBCentralManager|CBPeripheralManager/).length > 0;
+	if (!usesAlwaysLocation && !usesBluetooth) return null;
+
+	// Look for a weak/empty justification string in any Info.plist.
+	const WEAK_PURPOSE_RE = /<key>(?:NSLocationAlways(?:AndWhenInUse)?UsageDescription|NSBluetooth(?:Always|Peripheral)UsageDescription)<\/key>\s*<string>\s*(?:[a-z ]{0,12}|we need this|required|for the app to work|allow access)?\s*<\/string>/i;
+	const weakPlists = ctx.infoPlistEntries.filter(([, t]) => WEAK_PURPOSE_RE.test(t)).map(([p]) => p);
+
+	// Only fire when either a weak justification string exists, or background/always usage
+	// is present with no matching purpose key at all (missing justification).
+	const missingLocationPurpose = usesAlwaysLocation &&
+		!ctx.infoPlistEntries.some(([, t]) => /NSLocationAlways(?:AndWhenInUse)?UsageDescription/.test(t));
+	const missingBluetoothPurpose = usesBluetooth &&
+		!ctx.infoPlistEntries.some(([, t]) => /NSBluetooth(?:Always|Peripheral)UsageDescription/.test(t));
+
+	if (weakPlists.length === 0 && !missingLocationPurpose && !missingBluetoothPurpose) return null;
+
+	const evidence: string[] = [];
+	for (const [p, t] of ctx.infoPlistEntries) {
+		if (WEAK_PURPOSE_RE.test(t)) evidence.push(...evidenceLines(new Map([[p, t]]), /UsageDescription/, 3));
+	}
+	if (missingLocationPurpose) evidence.push("Always/background location used with no NSLocationAlwaysUsageDescription justification");
+	if (missingBluetoothPurpose) evidence.push("CoreBluetooth used with no NSBluetoothAlwaysUsageDescription justification");
+
+	return {
+		id: "IOS_OVERBROAD_BLUETOOTH_LOCATION",
+		title: "Overbroad always-on Bluetooth / location capability without a clear purpose-string justification — excessive sensitive-data collection (MASVS-PLATFORM-1)",
+		severity: "MEDIUM",
+		files: [...new Set([...weakPlists, ...ctx.infoPlistEntries.map(([p]) => p)])].slice(0, 10),
+		evidence: evidence.slice(0, 8),
+		sla: "30d",
+		requiredActions: [
+			"Request the narrowest scope needed: prefer requestWhenInUseAuthorization over requestAlwaysAuthorization, and only enable allowsBackgroundLocationUpdates when a background use case is real.",
+			"Provide a specific, user-facing purpose string for each NSLocation*/NSBluetooth* key explaining exactly why the data is needed — App Review rejects vague placeholders.",
+			"Drop the Bluetooth/location entitlement entirely if the feature is optional or unused.",
+			"MASVS-PLATFORM-1: minimize permissions and justify every sensitive capability."
+		]
+	};
+}
+
 // ── orchestrator ──────────────────────────────────────────────────────────────
 
 export async function checkMobileIos(_: { changedFiles: string[] }): Promise<Finding[]> {
@@ -841,6 +1072,14 @@ export async function checkMobileIos(_: { changedFiles: string[] }): Promise<Fin
 			checkWkWebviewHttpLoad(ctx),
 			checkUniversalLinkConfig(ctx),
 			checkCertificateTransparency(ctx),
+			checkWebviewCustomSchemeHandler(ctx),
+			checkKeychainSynchronizable(ctx),
+			checkPasteboardNoGesture(ctx),
+			checkMethodSwizzling(ctx),
+			checkTapjackingUnprotected(ctx),
+			checkCoreDataHardcodedKey(ctx),
+			checkKeychainAccessibleWhenLocked(ctx),
+			checkOverbroadBluetoothLocation(ctx),
 			await checkLogSensitive(ctx),
 			await checkRnAsyncStorageSensitive(),
 			await checkCodePushIntegrity(),

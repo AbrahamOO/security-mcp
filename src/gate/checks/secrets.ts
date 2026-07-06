@@ -139,6 +139,180 @@ function matchSecretPatterns(decoded: string): { name: string; match: string } |
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// Extended, specifically-classified secret detections.
+//
+// Unlike SECRET_PATTERNS (which all funnel into a single CRITICAL
+// POSSIBLE_SECRET finding), these produce their own finding id, severity, SLA,
+// and remediation guidance. Each entry carries a `context` guard so a bare
+// keyword match without the sensitive surrounding context is ignored — this
+// keeps false positives low per the scanner's design.
+// ---------------------------------------------------------------------------
+type ClassifiedSecret = {
+  id: string;
+  title: string;
+  severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  sla: "24h" | "7d" | "30d" | "90d";
+  regex: RegExp;
+  /** Optional secondary guard the match text must satisfy to count. */
+  context?: RegExp;
+  /** Optional guard that, if matched, suppresses the hit (placeholder/example). */
+  ignore?: RegExp;
+  requiredActions: string[];
+};
+
+const PLACEHOLDER_RE =
+  /example|placeholder|your[-_]?(?:key|secret|token|password)|xxxx|<[^>]+>|change[-_]?me|dummy|sample|redacted|\*{4,}/i;
+
+const CLASSIFIED_SECRETS: ClassifiedSecret[] = [
+  {
+    id: "SECRET_OPENSSH_PRIVATE_KEY",
+    title: "OpenSSH private key material committed to source",
+    severity: "CRITICAL",
+    sla: "24h",
+    // OPENSSH-format private key block, incl. raw ed25519/ecdsa key bodies that
+    // begin with the base64 magic "b3BlbnNzaC1rZXktdjE" ("openssh-key-v1").
+    regex: /-----BEGIN OPENSSH PRIVATE KEY-----|\bb3BlbnNzaC1rZXktdjEA[A-Za-z0-9+/]{20,}/,
+    requiredActions: [
+      "Remove the OpenSSH private key from source immediately and rotate the corresponding key pair (regenerate with ssh-keygen and re-deploy the public key).",
+      "Revoke the old public key from every authorized_keys file, deploy host, and CI system it was trusted by.",
+      "Store SSH keys in a secret manager or dedicated key store; never commit private key material to the repository."
+    ]
+  },
+  {
+    id: "SECRET_WEBHOOK_SIGNING_SECRET",
+    title: "Webhook signing secret hardcoded in source",
+    severity: "CRITICAL",
+    sla: "24h",
+    regex:
+      /\bwhsec_[A-Za-z0-9]{20,}\b|\b(?:github|gh)_?webhook_?secret\s*[:=]\s*["'][^"'\n]{12,}["']|\bwebhook_secret\s*[:=]\s*["'][^"'\n]{12,}["']/i,
+    ignore: PLACEHOLDER_RE,
+    requiredActions: [
+      "Remove the webhook signing secret from source and rotate it in the provider dashboard (Stripe, GitHub, etc.) — a leaked signing secret lets an attacker forge signed webhook payloads.",
+      "Load the signing secret from an environment variable or secret manager at runtime.",
+      "Re-verify inbound webhooks with the rotated secret and enforce a timestamp tolerance to block replay."
+    ]
+  },
+  {
+    id: "SECRET_CONTAINER_REGISTRY_PASSWORD",
+    title: "Container registry password / docker login credential exposed",
+    severity: "CRITICAL",
+    sla: "24h",
+    // .docker/config.json "auth" base64 blob, or `docker login -p <pw>`.
+    regex:
+      /"auths"\s*:\s*\{[\s\S]{0,200}?"auth"\s*:\s*"[A-Za-z0-9+/]{16,}={0,2}"|docker\s+login\b[^\n]*\s-p\s+["']?[^\s"']{6,}|--password(?:-stdin)?\s+["']?[^\s"']{6,}/,
+    ignore: PLACEHOLDER_RE,
+    requiredActions: [
+      "Remove the registry credential from source (and from any committed .docker/config.json) and rotate the registry password / access token immediately.",
+      "Use `docker login --password-stdin` fed from a secret manager, or short-lived registry tokens (e.g. OIDC), instead of an inline `-p` password.",
+      "Ensure ~/.docker/config.json is gitignored and CI injects registry auth from encrypted secrets."
+    ]
+  },
+  {
+    id: "SECRET_CLIENT_EXPOSED_API_KEY",
+    title: "Server/private API key embedded in client-exposed frontend code",
+    severity: "CRITICAL",
+    sla: "24h",
+    // A secret/private/service API key assigned in frontend/build-time inline
+    // config. The context guard requires a client-shipped surface (window,
+    // import.meta.env without a public prefix, a *.client./*.jsx/tsx file marker,
+    // or an inline <script> define) so pure server config does not match.
+    regex:
+      /(?:SERVICE|SECRET|PRIVATE|ADMIN)_?API_?KEY\s*[:=]\s*["'][A-Za-z0-9\-_]{16,}["']|(?:apiKey|secretKey)\s*:\s*["'][A-Za-z0-9\-_]{20,}["']/,
+    context:
+      /window\.|globalThis\.|import\.meta\.env\.(?!(?:VITE_PUBLIC|NEXT_PUBLIC|PUBLIC_))|__NEXT_DATA__|dangerouslySetInnerHTML|<script[\s>]|export\s+const|process\.env\.(?!NEXT_PUBLIC_)/i,
+    ignore: /NEXT_PUBLIC_|VITE_PUBLIC_|REACT_APP_|PUBLIC_/,
+    requiredActions: [
+      "Any key shipped in a client bundle is public — rotate it immediately and treat it as compromised.",
+      "Move the secret behind a server-side proxy/BFF endpoint; the browser should call your backend, which holds the key from a secret manager.",
+      "Only expose keys explicitly designed to be public (and prefixed NEXT_PUBLIC_/VITE_/PUBLIC_) to the frontend."
+    ]
+  },
+  {
+    id: "SECRET_CLOUDFLARE_API_TOKEN",
+    title: "Cloudflare API token exposed",
+    severity: "HIGH",
+    sla: "24h",
+    regex:
+      /\bCLOUDFLARE_API_TOKEN\s*[:=]\s*["'][A-Za-z0-9_-]{30,}["']|\bCF_API_(?:TOKEN|KEY)\s*[:=]\s*["'][A-Za-z0-9_-]{30,}["']|\bcf-[A-Za-z0-9]{8,}-[A-Za-z0-9_-]{30,}\b/,
+    ignore: PLACEHOLDER_RE,
+    requiredActions: [
+      "Roll (rotate) the Cloudflare API token in the Cloudflare dashboard immediately and remove it from source.",
+      "Scope the replacement token to the minimum zones/permissions required rather than a global API key.",
+      "Load the token from an environment variable or secret manager at runtime."
+    ]
+  },
+  {
+    id: "SECRET_ATLASSIAN_API_TOKEN",
+    title: "Jira / Atlassian API token exposed",
+    severity: "HIGH",
+    sla: "24h",
+    regex:
+      /\bATATT3[A-Za-z0-9_\-=]{20,}\b|\b(?:JIRA|ATLASSIAN|CONFLUENCE)_API_TOKEN\s*[:=]\s*["'][A-Za-z0-9_\-=]{20,}["']/,
+    ignore: PLACEHOLDER_RE,
+    requiredActions: [
+      "Revoke the Atlassian API token at id.atlassian.com/manage-profile/security/api-tokens and remove it from source.",
+      "Generate a replacement token and store it in a secret manager; reference it via environment variable.",
+      "Audit Jira/Confluence audit logs for unauthorized access made with the leaked token."
+    ]
+  },
+  {
+    id: "SECRET_KEY_IN_COMMENT",
+    title: "Encryption/secret key left in commented-out code or comment",
+    severity: "HIGH",
+    sla: "7d",
+    // A comment line (// ... or * ... or # ...) that assigns an encryption/secret
+    // key to a substantial literal. The comment marker is the required context.
+    regex:
+      /(?:\/\/|\*|#)[^\n]*\b(?:encryption_?key|encryptionKey|aes_?key|secret_?key|signing_?key|master_?key)\s*[:=]\s*["'][A-Za-z0-9+/=\-_]{16,}["']/i,
+    ignore: PLACEHOLDER_RE,
+    requiredActions: [
+      "Commenting out a key does not protect it — it is still in git history. Remove the comment and rotate the key immediately.",
+      "Treat any key that has ever appeared in the repository (even commented) as compromised and re-key affected data.",
+      "Store keys in a KMS / secret manager and reference them at runtime, never inline in code or comments."
+    ]
+  },
+  {
+    id: "SECRET_DB_URL_PASSWORD_IN_TEMPLATE",
+    title: "Database URL with embedded password in .env.example / docs / template",
+    severity: "HIGH",
+    sla: "7d",
+    // Real-looking credentialed DB URL. The scan-block below restricts this to
+    // example/template/docs files, which is where committed real passwords in a
+    // "template" are especially dangerous (developers copy them verbatim).
+    regex:
+      /(?:postgres|postgresql|mysql|mongodb(?:\+srv)?|redis|mssql|amqp):\/\/[^:\s'"]+:[^@\s'"]{6,}@[^\s'"/]+/,
+    ignore:
+      /:(?:password|pass|pwd|secret|user|username|host|dbname|xxxx|\*+|<[^>]+>|changeme|example|yourpassword)@/i,
+    requiredActions: [
+      "Replace the embedded password in the template/example/docs with a placeholder (e.g. postgres://user:PASSWORD@host/db).",
+      "If the credential is real, rotate it immediately — templates are frequently the first thing an attacker greps for.",
+      "Document the required environment variable name instead of a working connection string."
+    ]
+  },
+  {
+    id: "SECRET_FIREBASE_WEB_CONFIG",
+    title: "Firebase Web API config key present (verify it is not used for privileged auth)",
+    severity: "MEDIUM",
+    sla: "30d",
+    // Firebase web config object: apiKey alongside an *.firebaseapp.com authDomain
+    // or a firebase projectId. Web apiKeys are not secret by design, but they are
+    // routinely misused (e.g. treated as an auth secret, or paired with permissive
+    // rules), so this is a MEDIUM advisory rather than CRITICAL.
+    regex:
+      /apiKey\s*:\s*["']AIza[0-9A-Za-z\-_]{35}["'][\s\S]{0,200}?(?:authDomain\s*:\s*["'][^"']+\.firebaseapp\.com["']|projectId\s*:\s*["'][^"']+["'])/,
+    requiredActions: [
+      "A Firebase Web API key is not a secret, but it must be protected by Firebase Security Rules and App Check — do not rely on the key itself for authorization.",
+      "Restrict the key in Google Cloud Console (HTTP referrer / API restrictions) so it can only call the intended Firebase services.",
+      "Ensure Firestore/Storage/Realtime Database rules enforce per-user access; never use the web config key as a server-side admin credential."
+    ]
+  }
+];
+
+/** Files that count as env-example / docs / template surfaces. */
+const TEMPLATE_FILE_RE =
+  /(?:\.env\.(?:example|sample|template|dist)|\.env-example|\.env\.local\.example|(?:^|\/)(?:docs?|examples?|templates?)\/|readme|\.mdx?$|\.dist$|\.sample$|\.template$)/i;
+
 export async function checkSecrets(_: { changedFiles: string[] }): Promise<Finding[]> {
   const findings: Finding[] = [];
 
@@ -188,6 +362,9 @@ export async function checkSecrets(_: { changedFiles: string[] }): Promise<Findi
   // Track concatenation hits separately
   const concatHits: string[] = [];
 
+  // Track classified-secret hits (id -> evidence lines)
+  const classifiedHits = new Map<string, string[]>();
+
   for (const file of files) {
     let text = "";
     try {
@@ -213,6 +390,25 @@ export async function checkSecrets(_: { changedFiles: string[] }): Promise<Findi
       if (existing.length < 5) {
         existing.push(hit);
         hitsByPattern.set(pattern.name, existing);
+      }
+    }
+
+    // ------------------------------------------------------------------
+    // Classified secret scan (specific id / severity / SLA per pattern)
+    // ------------------------------------------------------------------
+    for (const cs of CLASSIFIED_SECRETS) {
+      const m = cs.regex.exec(text);
+      if (!m || m.index === undefined) continue;
+      // The DB-URL-in-template rule only fires inside example/docs/template files.
+      if (cs.id === "SECRET_DB_URL_PASSWORD_IN_TEMPLATE" && !TEMPLATE_FILE_RE.test(file)) continue;
+      const preview = previewLine(text, m.index);
+      if (cs.context && !cs.context.test(preview)) continue;
+      if (cs.ignore && cs.ignore.test(preview)) continue;
+      const redacted = preview.replace(cs.regex, "[REDACTED]");
+      const existing = classifiedHits.get(cs.id) ?? [];
+      if (existing.length < 5) {
+        existing.push(`${file}: ${redacted}`);
+        classifiedHits.set(cs.id, existing);
       }
     }
 
@@ -308,6 +504,23 @@ export async function checkSecrets(_: { changedFiles: string[] }): Promise<Findi
         "Store the secret in your cloud secret manager (AWS Secrets Manager, GCP Secret Manager, Azure Key Vault, HashiCorp Vault, Doppler, or 1Password Secrets Automation).",
         "Add a pre-commit hook or CI check with gitleaks to prevent future secret commits."
       ]
+    });
+  }
+
+  // ------------------------------------------------------------------
+  // Emit findings for classified secret hits
+  // ------------------------------------------------------------------
+  for (const cs of CLASSIFIED_SECRETS) {
+    const hits = classifiedHits.get(cs.id);
+    if (!hits || hits.length === 0) continue;
+    findings.push({
+      id: cs.id,
+      title: cs.title,
+      severity: cs.severity,
+      sla: cs.sla,
+      files: [...new Set(hits.map((h) => h.split(":")[0]).filter(Boolean))],
+      evidence: hits,
+      requiredActions: cs.requiredActions
     });
   }
 

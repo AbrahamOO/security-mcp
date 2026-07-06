@@ -337,6 +337,70 @@ const TF_AUTO_APPROVE_PATTERN =
   String.raw`terraform\s+destroy\s+.*-auto-approve|` +
   String.raw`-auto-approve`;
 
+// ===========================================================================
+// Round 4 — cloud audit/logging blind spots and IAM privilege-escalation
+// primitives that need cross-resource presence checks (companion-style) or
+// context anchors, which the JSON pack's single-block matcher cannot express.
+// ===========================================================================
+
+// VPC Flow Logs: a VPC/subnet is declared but no aws_flow_log resource anywhere.
+const TF_VPC_RESOURCE_PATTERN =
+  String.raw`resource\s+"aws_vpc"|` +
+  String.raw`resource\s+"aws_subnet"`;
+const TF_FLOW_LOG_RESOURCE_PATTERN = String.raw`resource\s+"aws_flow_log"`;
+const TF_FLOW_LOG_TRAFFIC_PATTERN = String.raw`traffic_type\s*=\s*"ALL"`;
+
+// CloudTrail entirely absent — resource type never declared in the repo.
+const TF_CLOUDTRAIL_RESOURCE_PATTERN = String.raw`resource\s+"aws_cloudtrail"`;
+const TF_CLOUDTRAIL_MULTIREGION_PATTERN =
+  String.raw`is_multi_region_trail\s*=\s*true`;
+
+// CloudWatch log retention explicitly set to 0 (never expires) — audit trail
+// grows unbounded and can be truncated, distinct from a missing attribute.
+const TF_LOG_RETENTION_ZERO_PATTERN =
+  String.raw`retention_in_days\s*=\s*0\b|` +
+  String.raw`"RetentionInDays"\s*:\s*0\b`;
+
+// IAM privilege-escalation primitives in HCL policy documents (aws_iam_policy_document).
+// PassRole with wildcard resource, or self-mutating policy-version actions.
+const TF_IAM_PASSROLE_HCL_PATTERN =
+  String.raw`"iam:PassRole"|` +
+  String.raw`actions\s*=\s*\[\s*"iam:PassRole"|` +
+  String.raw`actions\s*=\s*\[[^\]]*"iam:PassRole"`;
+const TF_IAM_ESCALATE_ACTION_PATTERN =
+  String.raw`"iam:CreatePolicyVersion"|` +
+  String.raw`"iam:SetDefaultPolicyVersion"|` +
+  String.raw`"iam:PutUserPolicy"|` +
+  String.raw`"iam:AttachUserPolicy"|` +
+  String.raw`"iam:CreateAccessKey"|` +
+  String.raw`"sts:AssumeRole"\s*,?\s*"iam:PassRole"`;
+
+// AssumeRole trust policy open to the whole world (any AWS principal).
+const TF_ASSUMEROLE_STAR_PATTERN =
+  String.raw`"AWS"\s*:\s*"\*"|` +
+  String.raw`identifiers\s*=\s*\[\s*"\*"\s*\]|` +
+  String.raw`"Principal"\s*:\s*"\*"`;
+
+// Lambda environment block with a plaintext-looking secret literal.
+const TF_LAMBDA_ENV_SECRET_PATTERN =
+  String.raw`(?:PASSWORD|SECRET|API_?KEY|TOKEN|PRIVATE_KEY)[A-Z_]*\s*=\s*"[^"$\s{][^"\n]{3}`;
+
+// SQS/SNS unencrypted: queue/topic resource with no KMS/SSE attribute at all.
+const TF_SQS_RESOURCE_PATTERN = String.raw`resource\s+"aws_sqs_queue"`;
+const TF_SNS_RESOURCE_PATTERN = String.raw`resource\s+"aws_sns_topic"`;
+const TF_QUEUE_ENC_PATTERN =
+  String.raw`kms_master_key_id\s*=|` +
+  String.raw`sqs_managed_sse_enabled\s*=\s*true`;
+const TF_TOPIC_ENC_PATTERN = String.raw`kms_master_key_id\s*=`;
+
+// API Gateway resource/method policy open to unauthenticated Principal "*".
+const TF_APIGW_OPEN_POLICY_PATTERN =
+  String.raw`resource\s+"aws_api_gateway_rest_api"|` +
+  String.raw`resource\s+"aws_apigatewayv2_api"`;
+const TF_APIGW_PRINCIPAL_STAR_PATTERN =
+  String.raw`"Principal"\s*:\s*"\*"|` +
+  String.raw`"Principal"\s*:\s*\{\s*"AWS"\s*:\s*"\*"`;
+
 export async function checkIac(opts: { changedFiles: string[] }): Promise<Finding[]> {
   void opts; // signature consistency; matching scans the whole repo via searchRepo
   const findings: Finding[] = [];
@@ -1459,6 +1523,205 @@ export async function checkIac(opts: { changedFiles: string[] }): Promise<Findin
         "  terraform apply tfplan",
         "Gate apply behind CI approval (environments/required reviewers); restrict who can run destroy.",
         "Avoid broad -target in committed scripts — it produces partial, drift-prone applies.",
+      ],
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Round 4: cloud audit/logging blind spots + IAM privilege escalation.
+  // Cross-resource presence checks and context-anchored matches the single
+  // JSON matcher cannot express. Each requiredActions entry is a concrete fix.
+  // -------------------------------------------------------------------------
+  const [
+    tfVpc,
+    tfFlowLog,
+    tfFlowLogTrafficAll,
+    tfCloudtrail,
+    tfCloudtrailMultiregion,
+    tfLogRetentionZero,
+    tfIamPassRoleHcl,
+    tfIamEscalateAction,
+    tfAssumeRoleStar,
+    tfLambdaEnvSecret,
+    tfSqsResource,
+    tfSnsResource,
+    tfQueueEnc,
+    tfTopicEnc,
+    tfApigwResource,
+    tfApigwPrincipalStar,
+  ] = await Promise.all([
+    searchRepo({ query: TF_VPC_RESOURCE_PATTERN, isRegex: true, maxMatches: 200 }),
+    searchRepo({ query: TF_FLOW_LOG_RESOURCE_PATTERN, isRegex: true, maxMatches: 200 }),
+    searchRepo({ query: TF_FLOW_LOG_TRAFFIC_PATTERN, isRegex: true, maxMatches: 200 }),
+    searchRepo({ query: TF_CLOUDTRAIL_RESOURCE_PATTERN, isRegex: true, maxMatches: 200 }),
+    searchRepo({ query: TF_CLOUDTRAIL_MULTIREGION_PATTERN, isRegex: true, maxMatches: 200 }),
+    searchRepo({ query: TF_LOG_RETENTION_ZERO_PATTERN, isRegex: true, maxMatches: 200 }),
+    searchRepo({ query: TF_IAM_PASSROLE_HCL_PATTERN, isRegex: true, maxMatches: 200 }),
+    searchRepo({ query: TF_IAM_ESCALATE_ACTION_PATTERN, isRegex: true, maxMatches: 200 }),
+    searchRepo({ query: TF_ASSUMEROLE_STAR_PATTERN, isRegex: true, maxMatches: 200 }),
+    searchRepo({ query: TF_LAMBDA_ENV_SECRET_PATTERN, isRegex: true, maxMatches: 200 }),
+    searchRepo({ query: TF_SQS_RESOURCE_PATTERN, isRegex: true, maxMatches: 200 }),
+    searchRepo({ query: TF_SNS_RESOURCE_PATTERN, isRegex: true, maxMatches: 200 }),
+    searchRepo({ query: TF_QUEUE_ENC_PATTERN, isRegex: true, maxMatches: 200 }),
+    searchRepo({ query: TF_TOPIC_ENC_PATTERN, isRegex: true, maxMatches: 200 }),
+    searchRepo({ query: TF_APIGW_OPEN_POLICY_PATTERN, isRegex: true, maxMatches: 200 }),
+    searchRepo({ query: TF_APIGW_PRINCIPAL_STAR_PATTERN, isRegex: true, maxMatches: 200 }),
+  ]);
+
+  // 57. VPC Flow Logs not enabled — no lateral-movement / exfil network logging.
+  //     Fire when a VPC/subnet exists but no aws_flow_log resource is present at
+  //     all, OR flow logs exist but none capture traffic_type = "ALL" (REJECT/
+  //     ACCEPT-only trails miss half the picture).
+  if (tfVpc.length > 0 && (tfFlowLog.length === 0 || tfFlowLogTrafficAll.length === 0)) {
+    findings.push({
+      id: "IAC_TF_VPC_NO_FLOW_LOGS",
+      title: "VPC/subnet defined without VPC Flow Logs capturing ALL traffic — no network telemetry to detect lateral movement or exfiltration",
+      severity: "CRITICAL",
+      evidence: ev(tfVpc),
+      requiredActions: [
+        "Attach a flow log to every VPC capturing ALL traffic:",
+        "  resource \"aws_flow_log\" \"vpc\" {",
+        "    vpc_id          = aws_vpc.main.id",
+        "    traffic_type    = \"ALL\"",
+        "    log_destination = aws_cloudwatch_log_group.flow.arn",
+        "    iam_role_arn    = aws_iam_role.flow.arn",
+        "  }",
+        "Send flow logs to a retained CloudWatch log group or S3 and alert on anomalous egress.",
+        "Verify: checkov -d . --check CKV_AWS_11 ; aws ec2 describe-flow-logs --filter Name=resource-id,Values=<vpc-id>",
+      ],
+    });
+  }
+
+  // 58. CloudTrail missing or not multi-region — control-plane API calls are not
+  //     recorded across regions, so an attacker's actions leave no audit trail.
+  if (tfCloudtrail.length === 0 || tfCloudtrailMultiregion.length === 0) {
+    // Only fire the "missing entirely" variant when other AWS Terraform is present,
+    // to avoid noise in repos with no AWS infra at all.
+    const awsInfraPresent = providers.length > 0 || tfVpc.length > 0 || tfSqsResource.length > 0 || tfSnsResource.length > 0;
+    if (awsInfraPresent) {
+      findings.push({
+        id: "IAC_TF_CLOUDTRAIL_MISSING_OR_SINGLE_REGION",
+        title: "No multi-region CloudTrail configured — API activity in other regions is unlogged, blinding incident response",
+        severity: "CRITICAL",
+        evidence: ev(tfCloudtrail.length > 0 ? tfCloudtrail : providers),
+        requiredActions: [
+          "Define an organization or account CloudTrail that is multi-region and tamper-evident:",
+          "  resource \"aws_cloudtrail\" \"main\" {",
+          "    name                          = \"org-trail\"",
+          "    s3_bucket_name                = aws_s3_bucket.trail.id",
+          "    is_multi_region_trail         = true",
+          "    enable_log_file_validation    = true",
+          "    include_global_service_events = true",
+          "    kms_key_id                    = aws_kms_key.trail.arn",
+          "  }",
+          "Deliver logs to a dedicated, access-restricted account with S3 Object Lock + MFA delete.",
+          "Verify: checkov -d . --check CKV_AWS_67 ; aws cloudtrail describe-trails --query 'trailList[].IsMultiRegionTrail'",
+        ],
+      });
+    }
+  }
+
+  // 59. CloudWatch / log group retention set to 0 (never expires). Distinct from
+  //     a *missing* retention_in_days: an explicit 0 means logs never roll off,
+  //     which both bloats cost and lets an attacker truncate/rewrite old audit data.
+  if (tfLogRetentionZero.length > 0) {
+    findings.push({
+      id: "IAC_TF_LOG_RETENTION_NEVER_EXPIRES",
+      title: "Log group retention_in_days = 0 (never expires) — audit logs are unbounded and lack an immutable, defined retention window",
+      severity: "HIGH",
+      evidence: ev(tfLogRetentionZero),
+      requiredActions: [
+        "Set an explicit, compliance-driven retention period instead of 0 (never expire):",
+        "  resource \"aws_cloudwatch_log_group\" \"app\" {",
+        "    name              = \"/app/prod\"",
+        "    retention_in_days = 365   # e.g. 365/90 per policy; never 0",
+        "    kms_key_id        = aws_kms_key.logs.arn",
+        "  }",
+        "For long-term tamper-proof retention, export to an S3 bucket with Object Lock rather than relying on unbounded CloudWatch storage.",
+        "Verify: checkov -d . --check CKV_AWS_66 ; aws logs describe-log-groups --query 'logGroups[?retentionInDays==null]'",
+      ],
+    });
+  }
+
+  // 60. IAM privilege-escalation primitives: PassRole (wildcard), self-mutating
+  //     policy-version actions, or an AssumeRole trust open to "*".
+  const iamEscalationHits = [...tfIamPassRoleHcl, ...tfIamEscalateAction, ...tfAssumeRoleStar];
+  if (iamEscalationHits.length > 0) {
+    findings.push({
+      id: "IAC_TF_IAM_PRIVILEGE_ESCALATION",
+      title: "IAM policy/trust enables privilege escalation (iam:PassRole, CreatePolicyVersion/PutUserPolicy, or AssumeRole trust to \"*\")",
+      severity: "CRITICAL",
+      evidence: ev(iamEscalationHits),
+      requiredActions: [
+        "Scope iam:PassRole to specific role ARNs with an iam:PassedToService condition — never pass to \"*\":",
+        "  statement {",
+        "    actions   = [\"iam:PassRole\"]",
+        "    resources = [aws_iam_role.task.arn]",
+        "    condition { test = \"StringEquals\"; variable = \"iam:PassedToService\"; values = [\"ecs-tasks.amazonaws.com\"] }",
+        "  }",
+        "Remove self-mutating actions (iam:CreatePolicyVersion, iam:SetDefaultPolicyVersion, iam:PutUserPolicy, iam:AttachUserPolicy, iam:CreateAccessKey) unless the principal is a trusted IAM admin.",
+        "Restrict every assume_role_policy trust to a specific principal ARN — never identifiers = [\"*\"] or \"AWS\":\"*\"; add an aws:SourceAccount/sts:ExternalId condition for cross-account roles.",
+        "Verify escalation paths: aws accessanalyzer create-finding ; checkov -d . --check CKV_AWS_1,CKV_AWS_111",
+      ],
+    });
+  }
+
+  // 61. Lambda environment block carrying a plaintext secret literal.
+  if (tfLambdaEnvSecret.length > 0) {
+    findings.push({
+      id: "IAC_TF_LAMBDA_ENV_PLAINTEXT_SECRET",
+      title: "Lambda environment variable holds a plaintext secret literal — value is readable via GetFunctionConfiguration and stored unencrypted in state",
+      severity: "HIGH",
+      evidence: ev(tfLambdaEnvSecret),
+      requiredActions: [
+        "Remove the plaintext credential from environment{} and rotate it immediately.",
+        "Fetch the secret at runtime from Secrets Manager / SSM SecureString using the function's execution role:",
+        "  # in code: secretsmanager.get_secret_value(SecretId=\"prod/app\")",
+        "Grant the role only secretsmanager:GetSecretValue on that one secret ARN.",
+        "Set kms_key_arn on the aws_lambda_function so any remaining environment variables are encrypted with a customer-managed key.",
+        "Verify: checkov -d . --check CKV_AWS_45 ; terraform plan -no-color | grep -iE 'password|secret|token'",
+      ],
+    });
+  }
+
+  // 62. SQS queue / SNS topic with no server-side encryption attribute at all.
+  const sqsUnencrypted = tfSqsResource.length > 0 && tfQueueEnc.length === 0;
+  const snsUnencrypted = tfSnsResource.length > 0 && tfTopicEnc.length === 0;
+  if (sqsUnencrypted || snsUnencrypted) {
+    findings.push({
+      id: "IAC_TF_SQS_SNS_UNENCRYPTED",
+      title: "SQS queue or SNS topic has no server-side encryption (no kms_master_key_id / SSE) — message payloads are stored unencrypted at rest",
+      severity: "HIGH",
+      evidence: ev(sqsUnencrypted ? tfSqsResource : tfSnsResource),
+      requiredActions: [
+        "Encrypt the SQS queue with a customer-managed KMS key (or SQS-managed SSE):",
+        "  resource \"aws_sqs_queue\" \"q\" {",
+        "    kms_master_key_id                 = aws_kms_key.sqs.id",
+        "    kms_data_key_reuse_period_seconds = 300",
+        "  }",
+        "Encrypt the SNS topic with a KMS key:",
+        "  resource \"aws_sns_topic\" \"t\" { kms_master_key_id = aws_kms_key.sns.id }",
+        "Prefer a customer-managed key over the aws/sqs / aws/sns default so key policy and rotation are controlled.",
+        "Verify: checkov -d . --check CKV_AWS_27,CKV_AWS_26 ; trivy config .",
+      ],
+    });
+  }
+
+  // 63. API Gateway resource policy open to unauthenticated Principal "*".
+  if (tfApigwResource.length > 0 && tfApigwPrincipalStar.length > 0) {
+    findings.push({
+      id: "IAC_TF_APIGW_PUBLIC_RESOURCE_POLICY",
+      title: "API Gateway resource policy uses Principal \"*\" — the API is invocable by any unauthenticated caller on the internet",
+      severity: "MEDIUM",
+      evidence: ev(tfApigwPrincipalStar),
+      requiredActions: [
+        "Replace Principal \"*\" in the API Gateway resource policy with specific account/role ARNs, a VPC-endpoint condition, or an org-id condition:",
+        "  statement {",
+        "    principals { type = \"AWS\"; identifiers = [\"arn:aws:iam::111122223333:root\"] }",
+        "    condition { test = \"StringEquals\"; variable = \"aws:SourceVpce\"; values = [aws_vpc_endpoint.api.id] }",
+        "  }",
+        "Enforce request authentication with an IAM / Cognito / Lambda authorizer instead of an open resource policy.",
+        "Verify: checkov -d . --check CKV_AWS_59 ; aws apigateway get-rest-api --rest-api-id <id> --query policy",
       ],
     });
   }

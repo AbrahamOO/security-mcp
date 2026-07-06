@@ -128,5 +128,12 @@
   "exceptions": {
     "require_ticket": true,
     "approval_roles": ["SecurityLead", "GRC", "CTO"]
+  },
+  "model_budget": {
+    "_comment": "Max-power-by-default posture. Security-critical reasoning tasks route to the advanced tier automatically; downgrade is OPT-OUT only. force_standard_tier_for lists tasks to force down to standard (empty = every advanced task runs at full power). Protected tasks (exploit_chain, pentest, ai_redteam, crypto_analysis, auth_analysis, threat_model, remediation) are NEVER downgraded. The budget safety valve downgrades NON-protected advanced tasks to standard once spend utilization reaches downgrade_threshold_pct.",
+    "max_total_cost_usd": 5,
+    "downgrade_threshold_pct": 80,
+    "force_standard_tier_for": [],
+    "advanced_task_preference": []
   }
 }

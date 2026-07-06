@@ -1306,6 +1306,94 @@ async function checkComposeBuildArgsSecret(): Promise<Finding[]> {
   }];
 }
 
+// ---------------------------------------------------------------------------
+// COPY/ADD of the .git directory into the image — leaks full repository
+// history, previously-committed secrets, and any deploy/SSH keys ever staged.
+// ---------------------------------------------------------------------------
+async function checkCopyGitDir(): Promise<Finding[]> {
+  // Matches: COPY .git ..., COPY ./.git ..., ADD path/.git ..., COPY --from=x .git
+  // Requires .git as a path component (start, ./, or after a slash) so we don't
+  // catch .gitignore / .github / arbitrary "git" substrings.
+  const matches = (await searchRepo({
+    query: String.raw`^\s*(?:COPY|ADD)\b[^\n]*\.git(?:/|\s|"|$)`,
+    isRegex: true,
+    maxMatches: MAX,
+  })).filter((m) => isDockerfile(m.file) && !/\.git(?:ignore|attributes|hub|modules|keep)/i.test(m.preview));
+  if (matches.length === 0) return [];
+  return [{
+    id: "DOCKER_COPY_GIT_DIR",
+    title:
+      "COPY/ADD of the .git directory into the image — leaks full repository history, rotated secrets and deploy keys ever committed (CWE-538)",
+    severity: "CRITICAL",
+    evidence: ev(matches),
+    requiredActions: [
+      "Never COPY/ADD .git into an image; copy only the built artifacts or source needed at runtime.",
+      "Add .git to .dockerignore, and rotate any credentials that may have been present in the repository history.",
+    ],
+    sla: "24h",
+  }];
+}
+
+// ---------------------------------------------------------------------------
+// Plaintext transport at build time — `git clone http://` (no TLS) and adding
+// cleartext apt sources. Both are MITM-injectable into the image (CWE-494/319).
+// (pip/npm http indexes are covered separately by DOCKER_PIP_INSECURE_INDEX /
+//  DOCKER_NPM_INSECURE; curl|sh is DOCKER_RUN_PIPE_TO_SHELL.)
+// ---------------------------------------------------------------------------
+async function checkPlaintextBuildFetch(): Promise<Finding[]> {
+  const gitClone = (await searchRepo({
+    query: String.raw`git\s+clone\s[^\n]*\bhttp://\S`,
+    isRegex: true,
+    maxMatches: MAX,
+  })).filter((m) => isDockerfile(m.file) || isCompose(m.file));
+  // apt source added over http:// — echo/add-apt-repository/sources.list writes.
+  const aptHttp = (await searchRepo({
+    query: String.raw`(?:add-apt-repository|sources\.list\S*|deb)\s[^\n]*\bhttp://\S`,
+    isRegex: true,
+    maxMatches: MAX,
+  })).filter((m) => isDockerfile(m.file));
+  const matches = [...gitClone, ...aptHttp];
+  if (matches.length === 0) return [];
+  return [{
+    id: "DOCKER_PLAINTEXT_BUILD_FETCH",
+    title:
+      "Build fetches code/packages over cleartext http:// (git clone / apt source) — a network attacker can MITM and inject code into the image (CWE-319)",
+    severity: "HIGH",
+    evidence: ev(matches),
+    requiredActions: [
+      "Use https:// (or git+ssh) for all clones and apt/repository sources, and pin to a commit/release.",
+      "For apt, use signed https mirrors with GPG-verified keys; never add cleartext deb sources during the build.",
+    ],
+    sla: "7d",
+  }];
+}
+
+// ---------------------------------------------------------------------------
+// EXPOSE of sensitive service ports (SMTP 25, Telnet 23, MySQL 3306,
+// Postgres 5432) — these back-end/admin services should never be published
+// from an app container (defense-in-depth; EXPOSE 22 handled separately).
+// ---------------------------------------------------------------------------
+async function checkExposeSensitivePorts(): Promise<Finding[]> {
+  const matches = (await searchRepo({
+    query: String.raw`^\s*EXPOSE\s[^\n]*\b(?:23|25|3306|5432)\b`,
+    isRegex: true,
+    maxMatches: MAX,
+  })).filter((m) => isDockerfile(m.file));
+  if (matches.length === 0) return [];
+  return [{
+    id: "DOCKER_EXPOSE_SENSITIVE_PORT",
+    title:
+      "Dockerfile EXPOSEs a sensitive service port (23 telnet / 25 SMTP / 3306 MySQL / 5432 Postgres) — databases and admin services should not be published from an app image (CWE-668)",
+    severity: "MEDIUM",
+    evidence: ev(matches),
+    requiredActions: [
+      "Remove EXPOSE for database/admin ports; run those services in dedicated containers reachable only over an internal network.",
+      "If the port must be reachable, bind it to a private network and require authentication + TLS; never publish it to 0.0.0.0.",
+    ],
+    sla: "30d",
+  }];
+}
+
 export async function checkDockerDeep(opts: { changedFiles: string[] }): Promise<Finding[]> {
   void opts;
   void DOCKERFILE_RE;
@@ -1348,6 +1436,10 @@ export async function checkDockerDeep(opts: { changedFiles: string[] }): Promise
     checkComposeTmpfsExec(),
     checkComposeDosAndRestart(),
     checkComposeBuildArgsSecret(),
+    // Round 3 — history/transport/port leaks
+    checkCopyGitDir(),
+    checkPlaintextBuildFetch(),
+    checkExposeSensitivePorts(),
   ]);
   const findings: Finding[] = [];
   for (const r of settled) {

@@ -392,6 +392,244 @@ async function checkNpmIgnoreScriptsCi(): Promise<Finding[]> {
 	return findings;
 }
 
+// Workflow- or job-level `env:` that holds a secret. Such env vars are injected
+// into every step of the job (and printed if a step runs `env`/`set`), so a
+// single malicious or debug step leaks the secret. Step-level env is narrower
+// and handled elsewhere; here we scope to top-level (col 0) or job-level env
+// blocks that are NOT inside a `steps:` list item.
+async function checkWorkflowLevelSecretEnv(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+	try {
+		const workflowFiles = await fg(["**/.github/workflows/*.yml", "**/.github/workflows/*.yaml"], {
+			dot: true,
+			ignore: ["**/node_modules/**", "**/.git/**"]
+		});
+		const secretRe = /\$\{\{\s*secrets\./;
+		const flaggedFiles: string[] = [];
+		for (const file of workflowFiles) {
+			let content: string;
+			try {
+				content = await readFileSafe(file);
+			} catch {
+				continue;
+			}
+			const lines = content.split("\n");
+			let inStepsList = false;
+			for (let i = 0; i < lines.length; i++) {
+				const line = lines[i];
+				const indent = line.search(/\S/);
+				if (indent === -1) continue;
+				// Track whether we've entered a `steps:` block (step-level env is out of scope).
+				if (/^\s*steps:\s*$/.test(line)) { inStepsList = true; continue; }
+				// A new job key (2-space indented `name:` under jobs) or top-level key resets step context.
+				if (indent <= 2 && !/^\s*-/.test(line)) inStepsList = false;
+				// Match an `env:` block header that is workflow-level (col 0) or job-level (indent <= 4)
+				// and NOT part of a step list item.
+				if (/^\s*env:\s*$/.test(line) && indent <= 4 && !inStepsList) {
+					// Scan the more-indented child block for a secret reference.
+					for (let j = i + 1; j < lines.length; j++) {
+						const child = lines[j];
+						const childIndent = child.search(/\S/);
+						if (childIndent === -1) continue;
+						if (childIndent <= indent) break;
+						if (secretRe.test(child)) { flaggedFiles.push(file); break; }
+					}
+				}
+				if (flaggedFiles.includes(file)) break;
+			}
+		}
+		if (flaggedFiles.length > 0) {
+			findings.push({
+				id: "CI_WORKFLOW_LEVEL_SECRET_ENV",
+				title: "Secret assigned in a workflow- or job-level env: block — exposed to every step and any command that prints the environment (CWE-532)",
+				severity: "CRITICAL",
+				files: flaggedFiles.slice(0, 10),
+				requiredActions: [
+					"Move `${{ secrets.* }}` into the specific step's `env:` that needs it, never a workflow- or job-level env block.",
+					"Job/workflow-level env is inherited by every step; a single `env`/`printenv`/`set -x` debug line (or a compromised action) leaks the value into logs.",
+					"Prefer reading secrets directly in the one step that needs them and scope permissions to that step."
+				]
+			});
+		}
+	} catch (err) {
+		console.warn("[checkWorkflowLevelSecretEnv] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));
+	}
+	return findings;
+}
+
+// A step writes a secret into a step `outputs`/`set-output` value, or a
+// `>> $GITHUB_OUTPUT` / `>> $GITHUB_ENV` line derived from a secret. Step
+// outputs persist across the job and are frequently logged or forwarded to
+// downstream (possibly third-party) jobs, defeating secret masking. (Direct
+// `echo ${{ secrets.* }}` is already covered by CI_SECRET_ECHO.)
+async function checkSecretInStepOutput(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+	try {
+		const workflowFiles = await fg(["**/.github/workflows/*.yml", "**/.github/workflows/*.yaml"], {
+			dot: true,
+			ignore: ["**/node_modules/**", "**/.git/**"]
+		});
+		// `::set-output ...secrets.` (legacy), or writing a secret into $GITHUB_OUTPUT/$GITHUB_ENV,
+		// or an `outputs:` mapping value that references a secret.
+		const setOutputRe = /::set-output[^\n]*\$\{\{\s*secrets\./;
+		const ghOutputRe = /\$\{\{\s*secrets\.[^\n]*>>\s*"?\$?\{?GITHUB_(?:OUTPUT|ENV)/;
+		const outputsMapRe = /^\s*outputs:\s*$/;
+		const secretRe = /\$\{\{\s*secrets\./;
+		const flaggedFiles: string[] = [];
+		for (const file of workflowFiles) {
+			let content: string;
+			try {
+				content = await readFileSafe(file);
+			} catch {
+				continue;
+			}
+			const lines = content.split("\n");
+			let hit = false;
+			for (let i = 0; i < lines.length && !hit; i++) {
+				const line = lines[i];
+				if (setOutputRe.test(line) || ghOutputRe.test(line)) { hit = true; break; }
+				// `outputs:` block whose child value references a secret.
+				if (outputsMapRe.test(line)) {
+					const indent = line.search(/\S/);
+					for (let j = i + 1; j < lines.length; j++) {
+						const child = lines[j];
+						const childIndent = child.search(/\S/);
+						if (childIndent === -1) continue;
+						if (childIndent <= indent) break;
+						if (secretRe.test(child)) { hit = true; break; }
+					}
+				}
+			}
+			if (hit) flaggedFiles.push(file);
+		}
+		if (flaggedFiles.length > 0) {
+			findings.push({
+				id: "CI_SECRET_IN_STEP_OUTPUT",
+				title: "Secret written to a step output / $GITHUB_OUTPUT / $GITHUB_ENV — persists across the job, is logged and forwarded to downstream steps (CWE-532)",
+				severity: "CRITICAL",
+				files: flaggedFiles.slice(0, 10),
+				requiredActions: [
+					"Never place `${{ secrets.* }}` into a step `outputs`, `::set-output`, `$GITHUB_OUTPUT` or `$GITHUB_ENV` value.",
+					"Step outputs are stored unmasked and passed to later (potentially third-party) steps/jobs, defeating GitHub's log masking.",
+					"Read the secret directly in the one step that consumes it via `env:`; if data must cross steps, derive a non-sensitive value instead."
+				]
+			});
+		}
+	} catch (err) {
+		console.warn("[checkSecretInStepOutput] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));
+	}
+	return findings;
+}
+
+// A secret or the GITHUB_TOKEN is passed as an input (`with:`) to a third-party
+// action pinned by owner/repo. The action's code (which the maintainer controls)
+// then sees the token/secret in plaintext — a compromised or malicious action
+// version exfiltrates it. Official `actions/*` and local `./` actions are excluded.
+async function checkSecretToThirdPartyAction(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+	try {
+		const workflowFiles = await fg(["**/.github/workflows/*.yml", "**/.github/workflows/*.yaml"], {
+			dot: true,
+			ignore: ["**/node_modules/**", "**/.git/**"]
+		});
+		const usesRe = /^\s*(?:-\s*)?uses:\s*([a-zA-Z0-9_.-]+)\/[a-zA-Z0-9_.-]+@/;
+		const withRe = /^\s*with:\s*$/;
+		const secretRe = /\$\{\{\s*(?:secrets\.|github\.token|secrets\.GITHUB_TOKEN)/;
+		const flaggedFiles: string[] = [];
+		for (const file of workflowFiles) {
+			let content: string;
+			try {
+				content = await readFileSafe(file);
+			} catch {
+				continue;
+			}
+			const lines = content.split("\n");
+			for (let i = 0; i < lines.length; i++) {
+				const m = lines[i].match(usesRe);
+				if (!m) continue;
+				const owner = m[1].toLowerCase();
+				// Skip first-party GitHub-maintained orgs and local actions.
+				if (owner === "actions" || owner === "github" || owner === "docker") continue;
+				const usesIndent = lines[i].search(/\S/);
+				// Look at the sibling `with:` block belonging to this step.
+				for (let j = i + 1; j < lines.length; j++) {
+					const child = lines[j];
+					const childIndent = child.search(/\S/);
+					if (childIndent === -1) continue;
+					// Stop when we leave this step (dedent to/under the `uses:` indent and hit a new key/list item).
+					if (childIndent < usesIndent) break;
+					if (childIndent <= usesIndent && /^\s*-/.test(child)) break;
+					if (withRe.test(child) || secretRe.test(child)) {
+						if (secretRe.test(child)) { flaggedFiles.push(file); break; }
+					}
+				}
+				if (flaggedFiles.includes(file)) break;
+			}
+		}
+		if (flaggedFiles.length > 0) {
+			findings.push({
+				id: "CI_SECRET_TO_THIRD_PARTY_ACTION",
+				title: "Secret or GITHUB_TOKEN passed as input to a third-party (non-actions/*) action — the action's code can exfiltrate it (CWE-522)",
+				severity: "HIGH",
+				files: flaggedFiles.slice(0, 10),
+				requiredActions: [
+					"Avoid handing secrets/GITHUB_TOKEN to third-party actions; if unavoidable, pin the action to a full 40-char commit SHA and audit that version.",
+					"A compromised or malicious action release receives the plaintext secret and can exfiltrate it to an attacker.",
+					"Scope the token with the minimum `permissions:` and prefer official first-party actions or a vetted, self-hosted fork."
+				]
+			});
+		}
+	} catch (err) {
+		console.warn("[checkSecretToThirdPartyAction] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));
+	}
+	return findings;
+}
+
+// Self-hosted runner in a workflow triggered by `pull_request` (fork PRs). On a
+// public repo this lets an untrusted contributor run arbitrary code on your
+// runner. This is a stronger, HIGH-severity signal than the generic
+// CI_SELF_HOSTED_RUNNER (MEDIUM) because it pairs the runner with a fork trigger.
+async function checkSelfHostedPullRequest(): Promise<Finding[]> {
+	const findings: Finding[] = [];
+	try {
+		const workflowFiles = await fg(["**/.github/workflows/*.yml", "**/.github/workflows/*.yaml"], {
+			dot: true,
+			ignore: ["**/node_modules/**", "**/.git/**"]
+		});
+		const selfHostedRe = /runs-on:\s*(?:\[[^\]]*self-hosted|self-hosted)/;
+		// `pull_request:` trigger but not only `pull_request_target:`
+		const prTriggerRe = /^\s*pull_request:\s*$|^\s*pull_request:\s*\n|on:\s*\[?[^\]\n]*\bpull_request\b/m;
+		const flaggedFiles: string[] = [];
+		for (const file of workflowFiles) {
+			let content: string;
+			try {
+				content = await readFileSafe(file);
+			} catch {
+				continue;
+			}
+			if (selfHostedRe.test(content) && prTriggerRe.test(content)) {
+				flaggedFiles.push(file);
+			}
+		}
+		if (flaggedFiles.length > 0) {
+			findings.push({
+				id: "CI_SELF_HOSTED_PR_TRIGGER",
+				title: "Self-hosted runner in a pull_request-triggered workflow — fork PRs can execute arbitrary code on your runner (CWE-829)",
+				severity: "HIGH",
+				files: flaggedFiles.slice(0, 10),
+				requiredActions: [
+					"Do not run `pull_request`-triggered jobs from forks on self-hosted runners; use GitHub-hosted runners for untrusted code.",
+					"If self-hosted is required, gate fork PRs behind an approval (`environment` protection or a manual `workflow_dispatch`) and make runners ephemeral/isolated.",
+					"An attacker's PR runs with your runner's local access (network, filesystem, cached credentials)."
+				]
+			});
+		}
+	} catch (err) {
+		console.warn("[checkSelfHostedPullRequest] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));
+	}
+	return findings;
+}
+
 export async function runCiPipelineChecks(_opts: { changedFiles: string[] }): Promise<Finding[]> {
 	const findings: Finding[] = [
 		...await checkGateStepPresent(_opts.changedFiles)
@@ -542,7 +780,11 @@ export async function runCiPipelineChecks(_opts: { changedFiles: string[] }): Pr
 		checkDownloadArtifactNoVerify(),
 		checkGithubTokenWriteAll(),
 		checkForkSecretExposure(),
-		checkNpmIgnoreScriptsCi()
+		checkNpmIgnoreScriptsCi(),
+		checkWorkflowLevelSecretEnv(),
+		checkSecretInStepOutput(),
+		checkSecretToThirdPartyAction(),
+		checkSelfHostedPullRequest()
 	]);
 	findings.push(...additional.flat());
 

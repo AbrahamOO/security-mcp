@@ -496,6 +496,44 @@ async function checkWildcardDependencyVersion(): Promise<Finding | null> {
 /**
  * CWE-494: .npmrc registry pointing to a non-HTTPS or unknown/untrusted source.
  */
+/**
+ * CWE-494: an install command that actively DISABLES supply-chain integrity
+ * checks — `npm install --no-verify`, forcing lifecycle scripts back on with
+ * `--no-ignore-scripts` / `ignore-scripts=false`, skipping the lockfile with
+ * `--no-package-lock`, or overriding to an inline http registry in a build/CI
+ * script. Distinct from NPMRC_UNTRUSTED_REGISTRY (which only flags .npmrc URLs)
+ * and from the lifecycle-script checks; here the danger is a switch that turns
+ * OFF a protection the project otherwise has.
+ */
+async function checkInstallIntegrityBypass(): Promise<Finding | null> {
+  // npm/yarn/pnpm install with an integrity-weakening flag.
+  const flagHits = await allSearch(
+    String.raw`(?:npm|yarn|pnpm)\s+(?:install|add|i|ci)\b[^\n]*(?:--no-verify|--no-ignore-scripts|--no-package-lock|--no-frozen-lockfile|--registry[=\s]+http://|--registry[=\s]+http\b)`
+  );
+  // Explicitly re-enabling lifecycle scripts in an rc/config (ignore-scripts=false).
+  const rcHits = (await allSearch(String.raw`ignore-scripts\s*=\s*false`)).filter(
+    (h) => h.file.endsWith(".npmrc") || h.file.endsWith(".yarnrc") || h.file.endsWith(".yarnrc.yml")
+  );
+  // Scope flag hits to build/CI/script contexts (avoid docs/lockfiles).
+  const flagScoped = flagHits.filter(
+    (h) => !/\.(?:md|lock|txt|rst)$/i.test(h.file) && !/package-lock\.json$/i.test(h.file)
+  );
+  const hits = [...flagScoped, ...rcHits];
+  if (!hits.length) return null;
+  return {
+    id: "INSTALL_INTEGRITY_BYPASS",
+    title: "Package install explicitly disables integrity protection (--no-verify / --no-ignore-scripts / --no-package-lock / http registry / ignore-scripts=false) — turns off supply-chain safeguards at install time (CWE-494)",
+    severity: "CRITICAL",
+    evidence: toEvidence(hits),
+    files: toFiles(hits),
+    requiredActions: [
+      "Remove flags that weaken install integrity: use `npm ci` with a committed lockfile, keep `ignore-scripts=true`, and never pass `--no-verify`/`--no-package-lock`.",
+      "CWE-494 / ATT&CK T1195 — disabling checksum verification, lockfiles, or re-enabling lifecycle scripts lets a compromised dependency execute code or be swapped at install.",
+      "Pin the official HTTPS registry (registry=https://registry.npmjs.org) and enforce these settings in a committed, CI-verified .npmrc."
+    ]
+  };
+}
+
 async function checkNpmrcUntrustedRegistry(): Promise<Finding | null> {
   const hits = await allSearch(
     String.raw`registry\s*=\s*(?!https://registry\.npmjs\.org)(?!https://registry\.yarnpkg\.com)http`
@@ -856,6 +894,7 @@ export async function checkSupplyChainDeep(_opts: { changedFiles: string[] }): P
       checkPostinstallNetworkRequest(),
       checkWildcardDependencyVersion(),
       checkNpmrcUntrustedRegistry(),
+      checkInstallIntegrityBypass(),
       checkChildProcessExecShell(),
       checkWeakCryptoHash(),
       checkHardcodedIpAddress(),

@@ -800,5 +800,91 @@ export async function checkGitOps(_opts: { changedFiles: string[] }): Promise<Fi
     });
   }
 
+  // ---- Round 3: default-project auto-prune, Flux validation, SSH host key ----
+
+  const [
+    fluxKustomizeValidationOff, // Flux Kustomization validation: none
+    argoRepoSshUrl, // repo url: git+ssh:// / ssh:// / git@host
+    argoRepoKnownHosts, // sshKnownHosts / knownHosts configured
+    argoSkipDryRun, // SkipDryRunOnMissingResource=true
+  ] = await Promise.all([
+    searchRepo({ query: String.raw`validation\s*:\s*['"]?none`, isRegex: true, maxMatches: MAX }),
+    searchRepo({ query: String.raw`(?:url|repoURL)\s*:\s*['"]?(?:git\+ssh://|ssh://|git@)`, isRegex: true, maxMatches: MAX }),
+    searchRepo({ query: String.raw`sshKnownHosts|known_hosts|knownHosts|ssh_known_hosts`, isRegex: true, maxMatches: MAX }),
+    searchRepo({ query: String.raw`SkipDryRunOnMissingResource\s*=\s*true`, isRegex: true, maxMatches: MAX }),
+  ]);
+
+  // 42. Default AppProject combined with automated prune — no guardrails on a
+  // destructive, unrestricted controller: a bad push can delete/replace anything.
+  if (argoProjectDefault.length > 0 && argoPrune.length > 0) {
+    findings.push({
+      id: "ARGOCD_DEFAULT_PROJECT_AUTOPRUNE",
+      title: "ArgoCD Application uses the 'default' AppProject AND automated.prune: true — an unrestricted project that auto-deletes resources; a single bad manifest can wipe or replace anything in-cluster (CWE-732)",
+      severity: "CRITICAL",
+      evidence: evidence([...argoProjectDefault, ...argoPrune]),
+      requiredActions: [
+        "Bind the Application to a dedicated, restricted AppProject (explicit sourceRepos/destinations/clusterResourceWhitelist) instead of 'default'.",
+        "Do not enable automated.prune on an unrestricted project; if prune is required, gate it behind a signed, protected, review-required source.",
+        "Set a clusterResourceBlacklist and destination allowlist so auto-prune cannot delete critical or cluster-scoped resources.",
+        "Require PR review + CODEOWNERS on manifests before auto-sync reconciles them."
+      ],
+      sla: "24h"
+    });
+  }
+
+  // 43. Flux Kustomization with validation disabled — manifests apply with no
+  // client/server schema or admission validation, letting malformed/malicious
+  // resources through.
+  if (fluxKustomizeValidationOff.length > 0 && fluxKustomization.length > 0) {
+    findings.push({
+      id: "FLUX_KUSTOMIZATION_VALIDATION_DISABLED",
+      title: "Flux Kustomization sets validation: none — reconciled manifests are applied without client/server schema validation, so malformed or malicious resources pass unchecked (CWE-20)",
+      severity: "CRITICAL",
+      evidence: evidence(fluxKustomizeValidationOff),
+      requiredActions: [
+        "Remove `validation: none`; use `validation: server` (or client) so the API server schema-validates every applied manifest.",
+        "Keep admission controllers (OPA Gatekeeper / Kyverno) in the apply path for all Flux-managed namespaces.",
+        "Pin the sourceRef to a verified, immutable revision so only reviewed manifests reach the cluster."
+      ],
+      sla: "24h"
+    });
+  }
+
+  // 44. ArgoCD Git repo over git+ssh/ssh with no pinned host key — the first
+  // connection trusts whatever host key is presented, enabling a MITM to serve
+  // malicious manifests.
+  if (argoRepoSshUrl.length > 0 && argoRepoKnownHosts.length === 0) {
+    findings.push({
+      id: "ARGOCD_REPO_SSH_NO_HOSTKEY",
+      title: "ArgoCD repository uses git+ssh/ssh without a pinned SSH host key (no sshKnownHosts) — the controller trusts any host key on connect, enabling a MITM to inject manifests (CWE-322)",
+      severity: "HIGH",
+      evidence: evidence(argoRepoSshUrl),
+      requiredActions: [
+        "Populate the argocd-ssh-known-hosts-cm ConfigMap (or repo `sshKnownHosts`) with the exact, verified host key for the Git server.",
+        "Never allow the repo-server to accept an unknown/unpinned SSH host key; disable any 'insecure'/auto-accept host-key behavior.",
+        "Prefer verified HTTPS with a pinned CA, or SSH with a pinned host key, and rotate keys if the pin was ever missing."
+      ],
+      sla: "7d"
+    });
+  }
+
+  // 45. syncOptions SkipDryRunOnMissingResource=true — apply proceeds without a
+  // server-side dry-run, skipping admission/validation feedback for resources
+  // not yet present.
+  if (argoSkipDryRun.length > 0) {
+    findings.push({
+      id: "ARGOCD_SKIP_DRY_RUN",
+      title: "ArgoCD syncOptions set SkipDryRunOnMissingResource=true — sync applies resources without a server-side dry-run, bypassing admission/validation feedback for not-yet-present resources (CWE-20)",
+      severity: "MEDIUM",
+      evidence: evidence(argoSkipDryRun),
+      requiredActions: [
+        "Remove SkipDryRunOnMissingResource=true so ArgoCD performs a server-side dry-run before applying.",
+        "Only skip the dry-run for a narrowly-scoped CRD-ordering issue, and re-enable it once CRDs are installed.",
+        "Keep validating admission webhooks (Gatekeeper/Kyverno) enforcing on the target namespaces regardless of dry-run settings."
+      ],
+      sla: "30d"
+    });
+  }
+
   return findings;
 }

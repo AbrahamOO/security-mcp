@@ -108,6 +108,30 @@ const MD_BEACON_RE = /!?\[[^\]]*\]\(\s*https?:\/\/[^)]*[?&][^)=]*=\s*[^)]*\)/i;
 // A token mixing Latin with Cyrillic/Greek letters (e.g. spoofed skill name).
 const HOMOGLYPH_RE = /[A-Za-z][Ѐ-ӿͰ-Ͽ]|[Ѐ-ӿͰ-Ͽ][A-Za-z]/;
 
+// ─── AGENT_MCP_DESCRIPTION_POISONING ─────────────────────────────────────────
+// Injected instructions hidden in an MCP/tool `description` (or inputSchema
+// description) field: rug-pull / tool-description poisoning. Broader than the
+// existing TOOL_IMPERATIVE_DESC_RE — catches "ignore previous", hidden directives,
+// and <system>/[INST] tags embedded in a JSON description value.
+const MCP_DESC_INJECT_RE = /"description"\s*:\s*"[^"]*(?:ignore\s+(?:all\s+|any\s+)?(?:previous|prior|above)\s+(?:instructions?|prompts?)|always\s+(?:run|execute|call|invoke|use)|before\s+(?:answering|responding|calling)|do\s+not\s+(?:tell|inform|mention|reveal)\s+(?:the\s+)?user|<\s*\/?\s*system\s*>|\[\/?INST\]|you\s+must\s+(?:also|first)|system\s*:\s*|<important>|<secret>)/i;
+// The tool-poisoning "rug pull": a description that references reading sensitive
+// files / env / other tools' behavior (classic MCP poisoning payload).
+const MCP_DESC_SIDECHANNEL_RE = /"description"\s*:\s*"[^"]*(?:\.env\b|~\/\.ssh|id_rsa|process\.env|\.aws\/credentials|read\s+the\s+file|contents?\s+of|pass\s+(?:the\s+)?(?:result|output)\s+to|<HIDDEN>|<!--)/i;
+
+// ─── AGENT_RECURSIVE_ENCODING — base64-within-base64 obfuscation ──────────────
+// A blob that base64-decodes to ANOTHER base64 blob which then decodes to an
+// instruction payload (multi-layer obfuscation to defeat single-pass decoders).
+const NESTED_B64_INNER_RE = /^[A-Za-z0-9+/]{24,}={0,2}$/;
+
+// ─── AGENT_INSTRUCTION_CHAIN_LOAD — instruction file loads another rule file ───
+// @include / load another SKILL.md|CLAUDE.md|AGENTS.md|rules file, or fetch remote rules.
+const CHAIN_LOAD_RE = /(?:@include\b|@import\b|\{\{\s*include|<!--\s*#include|(?:load|read|follow|apply|source|import)\s+(?:the\s+)?(?:instructions?|rules?|prompt|skill|guidelines?)\s+(?:in|from|at)\s+)[^.\n]{0,60}(?:SKILL\.md|CLAUDE\.md|AGENTS\.md|\.cursorrules|\.windsurfrules|copilot-instructions|\.mdc?\b)/i;
+const CHAIN_REMOTE_RULES_RE = /(?:fetch|load|import|pull|retrieve|sync)\s+(?:the\s+)?(?:latest\s+)?(?:instructions?|rules?|prompt|config\w*|skill)\s+from\s+https?:\/\//i;
+
+// ─── AGENT_SCRIPT_IN_MARKDOWN — <script> / javascript: link in instruction md ──
+const SCRIPT_TAG_RE = /<\s*script\b[^>]*>|<\s*iframe\b|<\s*img\b[^>]*\bon\w+\s*=|\bon(?:error|load|click)\s*=\s*["']/i;
+const JS_LINK_RE = /\]\(\s*javascript:|href\s*=\s*["']\s*javascript:|\]\(\s*data:text\/html/i;
+
 type Acc = {
   override: string[];
   exfil: string[];
@@ -120,12 +144,18 @@ type Acc = {
   permEsc: string[];
   backdoor: string[];
   promptLeak: string[];
+  mcpDescPoison: string[];
+  recursiveEncoding: string[];
+  chainLoad: string[];
+  scriptLink: string[];
+  symlinkEscape: string[];
 };
 
 function makeAcc(): Acc {
   return {
     override: [], exfil: [], toolPoison: [], persist: [], hidden: [], cred: [], memory: [],
-    remoteLoad: [], permEsc: [], backdoor: [], promptLeak: []
+    remoteLoad: [], permEsc: [], backdoor: [], promptLeak: [],
+    mcpDescPoison: [], recursiveEncoding: [], chainLoad: [], scriptLink: [], symlinkEscape: []
   };
 }
 
@@ -180,6 +210,26 @@ const DECODERS: Array<(t: string) => string> = [
 
 function decodesToInstruction(text: string): boolean {
   return DECODERS.some((decode) => isPrintableInstruction(decode(text)));
+}
+
+// Multi-layer base64: a blob whose base64 decode is ITSELF a base64 blob that
+// then decodes to an instruction/exfil payload. Defeats single-pass decoders.
+function decodesRecursively(text: string): boolean {
+  const m = BASE64_BLOB_RE.exec(text);
+  if (!m) return false;
+  let layer1 = "";
+  try {
+    layer1 = Buffer.from(m[0], "base64").toString("utf-8").trim();
+  } catch {
+    return false;
+  }
+  if (!NESTED_B64_INNER_RE.test(layer1)) return false;
+  try {
+    const layer2 = Buffer.from(layer1, "base64").toString("utf-8");
+    return isPrintableInstruction(layer2);
+  } catch {
+    return false;
+  }
 }
 
 function scanOverrideExfil(file: string, text: string, acc: Acc): void {
@@ -245,6 +295,62 @@ function scanCredMem(file: string, text: string, acc: Acc): void {
   }
 }
 
+// NFKC-normalize then re-test for homoglyphs so lookalike Cyrillic/Latin tokens
+// that only collide under compatibility normalization are still caught. This
+// EXTENDS the raw HOMOGLYPH_RE check in scanHidden rather than duplicating it.
+function hasHomoglyphAfterNfkc(text: string): boolean {
+  let normalized = "";
+  try {
+    normalized = text.normalize("NFKC");
+  } catch {
+    return false;
+  }
+  return HOMOGLYPH_RE.test(normalized) || HIDDEN_INVISIBLE_RE.test(normalized);
+}
+
+function scanNewInstructionThreats(file: string, text: string, lines: string[], acc: Acc): void {
+  // AGENT_MCP_DESCRIPTION_POISONING — injected directives in an MCP/tool description.
+  if (MCP_DESC_INJECT_RE.test(text) || MCP_DESC_SIDECHANNEL_RE.test(text)) {
+    acc.mcpDescPoison.push(file);
+  }
+  // AGENT_RECURSIVE_ENCODING — base64-within-base64 obfuscated instruction.
+  if (lines.some((l) => decodesRecursively(l))) {
+    acc.recursiveEncoding.push(file);
+  }
+  // AGENT_INSTRUCTION_CHAIN_LOAD — this instruction file loads another rule file / remote rules.
+  if (CHAIN_LOAD_RE.test(text) || CHAIN_REMOTE_RULES_RE.test(text)) {
+    acc.chainLoad.push(file);
+  }
+  // AGENT_SCRIPT_IN_MARKDOWN — <script>/javascript: link that executes if rendered.
+  if (SCRIPT_TAG_RE.test(text) || JS_LINK_RE.test(text)) {
+    acc.scriptLink.push(file);
+  }
+  // AGENT_HIDDEN_INSTRUCTION extension — homoglyph/bidi surviving NFKC normalization.
+  if (!acc.hidden.includes(file) && hasHomoglyphAfterNfkc(text)) {
+    acc.hidden.push(file);
+  }
+}
+
+// AGENT_SYMLINK_ESCAPE — a scanned instruction path that is a symlink resolving
+// OUTSIDE the repo (e.g. → ../../ sensitive host files). fg is run with
+// followSymbolicLinks:false, so we lstat each candidate and resolve its target.
+async function scanSymlinkEscape(file: string, acc: Acc): Promise<void> {
+  try {
+    const { lstat, realpath } = await import("node:fs/promises");
+    const abs = path.resolve(process.cwd(), file);
+    const st = await lstat(abs);
+    if (!st.isSymbolicLink()) return;
+    const target = await realpath(abs);
+    const root = process.cwd();
+    const rootPrefix = root.endsWith(path.sep) ? root : root + path.sep;
+    if (target !== root && !target.startsWith(rootPrefix)) {
+      acc.symlinkEscape.push(`${file} -> ${target}`);
+    }
+  } catch {
+    /* unreadable / broken symlink — ignore */
+  }
+}
+
 // ─── Opt-in remediation (quarantine / sanitize) ──────────────────────────────
 // Disabled by default. Enable with SECURITY_AGENTIC_QUARANTINE:
 //   "strip" | "sanitize" → write a cleaned copy to <file>.sanitized (original untouched)
@@ -271,7 +377,9 @@ const LINE_MALICIOUS_RES: RegExp[] = [
   HIDDEN_INVISIBLE_RE, HIDDEN_CSS_HIDE_RE, HOMOGLYPH_RE,
   REMOTE_INSTR_RE, CMD_SUBST_RE, PERM_ESCALATION_RE, BACKDOOR_RE, PROMPT_LEAK_RE,
   CRED_READ_RE, CRED_EXFIL_RE,
-  MEM_FALSEPOS_RE, MEM_SUPPRESS_RE, MEM_API_RE
+  MEM_FALSEPOS_RE, MEM_SUPPRESS_RE, MEM_API_RE,
+  MCP_DESC_INJECT_RE, MCP_DESC_SIDECHANNEL_RE, CHAIN_LOAD_RE, CHAIN_REMOTE_RULES_RE,
+  SCRIPT_TAG_RE, JS_LINK_RE
 ];
 
 function isMaliciousLine(line: string): boolean {
@@ -340,7 +448,10 @@ function uniqueFlaggedFiles(acc: Acc): string[] {
   const all = [
     ...acc.override, ...acc.exfil, ...acc.toolPoison, ...acc.persist,
     ...acc.hidden, ...acc.cred, ...acc.memory,
-    ...acc.remoteLoad, ...acc.permEsc, ...acc.backdoor, ...acc.promptLeak
+    ...acc.remoteLoad, ...acc.permEsc, ...acc.backdoor, ...acc.promptLeak,
+    ...acc.mcpDescPoison, ...acc.recursiveEncoding, ...acc.chainLoad, ...acc.scriptLink
+    // symlinkEscape entries are "file -> target" strings, not plain paths; excluded from
+    // strip/move remediation (the fix is to remove the symlink, not rewrite its content).
   ];
   return Array.from(new Set(all));
 }
@@ -514,6 +625,81 @@ function buildFindings(acc: Acc, remediation: Map<string, string>): Finding[] {
       ])
     });
   }
+  if (acc.mcpDescPoison.length > 0) {
+    findings.push({
+      id: "AGENT_MCP_DESCRIPTION_POISONING",
+      title: "MCP/tool description or schema field carries injected instructions (tool-description poisoning / rug pull)",
+      severity: "CRITICAL",
+      files: acc.mcpDescPoison,
+      evidence: acc.mcpDescPoison,
+      sla: "24h",
+      requiredActions: withNote(acc.mcpDescPoison, [
+        "Inspect .mcp.json / tool definitions: a 'description' (or inputSchema description) that tells the model to 'ignore previous', 'always run X', hide actions from the user, or read .env/.ssh is a tool-poisoning payload the model silently obeys (OWASP LLM07, MITRE ATLAS AML.T0053, CWE-77).",
+        "Pin MCP servers/tool definitions by version + hash and re-review on every change — a benign tool can be rug-pulled into a malicious description after install.",
+        "Render tool descriptions as neutral capability summaries only; reject any tool whose description issues instructions to the model."
+      ])
+    });
+  }
+  if (acc.recursiveEncoding.length > 0) {
+    findings.push({
+      id: "AGENT_RECURSIVE_ENCODING",
+      title: "Agentic instruction file hides a payload behind multi-layer (base64-within-base64) encoding",
+      severity: "CRITICAL",
+      files: acc.recursiveEncoding,
+      evidence: acc.recursiveEncoding,
+      sla: "24h",
+      requiredActions: withNote(acc.recursiveEncoding, [
+        "Decode every embedded blob recursively — a base64 string that decodes to another base64 string that decodes to an instruction/URL is deliberate obfuscation to defeat single-pass reviewers and scanners (CWE-116, MITRE ATLAS AML.T0051).",
+        "Treat multi-layer-encoded content in an instruction file as a live injection payload; quarantine the file and trace its origin.",
+        "Add a pre-commit hook that flags nested-encoded blobs in instruction/skill files."
+      ])
+    });
+  }
+  if (acc.chainLoad.length > 0) {
+    findings.push({
+      id: "AGENT_INSTRUCTION_CHAIN_LOAD",
+      title: "Instruction file chain-loads another instruction/rules file or fetches remote rules",
+      severity: "HIGH",
+      files: acc.chainLoad,
+      evidence: acc.chainLoad,
+      sla: "7d",
+      requiredActions: withNote(acc.chainLoad, [
+        "Remove @include/@import/'load rules from …' directives that pull in another SKILL.md/CLAUDE.md/AGENTS.md or remote rules — the visible file stays clean while authority is delegated to an unreviewed (possibly remote, mutable) file (indirect injection; OWASP LLM01, MITRE ATLAS AML.T0051).",
+        "Require every instruction source to be a single, fully-reviewed, pinned local file; forbid transitive/remote instruction loading.",
+        "If chaining is legitimate, inline and review the referenced content and pin it by hash."
+      ])
+    });
+  }
+  if (acc.scriptLink.length > 0) {
+    findings.push({
+      id: "AGENT_SCRIPT_IN_MARKDOWN",
+      title: "Instruction markdown contains a <script> tag or javascript: link that executes if rendered",
+      severity: "HIGH",
+      files: acc.scriptLink,
+      evidence: acc.scriptLink,
+      sla: "7d",
+      requiredActions: withNote(acc.scriptLink, [
+        "Strip <script>/<iframe>/on*= handlers and javascript:/data:text/html links from instruction markdown — these execute if the file is rendered in a preview/UI, enabling XSS and token theft (CWE-79).",
+        "Render instruction files as plain text or through a strict allowlist sanitizer (DOMPurify) that removes active content.",
+        "Treat active content in a repo-sourced instruction file as hostile and quarantine the file."
+      ])
+    });
+  }
+  if (acc.symlinkEscape.length > 0) {
+    findings.push({
+      id: "AGENT_SYMLINK_ESCAPE",
+      title: "Scanned instruction path is a symlink resolving outside the repository",
+      severity: "HIGH",
+      files: acc.symlinkEscape,
+      evidence: acc.symlinkEscape,
+      sla: "7d",
+      requiredActions: [
+        "Delete any instruction-surface symlink (SKILL.md/CLAUDE.md/.claude/**, .mcp.json, etc.) that resolves outside the repo (../../ to host files, ~/.ssh, /etc) — it can smuggle attacker-controlled or sensitive content into the agent's authority context or exfiltrate on read (CWE-59, CWE-22).",
+        "Materialize instruction files as real, in-repo, reviewed files; forbid symlinks in the agentic-instruction surface.",
+        "Run agents with the repo mounted so symlinks cannot escape the workspace root."
+      ]
+    });
+  }
 
   return findings;
 }
@@ -541,6 +727,8 @@ export async function checkAgenticInstructions(_: { changedFiles: string[] }): P
     scanAdvanced(file, text, acc);
     scanHidden(file, text, lines, acc);
     scanCredMem(file, text, acc);
+    scanNewInstructionThreats(file, text, lines, acc);
+    await scanSymlinkEscape(file, acc);
   }
 
   // Opt-in remediation: only runs when SECURITY_AGENTIC_QUARANTINE is set.
