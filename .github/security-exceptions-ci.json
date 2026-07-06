@@ -10,7 +10,8 @@
         "IR_PLAYBOOK_MISSING",
         "ARTIFACTS_NO_PENTEST_SIGNOFF",
         "ARTIFACTS_COMPLIANCE_GAP",
-        "CI_NO_PERMISSIONS"
+        "CI_NO_PERMISSIONS",
+        "SECRET_MANAGER_NOT_DETECTED"
       ],
       "control_ids": [
         "NIST_AC_ACCESS_CONTROL",
