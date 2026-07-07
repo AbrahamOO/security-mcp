@@ -1108,6 +1108,40 @@ Use before every production release. All items must be checked or explicitly ris
 - [ ] Container seccomp profile applied (RuntimeDefault or stricter)
 - [ ] Kubernetes resource limits (CPU and memory) set on all workloads
 
+## Containers / Docker
+
+- [ ] Base images pinned by digest — no floating tags, no implicit registries
+- [ ] Containers run as non-root — USER directive set, no explicit root, no sudo in RUN
+- [ ] No secrets in build args, ENV, labels, or COPY'd .env files — BuildKit secret mounts used
+- [ ] No curl-pipe-to-shell, insecure download flags, or plaintext fetches in build steps
+- [ ] Docker daemon not exposed over TCP; TLS verification never disabled
+- [ ] No privileged compose services, host namespaces (pid/network/ipc), or dangerous capabilities
+- [ ] No sensitive host bind mounts (docker.sock, /etc, SSH directories)
+- [ ] Healthchecks defined; compose resource limits set; no 0.0.0.0 port binds
+- [ ] No SSH or sensitive ports EXPOSEd; no setuid bits or chmod 777 in image layers
+
+## Database
+
+- [ ] TLS enforced on all database connections
+- [ ] No hardcoded database passwords or admin credentials in code or config
+- [ ] No dynamic SQL string concatenation — parameterized/prepared statements used correctly
+- [ ] MongoDB operator-key injection blocked — user input cannot supply $where/$gt/$ne keys
+- [ ] Row-level security policies reviewed — no bypass via role switch or policy gaps
+- [ ] GRANT statements reviewed — no privilege escalation via broad grants
+- [ ] Connection pool limits configured; no dirty-read isolation level
+- [ ] Database backups encrypted at rest
+
+## Data Platform (Databricks / Snowflake)
+
+- [ ] No hardcoded Databricks tokens or PATs — all tokens have expiry
+- [ ] Databricks workspace not on public network; serverless has IP ACLs
+- [ ] Cluster policies enforced; init scripts only from trusted locations
+- [ ] Unity Catalog grants scoped — no broad grants; audit logging enabled
+- [ ] Snowflake network policy present and restrictive; password policy and strong auth enforced
+- [ ] Snowflake PII columns covered by masking policies; no wildcard or public data shares
+- [ ] No dynamic SQL concatenation in notebooks or stored procedures
+- [ ] No inline credentials in mounts, stages, storage integrations, or Spark conf
+
 ## Supply Chain / CI-CD
 
 - [ ] All GitHub Actions pinned to full SHA — no floating tag references
@@ -1116,6 +1150,19 @@ Use before every production release. All items must be checked or explicitly ris
 - [ ] SLSA Level 3 provenance or equivalent documented
 - [ ] SBOM signed with cosign — signature verified at deployment
 - [ ] No secrets readable in CI job logs — masked and audited
+- [ ] Lockfile resolves only to the expected registry — no off-registry resolved URLs
+- [ ] Dependency IoC scan clean (Shai-Hulud and similar npm worm indicators)
+- [ ] MCP server configs pinned and verified — no mutable remote sources or command injection
+
+## GitOps (ArgoCD / Flux / Helm)
+
+- [ ] No plaintext secrets in GitOps repos — SOPS / sealed-secrets / external-secrets used
+- [ ] ArgoCD: no default project, no wildcard AppProjects, RBAC scoped, exec extensions disabled
+- [ ] ArgoCD: auto-sync only from pinned/immutable sources; sync validation not disabled
+- [ ] ArgoCD: ApplicationSet generators reviewed for template injection
+- [ ] Flux: sources verified (OCI signature / GPG); kustomization validation enabled
+- [ ] Flux: no image automation pushing to protected branches from floating tags
+- [ ] Helm: chart versions pinned with digests; no HTTP repositories; no privileged --set overrides
 
 ## OAuth / OIDC
 
@@ -1145,6 +1192,21 @@ Use before every production release. All items must be checked or explicitly ris
 - [ ] Prototype pollution mitigated: Zod validation before all object merges
 - [ ] Open redirect blocked: all res.redirect() targets validated against allowlist
 - [ ] CRLF injection blocked: response headers sanitized before setting
+
+## Cryptography / PKI
+
+- [ ] No MD5 or SHA-1 for any security purpose — signatures use SHA-256 or stronger
+- [ ] Password hashing uses Argon2id / bcrypt / scrypt — never plain SHA; PBKDF2 ≥ 600k iterations if used
+- [ ] No ECB mode; AES-CBC without authentication banned — AES-GCM or ChaCha20-Poly1305
+- [ ] GCM/stream-cipher nonces random per operation — no hardcoded, zero, module-level, or reused IVs
+- [ ] AEAD authentication tag verified before plaintext is used
+- [ ] No hardcoded symmetric keys or KDF salts in source
+- [ ] Non-cryptographic PRNGs never used for tokens, identifiers, or key material — CSPRNG only
+- [ ] RSA ≥ 2048 with OAEP padding — PKCS#1 v1.5 and RSA-1024 banned
+- [ ] No weak ECDSA curves or DH parameters; forward-secrecy cipher suites required
+- [ ] TLS minimum version 1.2; certificate validation never disabled (rejectUnauthorized)
+- [ ] Security tokens carry a TTL; HMAC outputs not truncated
+- [ ] Post-quantum migration plan documented for long-lived data under RSA-2048 / P-256
 
 ## Mobile
 
@@ -1179,6 +1241,21 @@ Use before every production release. All items must be checked or explicitly ris
 - [ ] Agentic tool allowlist — only permitted tools exposed to the model
 - [ ] High-impact tools require human-in-the-loop approval
 - [ ] AML.T0054 (LLM Prompt Injection) and AML.T0057 mitigations verified
+- [ ] Invisible Unicode injection scan on prompt inputs and retrieved content
+- [ ] Model artifacts scanned — no pickle files with dangerous opcodes loaded
+- [ ] Agent-to-agent flows reviewed — no credential forwarding between agents
+
+## AI-Assisted Development (Vibe Coding)
+
+- [ ] All dependencies verified to exist on the public registry — no hallucinated or unvetted packages
+- [ ] Supabase: RLS enabled on all tables; service-role key never shipped to the client
+- [ ] No AI-provider API keys in frontend bundles or public env vars (NEXT_PUBLIC_ / VITE_)
+- [ ] Server-side authorization on every API route — client-side guards are not access control
+- [ ] No client-controlled prices, amounts, or quantities trusted server-side
+- [ ] .env files not committed; debug mode disabled; sourcemaps stripped from production
+- [ ] Tokens not stored in localStorage; CORS not wildcard with credentials
+- [ ] File uploads restricted by type, size, and destination path
+- [ ] Firebase security rules not public-read/write
 
 ## Payments (PCI DSS 4.0)
 
@@ -1197,6 +1274,28 @@ Use before every production release. All items must be checked or explicitly ris
 - [ ] Audit trail maintained for all payment operations
 - [ ] SAQ type documented and current for this release scope
 - [ ] PCI scope clearly defined and documented
+
+## Data Leakage Prevention (DLP)
+
+- [ ] No PII in logs: SSN, PAN, email, passport, driver's license, PHI, biometrics
+- [ ] No OAuth tokens or token-bearing URLs logged
+- [ ] No raw request bodies or whole user objects passed to loggers
+- [ ] No stack traces in HTTP responses; Server/X-Powered-By headers suppressed
+- [ ] No PII in cache keys
+- [ ] Data exports encrypted; database backups not reachable from web root
+
+## Emerging Threats
+
+- [ ] Next.js middleware auth bypass: x-middleware-subrequest header stripped at the edge (CVE-2025-29927)
+- [ ] React Server Components flight/deserialization inputs validated — no RCE surface
+- [ ] path-to-regexp route patterns audited for ReDoS
+- [ ] JWT jku/x5u header SSRF blocked — key URLs pinned to known hosts
+- [ ] ingress-nginx snippet annotations disabled (IngressNightmare)
+- [ ] Container runtime patched against known runc escapes
+- [ ] Proxy middleware strips inbound trust headers before forwarding
+- [ ] Kestrel/back-end chunked-encoding smuggling mitigations confirmed
+- [ ] Django ORM connector SQL injection patterns audited
+- [ ] IAM privilege-escalation chains reviewed (iam:PassRole, serviceAccountTokenCreator project bindings)
 
 ## Observability Gate
 
