@@ -23,8 +23,20 @@ HANDOFF.md
 .mcp/baselines/
 .mcp/audit/
 
-# Generated baseline outputs inside fixtures
+# Generated scan artifacts inside fixtures (review/report/baseline JSON produced by
+# running the gate against a fixture — these embed local paths and scan evidence and
+# must never be committed). The top-level .mcp/* rules above are anchored to the repo
+# root, so fixture copies need their own patterns.
 fixtures/**/.mcp/baselines/
+fixtures/**/.mcp/reviews/
+fixtures/**/.mcp/reports/
+
+# Internal-only documents — engineering/advisory notes and pitch material that must
+# stay local and never reach the public GitHub repo or the npm package. The public
+# docs (README.md, docs/ARCHITECTURE.md, docs/WIKI.md) are intentionally NOT listed.
+docs/SECURITY_GAP_ANALYSIS.md
+docs/UPGRADE_BUILD_INSTRUCTIONS.md
+security-mcp-deck-prompt.md
 
 # Keep the intentional malicious-agent test fixtures (consumed by src/tests/run.ts).
 # These live under .claude/ but must be tracked so CI's npm test can detect them.

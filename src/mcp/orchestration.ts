@@ -28,6 +28,8 @@ import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { updateReviewStep } from "../review/store.js";
 import { getChain, verifyChain, computeFindingsHash } from "./audit-chain.js";
+import { enforceCapabilityFloor } from "./capability-enforcer.js";
+import { sanitizeErrorMessage } from "../gate/result.js";
 import type {
   AgentName,
   AgentRunManifest,
@@ -63,6 +65,20 @@ const BUNDLED_SKILLS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../
 const NPM_REGISTRY_URL = "https://registry.npmjs.org/security-mcp/latest";
 // Strict SemVer pattern — rejects any version string that doesn't conform.
 const SEMVER_RE = /^\d{1,5}\.\d{1,5}\.\d{1,5}(?:-[\w.+]+)?$/;
+
+// Returns true only when `candidate` is a strictly-higher release than `current`
+// (major/minor/patch, ignoring pre-release tags). Used so check_updates never
+// recommends installing an OLDER registry version than the one already running —
+// a downgrade would re-introduce patched bugs. Non-semver inputs return false.
+function isStrictlyNewer(candidate: string, current: string): boolean {
+  if (!SEMVER_RE.test(candidate) || !SEMVER_RE.test(current)) return false;
+  const core = (v: string) => v.split("-")[0].split(".").map((n) => Number(n));
+  const [aMaj, aMin, aPat] = core(candidate);
+  const [bMaj, bMin, bPat] = core(current);
+  if (aMaj !== bMaj) return aMaj > bMaj;
+  if (aMin !== bMin) return aMin > bMin;
+  return aPat > bPat;
+}
 
 // CWE-22: input validation patterns for path components
 const SAFE_SKILL_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/;
@@ -766,6 +782,40 @@ export async function mergeAgentFindings(args: z.infer<typeof MergeAgentFindings
     }
   }
 
+  // (e) Max-capability floor enforcement (1.5.0). Turns the "all agents always
+  //     operate at fullest capability" mandate into a hard, gate-blocking invariant:
+  //     every spawned agent must have run at its required model tier, met its tool
+  //     floor, produced evidence, and covered its SKILL.md. Any degraded agent adds
+  //     HIGH/CRITICAL findings into the merged set (so they force FAIL through the
+  //     existing severity path) and flips thoroughnessFailed. Enforcement never
+  //     crashes the merge: on any internal error it degrades to a non-fatal warning.
+  try {
+    const capability = await enforceCapabilityFloor({ agentRunId });
+    if (capability.findings.length > 0) {
+      for (const f of capability.findings) {
+        // Adapt gate Finding -> AgentFinding shape (add the mandatory remediated flag).
+        deduped.push({
+          id: f.id,
+          title: f.title,
+          severity: f.severity,
+          ...(f.evidence ? { evidence: f.evidence } : {}),
+          ...(f.files ? { files: f.files } : {}),
+          remediated: false,
+          requiredActions: f.requiredActions
+        });
+      }
+    }
+    if (!capability.passed) {
+      thoroughnessFailed = true;
+      warnings.push(
+        `CAPABILITY_FLOOR_NOT_MET: agent(s) did not run at full capability: ` +
+        `${capability.degradedAgents.join(", ")}. Gate forced to FAIL.`
+      );
+    }
+  } catch (err) {
+    warnings.push(`Capability-floor enforcement could not complete: ${sanitizeErrorMessage(err instanceof Error ? err.message : String(err))}.`);
+  }
+
   const signatureVerification: SignatureVerification = {
     mode: verificationMode,
     chainValid: chainResult.valid,
@@ -1165,12 +1215,12 @@ export async function checkUpdates(args: z.infer<typeof CheckUpdatesSchema>): Pr
     fetchSkillUpdates(versions)
   ]);
 
-  const hasUpdate =
-    (latestMcpVersion !== null && latestMcpVersion !== currentMcpVersion) ||
-    skillUpdates.length > 0;
+  const mcpUpgradeAvailable =
+    latestMcpVersion !== null && isStrictlyNewer(latestMcpVersion, currentMcpVersion);
+  const hasUpdate = mcpUpgradeAvailable || skillUpdates.length > 0;
 
   const changelogParts: string[] = [];
-  if (latestMcpVersion && latestMcpVersion !== currentMcpVersion) {
+  if (mcpUpgradeAvailable) {
     changelogParts.push(`security-mcp: ${currentMcpVersion} → ${latestMcpVersion}`);
   }
   if (skillUpdates.length > 0) {

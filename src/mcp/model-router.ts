@@ -55,7 +55,7 @@ const DEFAULT_DOWNGRADE_THRESHOLD_PCT = 80;
 // circuit-breaker may never downgrade these. This is the security-critical core:
 // active exploitation, adversarial AI, cryptography, authentication, and the
 // threat-model/remediation reasoning that everything else depends on.
-const PROTECTED_MAX_POWER_TASKS: ReadonlySet<TaskType> = new Set<TaskType>([
+export const PROTECTED_MAX_POWER_TASKS: ReadonlySet<TaskType> = new Set<TaskType>([
   "exploit_chain",
   "pentest",
   "ai_redteam",

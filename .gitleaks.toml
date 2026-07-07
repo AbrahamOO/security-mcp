@@ -1,0 +1,20 @@
+# Gitleaks configuration for security-mcp's own self-scan.
+#
+# Extends the full default gitleaks ruleset (useDefault = true) and adds a narrow
+# allowlist for the tool's own remediation-template registries. Those files pair a
+# deliberately-insecure "before" example with the secure fix, so they necessarily
+# contain placeholder credential strings (e.g. sk_live_XXXXplaceholderXXXX) that are
+# teaching examples, never real secrets — the same false-positive class already
+# excluded from the policy gate for fixtures/ and defaults/. This config applies only
+# to this repo's own scans; .gitleaks.toml is not shipped in the npm package.
+title = "security-mcp gitleaks config"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Placeholder example secrets in the remediation-template registries (teaching examples, not real credentials)"
+paths = [
+  '''src/gate/remediation-map\.ts''',
+  '''src/gate/remediation-parts/.*\.ts''',
+]

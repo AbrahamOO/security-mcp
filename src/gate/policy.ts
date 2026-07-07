@@ -41,6 +41,18 @@ import { checkGitOps } from "./checks/gitops.js";
 import { checkDataPlatform } from "./checks/data-platform.js";
 import { checkDockerDeep } from "./checks/docker-deep.js";
 import { checkCloudControls } from "./checks/cloud-controls.js";
+// 1.5.0 emerging-threat modules: 2025–2026 CVE-class and agentic signatures.
+// Each follows the same (opts) => Promise<Finding[]> contract as the checks above.
+import { checkEmergingWeb } from "./checks/emerging-web.js";
+import { checkEmergingCloud } from "./checks/emerging-cloud.js";
+import { checkEmergingSupplyAi } from "./checks/emerging-supply-ai.js";
+// Always-on module targeting how attackers exploit vibe-coded / AI-generated apps
+// (client-side secrets, RLS-off datastores, missing server authz, slopsquatting).
+import { checkVibeCoding } from "./checks/vibe-coding.js";
+// Always-on web-hardening module: response-header gaps (clickjacking/HSTS/CSP),
+// open redirect, hardcoded session secrets, email header injection, unauthenticated
+// Next.js Server Actions, and sensitive-field over-exposure in responses.
+import { checkWebHardening } from "./checks/web-hardening.js";
 
 const PolicySchema = z.object({
   name: z.string(),
@@ -295,7 +307,14 @@ const CHECK_NAMES = [
   "gitops",
   "data-platform",
   "docker-deep",
-  "cloud-controls"
+  "cloud-controls",
+  // 1.5.0 emerging-threat modules — order must stay aligned with the settled[]
+  // array in runAllChecks so GATE_CHECK_CRASHED reports the correct module name.
+  "emerging-web",
+  "emerging-cloud",
+  "emerging-supply-ai",
+  "vibe-coding",
+  "web-hardening"
 ] as const;
 
 /** Run every applicable security check in parallel and collect findings. */
@@ -346,7 +365,21 @@ async function runAllChecks(opts: {
     checkGitOps({ changedFiles }),
     checkDataPlatform({ changedFiles }),
     checkDockerDeep({ changedFiles }),
-    checkCloudControls({ changedFiles })
+    checkCloudControls({ changedFiles }),
+    // 1.5.0 emerging-threat modules. Surface-gated to match the engine's cost model:
+    // emerging-web runs on web/api changes, emerging-cloud on infra changes, and
+    // emerging-supply-ai always runs (supply-chain + invisible-unicode/model-file
+    // risks apply to every repo). Order aligns with CHECK_NAMES above.
+    isApiOrWeb   ? checkEmergingWeb({ changedFiles })                       : Promise.resolve([]),
+    surfaces.infra ? checkEmergingCloud({ changedFiles })                   : Promise.resolve([]),
+    checkEmergingSupplyAi({ changedFiles }),
+    // Always-on: vibe-coded apps often don't match a specific surface but still
+    // ship client-side secrets, RLS-off datastores, and unauthenticated APIs.
+    checkVibeCoding({ changedFiles }),
+    // Always-on: web-hardening blindspots (security headers, open redirect,
+    // hardcoded session secrets, email header injection, unauthenticated Server
+    // Actions, sensitive-field exposure) apply regardless of detected surface.
+    checkWebHardening({ changedFiles })
   ]);
 
   const findings: Finding[] = [];

@@ -488,6 +488,53 @@
       "approver": "ciso-review-board",
       "approval_role": "SecurityLead",
       "expires_on": "2027-06-15"
+    },
+    {
+      "id": "self-scan-v135-changelog-and-doc-prose",
+      "finding_ids": [
+        "WEB_OPEN_REDIRECT",
+        "IAC_AWS_PASSROLE_PRIVESC_CHAIN",
+        "AI_INVISIBLE_UNICODE_INJECTION",
+        "VIBE_PUBLIC_ENV_HOLDS_SECRET",
+        "VIBE_DEBUG_MODE_ENABLED"
+      ],
+      "control_ids": [],
+      "justification": "Self-scan false positives from the v1.3.5 documentation, in which CHANGELOG.md, README.md, and docs/WIKI.md describe the detection rules the gate ships and therefore quote the very patterns those rules match. (1) WEB_OPEN_REDIRECT matches the prose example `res.redirect(req.query.url)` used to explain the rule (CHANGELOG.md:65, and the rule name repeated in README.md/WIKI.md). (2) IAC_AWS_PASSROLE_PRIVESC_CHAIN matches the phrase `iam:PassRole` in the 1.5.0 emerging-cloud description (CHANGELOG.md:196). (3) AI_INVISIBLE_UNICODE_INJECTION matches the warning emoji ⚠️ (U+FE0F variation selector) used in a CHANGELOG section heading and in the tool's own authentication-preamble UI string (src/mcp/auth.ts) — a legitimate emoji, not smuggled instructions. (4) VIBE_PUBLIC_ENV_HOLDS_SECRET and (5) VIBE_DEBUG_MODE_ENABLED match the rule NAMES and their example strings where the CHANGELOG/WIKI enumerate the vibe-coding rule set. All five are descriptive documentation of security-mcp's own detectors, not vulnerabilities in shippable code. Suppressed only in the repo-local self-scan; .github/ is not shipped in the npm package (package.json files: dist/, prompts/, skills/, defaults/, README.md, LICENSE — the CHANGELOG and docs/WIKI.md are not packaged), so downstream detection of these classes in user code is unaffected.",
+      "ticket": "self-scan/v135-changelog-and-doc-prose",
+      "owner": "security-mcp-team",
+      "approver": "ciso-review-board",
+      "approval_role": "SecurityLead",
+      "expires_on": "2027-06-15"
+    },
+    {
+      "id": "self-scan-v15-v16-fixtures-and-teaching-skills",
+      "finding_ids": [
+        "K8S_DEFAULT_SA_TOKEN_AUTOMOUNT",
+        "K8S_RUNC_ESCAPE_DELIVERY_SURFACE",
+        "INSTALL_INTEGRITY_BYPASS",
+        "AGENT_MCP_DESCRIPTION_POISONING",
+        "AGENT_SCRIPT_IN_MARKDOWN",
+        "VIBE_SUPABASE_RLS_DISABLED",
+        "VIBE_CLIENT_CONTROLLED_PRICE",
+        "VIBE_TOKEN_IN_LOCALSTORAGE",
+        "CRYPTO_INSECURE_RNG_MATERIAL",
+        "CRYPTO_TOKEN_NO_TTL",
+        "DB_GRANT_PRIVILEGE_ESCALATION",
+        "DATABRICKS_TOKEN_NO_EXPIRY",
+        "SNOWFLAKE_INTEGRATION_NO_NETWORK_POLICY",
+        "ARGOCD_DEFAULT_PROJECT_AUTOPRUNE",
+        "IAC_TF_IAM_PRIVILEGE_ESCALATION",
+        "IAC_TF_LAMBDA_ENV_PLAINTEXT_SECRET",
+        "IAC_TF_MODULE_GIT_UNPINNED_REF",
+        "IAC_GCP_TOKEN_CREATOR_PROJECT_BINDING"
+      ],
+      "control_ids": [],
+      "justification": "Self-scan false positives from the v1.5.0/v1.6.0/v1.6.1 detection modules matching security-mcp's OWN deliberately-insecure test fixtures, teaching-example skill docs, and detection-rule registries — the identical false-positive class already excepted for the pre-v1.5.0 fixtures under self-scan-fixtures-and-cloud-controls, extended here for the fixtures/skills those releases added (they were committed after v1.3.4 published but never themselves published, so the exceptions were never updated). Every finding cites fixtures/ (deliberately-insecure inputs consumed by src/tests/run.ts: fixtures/k8s-insecure, fixtures/docker-insecure, fixtures/agentic-malicious, fixtures/data-platform-insecure), skills/*/SKILL.md (before/after vulnerability teaching examples: algorithm-implementation-reviewer, capec-code-mapper, agentic-loop-exploiter, business-logic-attacker, oauth-pkce-specialist, _TEMPLATE), or defaults/cloud-controls/*.json (the detection rule registry, whose rule titles/descriptions quote the very patterns they detect). None are shippable application code — verified: zero of these findings cite src/ outside the remediation registries. Suppressed only in the repo-local self-scan; .github/ is not shipped in the npm package, so downstream detection of these classes (K8s SA tokens, Supabase RLS, weak crypto RNG, IAM PassRole privesc, etc.) in real user code is fully unaffected.",
+      "ticket": "self-scan/v15-v16-fixtures-and-teaching-skills",
+      "owner": "security-mcp-team",
+      "approver": "ciso-review-board",
+      "approval_role": "SecurityLead",
+      "expires_on": "2027-06-15"
     }
   ]
 }
