@@ -1,10 +1,10 @@
 {
-  "version": "1.6.0",
-  "updatedAt": "2026-06-16",
+  "version": "1.6.1",
+  "updatedAt": "2026-07-14",
   "baseUrl": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills",
   "skills": {
     "ciso-orchestrator": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/ciso-orchestrator/SKILL.md",
       "description": "Master coordinator. Spins up all 39 specialist agents across Phase 1 and Phase 2. User-invocable via /ciso-orchestrator.",
       "userInvocable": true,
@@ -32,7 +32,7 @@
         "industry vertical APT matching",
         "ghost agent escalation"
       ],
-      "sha256": "2b813e2776b52cd528bee38d572bce54bf7d729cef61ed7d096812024e11ac61"
+      "sha256": "83d308a96f13cf271463db77568487e4a017ca57c6c3444f89d6091e9084afe3"
     },
     "threat-modeler": {
       "version": "1.0.0",

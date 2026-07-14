@@ -11,8 +11,9 @@
  */
 
 import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { homedir, platform } from "node:os";
 import { runInstall } from "./install.js";
 import { main as runServer } from "../mcp/server.js";
@@ -145,43 +146,128 @@ function getVsCodeSettingsPath(): string {
   return `${homedir()}/.config/Code/User/settings.json`;
 }
 
-function runDoctor(): void {
-  const checks: Array<{ label: string; ok: boolean; hint?: string }> = [];
+// Compare two dotted versions. Returns <0 if a<b, 0 if equal, >0 if a>b.
+// Prerelease/build suffixes are stripped; only major.minor.patch are compared.
+function compareSemver(a: string, b: string): number {
+  const parse = (v: string): number[] =>
+    (v.split("-")[0] ?? v).split(".").map((n) => Number(n) || 0);
+  const pa = parse(a);
+  const pb = parse(b);
+  for (let i = 0; i < 3; i++) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (d !== 0) return d < 0 ? -1 : 1;
+  }
+  return 0;
+}
 
-  // Node.js version
+type DoctorCheck = { label: string; ok: boolean; hint?: string };
+
+// A globally installed security-mcp older than the running build shadows
+// `npx security-mcp` (npx prefers an existing global over downloading), so the
+// editor launches a stale server missing newer tools like the orchestration
+// control plane. Detect it and tell the user to remove it.
+function checkStaleGlobalShadow(): DoctorCheck | null {
+  try {
+    const root = execFileSync("npm", ["root", "-g"], {
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+    if (!root) return null;
+    const pkgPath = join(root, "security-mcp", "package.json");
+    if (!existsSync(pkgPath)) return null; // no global install — nothing to shadow
+    const globalVer = (JSON.parse(readFileSync(pkgPath, "utf-8")) as { version?: string }).version;
+    if (!globalVer) return null;
+    if (compareSemver(globalVer, VERSION) < 0) {
+      return {
+        label: `Global security-mcp ${globalVer} is older than ${VERSION} and can shadow npx`,
+        ok: false,
+        hint: "Remove the stale global so npx resolves the latest: npm rm -g security-mcp"
+      };
+    }
+    return { label: `Global security-mcp ${globalVer} (not stale)`, ok: true };
+  } catch {
+    return null; // npm unavailable or errored — skip silently
+  }
+}
+
+// An MCP config entry that launches `npx security-mcp` without a version tag can
+// resolve to a stale npx cache or a global install, pinning the editor to an old
+// server. Entries pinned to `security-mcp@latest` (or an explicit version), or the
+// intentional global-binary mode (`command: "security-mcp"`), are fine.
+function checkPinnedConfig(configPath: string, serversKey: string, label: string): DoctorCheck | null {
+  if (!existsSync(configPath)) return null;
+  try {
+    const json = JSON.parse(readFileSync(configPath, "utf-8")) as Record<string, unknown>;
+    const servers = json[serversKey] as Record<string, unknown> | undefined;
+    const entry = servers?.["security-mcp"] as { command?: string; args?: unknown[] } | undefined;
+    if (!entry) return null; // no security-mcp entry here
+    if (entry.command === "security-mcp") return null; // global-binary mode, intentional
+    if (entry.command !== "npx") return null;
+    const args = Array.isArray(entry.args) ? entry.args : [];
+    const pkgTok = args.find(
+      (a): a is string => typeof a === "string" && a.startsWith("security-mcp")
+    );
+    const pinned = !!pkgTok && pkgTok.includes("@");
+    if (!pinned) {
+      return {
+        label: `${label} security-mcp launch is unpinned (${pkgTok ?? "security-mcp"})`,
+        ok: false,
+        hint: `Pin to @latest so npx never uses a stale build — re-run: npx -y security-mcp@latest install`
+      };
+    }
+    return { label: `${label} security-mcp launch pinned (${pkgTok})`, ok: true };
+  } catch {
+    return null; // unreadable/invalid JSON — skip silently
+  }
+}
+
+// Build the list of editor config-presence checks (files the installer writes).
+function collectConfigPresenceChecks(): DoctorCheck[] {
+  const claudeConfig = resolveHome("~/.claude/settings.json");
+  const skillPath = resolveHome("~/.claude/skills/senior-security-engineer/SKILL.md");
+  const cursorConfig = resolveHome("~/.cursor/mcp.json");
+  const vscodePath = getVsCodeSettingsPath();
+  const windsurfConfig = resolveHome("~/.windsurf/mcp.json");
+
+  const candidates: Array<DoctorCheck | null> = [
+    { label: `Claude Code config (${claudeConfig})`, ok: existsSync(claudeConfig), hint: existsSync(claudeConfig) ? undefined : "Run: npx -y security-mcp@latest install --claude-code" },
+    { label: `senior-security-engineer skill (${skillPath})`, ok: existsSync(skillPath), hint: existsSync(skillPath) ? undefined : "Run: npx -y security-mcp@latest install --claude-code" },
+    existsSync(resolveHome("~/.cursor"))
+      ? { label: `Cursor config (${cursorConfig})`, ok: existsSync(cursorConfig), hint: existsSync(cursorConfig) ? undefined : "Run: npx -y security-mcp@latest install --cursor" }
+      : null,
+    existsSync(vscodePath) ? { label: `VS Code config (${vscodePath})`, ok: true } : null,
+    existsSync(resolveHome("~/.windsurf"))
+      ? { label: `Windsurf config (${windsurfConfig})`, ok: existsSync(windsurfConfig), hint: existsSync(windsurfConfig) ? undefined : "Run: npx -y security-mcp@latest install" }
+      : null
+  ];
+
+  return candidates.filter((c): c is DoctorCheck => c !== null);
+}
+
+function collectDoctorChecks(): DoctorCheck[] {
   const nodeVer = process.versions.node.split(".").map(Number);
   const nodeOk = (nodeVer[0] ?? 0) >= 20;
-  checks.push({ label: `Node.js ${process.versions.node}`, ok: nodeOk, hint: nodeOk ? undefined : "Node.js 20+ required. Download from https://nodejs.org" });
+  const nodeCheck: DoctorCheck = { label: `Node.js ${process.versions.node}`, ok: nodeOk, hint: nodeOk ? undefined : "Node.js 20+ required. Download from https://nodejs.org" };
 
-  // Claude Code config
-  const claudeConfig = resolveHome("~/.claude/settings.json");
-  const claudeOk = existsSync(claudeConfig);
-  checks.push({ label: `Claude Code config (${claudeConfig})`, ok: claudeOk, hint: claudeOk ? undefined : "Run: npx -y security-mcp@latest install --claude-code" });
+  const candidates: Array<DoctorCheck | null> = [
+    nodeCheck,
+    // Editor config + skill presence
+    ...collectConfigPresenceChecks(),
+    // Stale global install that shadows npx (old server, missing tools)
+    checkStaleGlobalShadow(),
+    // Unpinned launch entries across editor configs (resolve to stale caches)
+    checkPinnedConfig(resolveHome("~/.claude/settings.json"), "mcpServers", "Claude Code (settings.json):"),
+    checkPinnedConfig(resolveHome("~/.claude.json"), "mcpServers", "Claude Code (~/.claude.json):"),
+    checkPinnedConfig(resolveHome("~/.cursor/mcp.json"), "mcpServers", "Cursor:"),
+    checkPinnedConfig(getVsCodeSettingsPath(), "mcp.servers", "VS Code:"),
+    checkPinnedConfig(resolveHome("~/.windsurf/mcp.json"), "mcpServers", "Windsurf:")
+  ];
 
-  // Claude Code skill
-  const skillPath = resolveHome("~/.claude/skills/senior-security-engineer/SKILL.md");
-  const skillOk = existsSync(skillPath);
-  checks.push({ label: `senior-security-engineer skill (${skillPath})`, ok: skillOk, hint: skillOk ? undefined : "Run: npx -y security-mcp@latest install --claude-code" });
+  return candidates.filter((c): c is DoctorCheck => c !== null);
+}
 
-  // Cursor global config
-  const cursorConfig = resolveHome("~/.cursor/mcp.json");
-  if (existsSync(resolveHome("~/.cursor"))) {
-    const cursorOk = existsSync(cursorConfig);
-    checks.push({ label: `Cursor config (${cursorConfig})`, ok: cursorOk, hint: cursorOk ? undefined : "Run: npx -y security-mcp@latest install --cursor" });
-  }
-
-  // VS Code config
-  const vscodePath = getVsCodeSettingsPath();
-  if (existsSync(vscodePath)) {
-    checks.push({ label: `VS Code config (${vscodePath})`, ok: true });
-  }
-
-  // Windsurf config
-  const windsurfConfig = resolveHome("~/.windsurf/mcp.json");
-  if (existsSync(resolveHome("~/.windsurf"))) {
-    const windsurfOk = existsSync(windsurfConfig);
-    checks.push({ label: `Windsurf config (${windsurfConfig})`, ok: windsurfOk, hint: windsurfOk ? undefined : "Run: npx -y security-mcp@latest install" });
-  }
+function runDoctor(): void {
+  const checks = collectDoctorChecks();
 
   process.stdout.write(`\nsecurity-mcp doctor v${VERSION}\n`);
   process.stdout.write("=".repeat(40) + "\n\n");

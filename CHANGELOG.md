@@ -3,6 +3,23 @@
 All notable changes to `security-mcp` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.6] - 2026-07-14
+
+### Fixed: stale/unpinned security-mcp installs silently degrading the CISO orchestrator
+
+`npx security-mcp` without a pinned version can resolve to a stale global install or npx
+cache entry, launching an old server missing the `orchestration.*` control plane tools.
+The ciso-orchestrator skill previously degraded silently to a deterministic-only run
+instead of surfacing this.
+
+- `security-mcp doctor` now detects a global install older than the running version
+  (flags `npm rm -g security-mcp`) and unpinned `npx security-mcp` launch entries across
+  Claude Code, Cursor, VS Code, and Windsurf configs (flags re-running the installer).
+- `ciso-orchestrator` SKILL.md adds a mandatory Step 0 control-plane preflight: it checks
+  for the `orchestration.*` tools under any host-namespaced form before starting, and
+  halts with exact remediation instead of silently falling back if they are genuinely
+  absent.
+
 ## [1.3.5] - 2026-07-07
 
 First version published to npm since 1.3.4. The versions documented below as 1.4.0,
