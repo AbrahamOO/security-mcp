@@ -1,6 +1,6 @@
 # Architecture
 
-Last updated: 2026-07-07
+Last updated: 2026-07-14
 
 > **Version note:** 1.4.0, 1.5.0, 1.6.0, and 1.6.1 referenced throughout this document
 > are internal milestones that were never published to npm. All of them ship publicly in
@@ -315,6 +315,19 @@ flowchart TD
     DECIDE -- clean --> RPASS(["PASS"])
 ```
 
+### Portable agent delivery (all clients)
+
+The agent roster is delivered over the MCP protocol, not a Claude-only skills directory,
+so every MCP host runs the full roster. `src/mcp/server.ts` registers the user-invocable
+agents (`senior-security-engineer`, `ciso-orchestrator`, `agentic-instruction-auditor`) as
+MCP prompts, and exposes every persona as an MCP resource (`skill://catalog` and the
+`skill://{name}` template). `orchestration.ensure_skill` returns the full bundled SKILL.md
+in its result (`content`), and only materializes into `~/.claude/skills` when that layout
+exists — other hosts consume the persona from the returned content or the resource. A host
+with a subagent tool spawns the roster in parallel; a host without one adopts each persona
+sequentially, each to completion, and the same thoroughness checks (SKILL.md coverage floor,
+capability enforcement) gate the run, so completeness is host-independent.
+
 `/ciso-orchestrator` spawns a tree of agents (nine specialist leads and their sub-agents)
 that run in phases: discovery leads and sub-agents in parallel, then adversarial and
 compliance agents that consume the discovery phase's threat model, then a synthesis phase.
@@ -444,6 +457,7 @@ produce the final verdict that either blocks a merge or clears it.
 
 ## Change History
 
+- 2026-07-14 — Added the "Portable agent delivery (all clients)" subsection: agents are served over MCP prompts + `skill://` resources and `ensure_skill` returns the full persona body, so every MCP host runs the complete roster (parallel or sequential) under the same thoroughness gate.
 - 2026-07-07 — Added mermaid architecture diagrams (one engine / two callers overview,
   gate-engine pipeline, orchestration + attestation flow) and the version note that
   internal milestones 1.4.0–1.6.1 ship publicly in 1.3.5.

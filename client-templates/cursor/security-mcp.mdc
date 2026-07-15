@@ -1,0 +1,36 @@
+---
+description: How to run the security-mcp agents and gate from Cursor
+alwaysApply: true
+---
+
+This project has the **security-mcp** server configured (`.cursor/mcp.json`). It exposes
+a full roster of security agents and a deterministic policy gate over MCP.
+
+## Security reviews
+
+- Single-session review: invoke the `senior-security-engineer` MCP prompt. It picks a
+  scan scope, runs the gate, writes the fixes (90% fixing, 10% advisory), and attests.
+- Full audit: invoke the `ciso-orchestrator` MCP prompt.
+
+## Running any specialist agent
+
+Agents are delivered over MCP — no Claude Code skills required.
+
+- Read the `skill://catalog` MCP resource for the full roster.
+- Read `skill://<name>` (e.g. `skill://ai-llm-redteam`) or call the
+  `orchestration.ensure_skill` tool with `{ "skillName": "<name>" }` to load an agent's
+  complete persona, then execute every section.
+- Coordinate multi-agent runs with the `orchestration.*` tools (`create_agent_run`,
+  `update_agent_status`, `write_agent_memory`, `read_agent_memory`,
+  `merge_agent_findings`, `verify_skill_coverage`).
+
+## Rules
+
+Adopt each agent's FULL persona. Never skip an agent, never summarize a persona, never
+lower the coverage bar. Where Cursor cannot spawn parallel subagents, run the agents
+sequentially, each to completion. `orchestration.verify_skill_coverage` gates completion.
+
+## CI gate
+
+`npx -y security-mcp@latest ci:pr-gate` runs the gate in CI (no AI session); it exits
+non-zero on HIGH/CRITICAL findings.

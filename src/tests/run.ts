@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { runPrGate } from "../gate/policy.js";
 import { autoHardenTree } from "../gate/cloud-controls/apply.js";
 import { checkCloudControls } from "../gate/checks/cloud-controls.js";
 import { createReviewAttestation, createReviewRun, readReviewRun, updateReviewStep } from "../review/store.js";
+import { ensureSkill, readBundledSkillBody, listBundledSkills } from "../mcp/orchestration.js";
+import { writeJsonServers, writeCodexTomlConfig } from "../cli/install.js";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
 function repoPath(...parts: string[]): string {
   return path.join(process.cwd(), ...parts);
@@ -42,6 +46,10 @@ async function runPromptConformanceTests(): Promise<void> {
   assert.match(readme, /security\.attest_review/);
   assert.match(serverSource, /"security\.start_review"/);
   assert.match(serverSource, /"security\.attest_review"/);
+  // Portable agent delivery is registered.
+  assert.match(serverSource, /HOST_ADAPTATION_PREAMBLE/);
+  assert.match(serverSource, /skill:\/\/catalog/);
+  assert.match(serverSource, /skill:\/\/\{name\}/);
 }
 
 async function runFixtureGateTests(): Promise<void> {
@@ -234,7 +242,109 @@ async function runCfnBicepDetectionTests(): Promise<void> {
   });
 }
 
+// Every bundled agent must be serveable at full persona over MCP, so no agent is
+// unrunnable on a non-Claude client. ensure_skill must return the full body even
+// when ~/.claude is absent.
+async function runAgentDeliveryTests(): Promise<void> {
+  const skills = listBundledSkills();
+  assert.ok(skills.length >= 90, `expected the full agent roster, got ${skills.length}`);
+  for (const name of ["ciso-orchestrator", "senior-security-engineer", "agentic-instruction-auditor"]) {
+    assert.ok(skills.includes(name), `catalog missing user-invocable agent: ${name}`);
+  }
+  for (const name of skills) {
+    const body = readBundledSkillBody(name);
+    assert.ok(body && body.length > 0, `empty persona body for agent: ${name}`);
+  }
+  // Persona fidelity: the orchestrator keeps its legitimate control-plane references
+  // (would be stripped by the network-download sanitizer, must not be for bundled).
+  const ciso = readBundledSkillBody("ciso-orchestrator");
+  assert.ok(ciso);
+  assert.match(ciso, /orchestration\.ensure_skill/);
+
+  // ensure_skill returns the full body over MCP even with no ~/.claude layout.
+  const prevHome = process.env["HOME"];
+  const tmpHome = mkdtempSync(path.join(tmpdir(), "home-noclaude-"));
+  try {
+    process.env["HOME"] = tmpHome;
+    const res = await ensureSkill({ skillName: "threat-modeler" });
+    assert.ok(res.content && res.content.length > 0, "ensureSkill returned empty content");
+  } finally {
+    if (prevHome === undefined) delete process.env["HOME"]; else process.env["HOME"] = prevHome;
+    rmSync(tmpHome, { recursive: true, force: true });
+  }
+}
+
+// The installer must write the correct per-client shape: VS Code uses `servers`,
+// Windsurf omits `type`, Codex TOML merges without clobbering and is idempotent.
+async function runInstallerWriterTests(): Promise<void> {
+  const tmp = mkdtempSync(path.join(tmpdir(), "mcp-writers-"));
+  try {
+    const vs = path.join(tmp, ".vscode", "mcp.json");
+    writeJsonServers(vs, "servers", "with-type", false, false);
+    const vsJson = JSON.parse(readFileSync(vs, "utf-8")) as Record<string, Record<string, { command?: string; args?: string[]; type?: string }>>;
+    assert.ok(vsJson["servers"]?.["security-mcp"], "VS Code servers entry missing");
+    assert.equal(vsJson["mcpServers"], undefined);
+    assert.equal(vsJson["mcp.servers"], undefined);
+    assert.equal(vsJson["servers"]["security-mcp"].command, "npx");
+    assert.ok(vsJson["servers"]["security-mcp"].args?.includes("security-mcp@latest"));
+
+    const ws = path.join(tmp, "windsurf.json");
+    writeJsonServers(ws, "mcpServers", "no-type", false, false);
+    const wsJson = JSON.parse(readFileSync(ws, "utf-8")) as Record<string, Record<string, { type?: string }>>;
+    assert.equal(wsJson["mcpServers"]["security-mcp"].type, undefined, "Windsurf entry must omit type");
+
+    const cx = path.join(tmp, "config.toml");
+    writeFileSync(cx, '[mcp_servers.other]\ncommand = "x"\n# keep me\n', "utf-8");
+    writeCodexTomlConfig(cx, false, false);
+    let toml = readFileSync(cx, "utf-8");
+    assert.match(toml, /\[mcp_servers\.security-mcp\]/);
+    assert.match(toml, /security-mcp@latest/);
+    assert.match(toml, /\[mcp_servers\.other\]/);
+    assert.match(toml, /# keep me/);
+    // Idempotent: second write does not duplicate the table.
+    writeCodexTomlConfig(cx, false, false);
+    toml = readFileSync(cx, "utf-8");
+    assert.equal((toml.match(/\[mcp_servers\.security-mcp\]/g) ?? []).length, 1, "Codex table not idempotent");
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+// End-to-end MCP protocol check: the server must expose the agent prompts and the
+// skill:// resources so every client can discover and load the full roster.
+async function runMcpSurfaceTests(): Promise<void> {
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [repoPath("dist", "mcp", "server.js")]
+  });
+  const client = new Client({ name: "security-mcp-tests", version: "0.0.0" }, { capabilities: {} });
+  await client.connect(transport);
+  try {
+    const promptNames = (await client.listPrompts()).prompts.map((p) => p.name);
+    for (const n of ["ciso-orchestrator", "senior-security-engineer", "agentic-instruction-auditor"]) {
+      assert.ok(promptNames.includes(n), `MCP prompt missing: ${n}`);
+    }
+    const resourceUris = (await client.listResources()).resources.map((r) => r.uri);
+    assert.ok(resourceUris.includes("skill://catalog"), "skill://catalog resource missing");
+    assert.ok(resourceUris.length > 90, `expected full roster of resources, got ${resourceUris.length}`);
+
+    const persona = await client.readResource({ uri: "skill://ciso-orchestrator" });
+    const personaText = (persona.contents[0] as { text?: string }).text ?? "";
+    assert.match(personaText, /CISO Orchestrator/);
+
+    const gp = await client.getPrompt({ name: "ciso-orchestrator" });
+    const body = (gp.messages[0]?.content as { text?: string }).text ?? "";
+    assert.match(body, /Host adaptation/);
+    assert.match(body, /CISO Orchestrator/);
+  } finally {
+    await client.close();
+  }
+}
+
 async function main(): Promise<void> {
+  await runAgentDeliveryTests();
+  await runInstallerWriterTests();
+  await runMcpSurfaceTests();
   await runPromptConformanceTests();
   await runFixtureGateTests();
   await runCloudControlRemediationTests();

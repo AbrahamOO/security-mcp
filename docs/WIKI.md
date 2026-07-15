@@ -1,6 +1,6 @@
 # Wiki
 
-Last updated: 2026-07-07
+Last updated: 2026-07-14
 
 A practical reference for running security-mcp, understanding how the gate decides
 PASS/FAIL, the full list of rule IDs added in 1.5.0, 1.6.0, and 1.6.1, how capability
@@ -199,6 +199,36 @@ more thorough than the daily skill by design.
 It exits non-zero on any un-excepted HIGH or CRITICAL finding, which is what actually
 blocks a merge; the interactive skills and CI enforce identically because they call the
 same `runAllChecks` logic underneath.
+
+## Client support matrix
+
+security-mcp runs in any MCP-capable editor. The server is stdio; the agent roster is
+delivered over the MCP protocol (prompts + resources), so the guided experience is not
+Claude-only.
+
+| Client | MCP config | Key / format |
+| --- | --- | --- |
+| Claude Code | `~/.claude/settings.json` | `mcpServers` (JSON) |
+| Cursor | `~/.cursor/mcp.json` or `.cursor/mcp.json` | `mcpServers` (JSON) |
+| VS Code / GitHub Copilot | `.vscode/mcp.json` | `servers` (JSON) |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` | `mcpServers` (JSON) |
+| Codex | `~/.codex/config.toml` or `.codex/config.toml` | `[mcp_servers.security-mcp]` (TOML) |
+| Replit | Integrations UI (remote MCP) | hosted endpoint — no local stdio config |
+
+`npx -y security-mcp@latest install` writes the correct config for every detected local
+client; `doctor` verifies it. The installer also drops a per-client instruction file
+(`.cursor/rules`, `.github/copilot-instructions.md`, `.windsurf/rules`, `AGENTS.md`) that
+tells each host how to drive the agents.
+
+### Portable agent delivery
+
+The two entry prompts (`senior-security-engineer`, `ciso-orchestrator`) are MCP prompts,
+so they appear as slash commands / prompt pickers in every client. Every specialist
+persona is reachable two ways: the `skill://<name>` MCP resource (browse `skill://catalog`
+for the roster) and the `orchestration.ensure_skill` tool, which returns the full SKILL.md
+on demand. A host with parallel subagents runs the roster concurrently; a host without one
+runs the agents sequentially, each to full completion — `orchestration.verify_skill_coverage`
+gates run completion either way, so no agent is skipped and no persona is abbreviated.
 
 ## How the gate decides PASS/FAIL
 
@@ -466,6 +496,7 @@ environment-variable configuration, as of 1.5.0.
 
 ## Change History
 
+- 2026-07-14 — Added the "Client support matrix" and "Portable agent delivery" sections: per-client MCP config paths/keys (VS Code `servers`, Windsurf `~/.codeium/windsurf/mcp_config.json`, Codex TOML, Replit remote-only) and how agents are delivered over MCP prompts/resources so every client runs the full roster.
 - 2026-07-07 — Added the version note (internal milestones 1.4.0–1.6.1 ship publicly in
   1.3.5) and the "pre-release checklist" section documenting the checklist's sync with
   the detection engine (246 items across 21 sections).

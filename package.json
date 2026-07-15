@@ -48,6 +48,7 @@
     "prompts/",
     "skills/",
     "defaults/",
+    "client-templates/",
     "README.md",
     "LICENSE"
   ],

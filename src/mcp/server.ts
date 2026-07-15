@@ -1,4 +1,4 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { readFileSync, existsSync } from "node:fs";
 import { attemptAuth, authSystemPromptPreamble, getSessionId, isAuthRequired, isAuthenticated, logout, recordAttempt } from "./auth.js";
@@ -21,7 +21,8 @@ import {
   writeAgentMemory, WriteAgentMemorySchema,
   checkUpdates, CheckUpdatesSchema,
   applyUpdates, ApplyUpdatesSchema,
-  verifySkillCoverage, VerifySkillCoverageSchema
+  verifySkillCoverage, VerifySkillCoverageSchema,
+  readBundledSkillBody, listBundledSkills
 } from "./orchestration.js";
 import {
   recordOutcome, RecordOutcomeParams,
@@ -2339,6 +2340,154 @@ server.prompt(
           }
         }
       ]
+    };
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Portable agent delivery — MCP resources + prompts
+//
+// The agent roster (skills/*/SKILL.md) is delivered over the MCP protocol itself
+// so every host — Claude Code, Cursor, VS Code / Copilot, Windsurf, Codex — can
+// load and run every agent at full persona, not just Claude Code (which reads
+// ~/.claude/skills). Resources expose the catalog; prompts expose the
+// user-invocable entry agents; both serve the verbatim bundled SKILL.md.
+// ---------------------------------------------------------------------------
+
+// One shared block prepended to every agent prompt. It defines the portable
+// subagent primitive: parallel where the host supports it, sequential-but-complete
+// where it does not. Capability degrades in concurrency only, never in completeness.
+const HOST_ADAPTATION_PREAMBLE = [
+  "## Host adaptation (read first)",
+  "",
+  "You are running inside an MCP host. Tools are namespaced by the host, so the same",
+  "tool appears under different names (e.g. `orchestration.create_agent_run`,",
+  "`mcp__security-mcp__orchestration_create_agent_run`, or any",
+  "`*orchestration*create_agent_run*` variant). Treat any of these forms as the same",
+  "tool; search the tool registry before concluding a tool is missing.",
+  "",
+  "This agent roster is delivered over MCP, not the Claude-only `~/.claude/skills`",
+  "directory. To run any named specialist agent:",
+  "",
+  "- If your host provides an Agent / Task / subagent tool, spawn each named agent in",
+  "  parallel exactly as written below.",
+  "- If it does NOT, adopt each agent's FULL persona sequentially: call",
+  "  `orchestration.ensure_skill({ skillName })` (or read the `skill://<name>` MCP",
+  "  resource) to load that agent's complete SKILL.md, then execute every section to",
+  "  completion before moving to the next agent.",
+  "",
+  "Rules that never relax on any host: never skip an agent, never abbreviate or",
+  "summarize a persona, never lower the coverage bar.",
+  "`orchestration.verify_skill_coverage` still gates run completion",
+  "(`SECURITY_MIN_SKILL_COVERAGE_PCT`). Deliver the complete result the persona below",
+  "specifies — and beyond.",
+  "",
+  "---",
+  ""
+].join("\n");
+
+// User-invocable entry agents surfaced as MCP prompts (slash-command / prompt picker
+// in every client). Bodies are the verbatim bundled SKILL.md + the shared preamble.
+const AGENT_PROMPTS: Array<{ name: string; skill: string; description: string }> = [
+  {
+    name: "ciso-orchestrator",
+    skill: "ciso-orchestrator",
+    description:
+      "Coordinate the full 40+ agent security review across Phase 1 (discovery) and Phase 2 (adversarial testing + compliance synthesis). Runs every specialist to full persona — parallel where the host supports subagents, sequential-but-complete otherwise."
+  },
+  {
+    name: "senior-security-engineer",
+    skill: "senior-security-engineer",
+    description:
+      "Activate the senior security engineer: 90% fixing, 10% advisory. Picks scan scope, runs the gate, writes the fixes, enforces the controls, and attests — driving the security-mcp tools directly."
+  },
+  {
+    name: "agentic-instruction-auditor",
+    skill: "agentic-instruction-auditor",
+    description:
+      "Audit agent-instruction surfaces (CLAUDE.md, .cursor rules, .windsurfrules, AGENTS.md, .mcp.json, SKILL.md) for prompt injection, tool poisoning, and hidden-instruction attacks."
+  }
+];
+
+function agentPromptBody(skillName: string): string {
+  const body = readBundledSkillBody(skillName);
+  if (body === null) {
+    return `[security-mcp] Agent "${skillName}" is not bundled in this package. Run "npm run build" from the package root or reinstall security-mcp.`;
+  }
+  return HOST_ADAPTATION_PREAMBLE + body;
+}
+
+for (const agent of AGENT_PROMPTS) {
+  server.prompt(agent.name, agent.description, async () => {
+    if (isAuthRequired() && !isAuthenticated()) {
+      return {
+        messages: [{
+          role: "user" as const,
+          content: { type: "text" as const, text: "UNAUTHENTICATED — call security.authenticate first" }
+        }]
+      };
+    }
+    return {
+      messages: [{
+        role: "user" as const,
+        content: { type: "text" as const, text: agentPromptBody(agent.skill) }
+      }]
+    };
+  });
+}
+
+// skill://catalog — the full agent roster, so any host can discover the roster.
+server.resource(
+  "security-mcp agent catalog",
+  "skill://catalog",
+  { description: "List of every security-mcp agent/skill available over MCP. Read skill://<name> for a persona.", mimeType: "application/json" },
+  async (uri: URL) => {
+    const skills = listBundledSkills();
+    return {
+      contents: [{
+        uri: uri.href,
+        mimeType: "application/json",
+        text: JSON.stringify(
+          { count: skills.length, skills, read: "skill://<name>" },
+          null,
+          2
+        )
+      }]
+    };
+  }
+);
+
+// skill://<name> — the verbatim persona for any bundled agent.
+server.resource(
+  "security-mcp agent persona",
+  new ResourceTemplate("skill://{name}", {
+    list: async () => ({
+      resources: listBundledSkills().map((name) => ({
+        uri: `skill://${name}`,
+        name,
+        mimeType: "text/markdown"
+      }))
+    })
+  }),
+  { description: "Full SKILL.md persona for a security-mcp agent. Load and execute it completely." },
+  async (uri: URL, variables: Record<string, string | string[]>) => {
+    const raw = variables["name"];
+    const name = Array.isArray(raw) ? (raw[0] ?? "") : (raw ?? "");
+    // readBundledSkillBody throws on a name that fails path-safety validation (CWE-22);
+    // an invalid resource id is a client error, not an exception — return a clean message.
+    let body: string | null = null;
+    try {
+      body = readBundledSkillBody(name);
+    } catch {
+      body = null;
+    }
+    if (body === null) {
+      return {
+        contents: [{ uri: uri.href, mimeType: "text/plain", text: `[security-mcp] Unknown agent "${name}". Read skill://catalog for the list.` }]
+      };
+    }
+    return {
+      contents: [{ uri: uri.href, mimeType: "text/markdown", text: body }]
     };
   }
 );

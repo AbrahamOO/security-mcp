@@ -1,6 +1,6 @@
 # security-mcp
 
-Last updated: 2026-07-07
+Last updated: 2026-07-14
 
 [![npm version](https://img.shields.io/npm/v/security-mcp.svg)](https://www.npmjs.com/package/security-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -317,7 +317,7 @@ Prerequisite: Node.js 20 or higher (`node --version`).
 npx -y security-mcp@latest install
 ```
 
-The installer auto-detects Claude Code, Cursor, VS Code, and Windsurf, and writes the config to the right place. Restart your editor, then run a review:
+The installer auto-detects Claude Code, Cursor, VS Code / GitHub Copilot, Windsurf, and Codex, and writes the config to the right place. (Replit is remote-MCP only — see below.) Restart your editor, then run a review:
 
 ```text
 /senior-security-engineer
@@ -339,7 +339,7 @@ npx -y security-mcp@latest doctor
 
 Add the server to your editor's MCP config and restart.
 
-Claude Code (`~/.claude/settings.json`), Cursor (`~/.cursor/mcp.json`), Windsurf (`~/.windsurf/mcp.json`):
+Claude Code (`~/.claude/settings.json`), Cursor (`~/.cursor/mcp.json` or `.cursor/mcp.json`), Windsurf (`~/.codeium/windsurf/mcp_config.json`) — all use the `mcpServers` key:
 
 ```json
 {
@@ -352,11 +352,11 @@ Claude Code (`~/.claude/settings.json`), Cursor (`~/.cursor/mcp.json`), Windsurf
 }
 ```
 
-VS Code / GitHub Copilot (user `settings.json`):
+VS Code / GitHub Copilot (`.vscode/mcp.json`) — top-level key is `servers` (in user `settings.json` it nests under `"mcp": { "servers": { … } }`):
 
 ```json
 {
-  "mcp.servers": {
+  "servers": {
     "security-mcp": {
       "command": "npx",
       "args": ["-y", "security-mcp@latest", "serve"]
@@ -364,6 +364,28 @@ VS Code / GitHub Copilot (user `settings.json`):
   }
 }
 ```
+
+Codex (`~/.codex/config.toml`, or project-scoped `.codex/config.toml`) — TOML:
+
+```toml
+[mcp_servers.security-mcp]
+command = "npx"
+args = ["-y", "security-mcp@latest", "serve"]
+```
+
+Replit consumes MCP as a remote server only. Add security-mcp through Replit's
+Integrations UI (Add custom MCP server) pointing at a hosted MCP endpoint; the local
+`npx … serve` stdio command above does not apply there.
+
+### Runs on every client, at full capability
+
+The agent roster is delivered over the MCP protocol itself, not a Claude-only skills
+directory. Every client can load and run every agent: the `senior-security-engineer` and
+`ciso-orchestrator` MCP prompts are the entry points, `skill://catalog` and
+`skill://<name>` resources expose each agent's full persona, and the
+`orchestration.ensure_skill` tool returns any agent's complete instructions on demand.
+Hosts with parallel subagents run the roster concurrently; others run it sequentially —
+each agent to full completion, nothing skipped.
 
 ---
 
@@ -656,6 +678,7 @@ The `security-mcp` binary exposes:
 
 ## Change History
 
+- 2026-07-14 — Multi-client parity: corrected manual-config paths/keys (VS Code `.vscode/mcp.json` with `servers`, Windsurf `~/.codeium/windsurf/mcp_config.json`, added Codex TOML and the Replit remote-only note); added the "Runs on every client, at full capability" section describing MCP-native agent delivery (prompts, `skill://` resources, `ensure_skill`).
 - 2026-07-07 — Added the "What's new in 1.3.5" section: pre-release checklist synced with the detection engine (8 new sections, 246 items) and the note that internal milestones 1.4.0–1.6.1 ship publicly in 1.3.5.
 - 2026-07-07 — Tightened the 1.4.0 self-hardening note to an outcome statement (removed internal review-process mechanics), keeping the residual-risk disclosure pointer.
 - 2026-07-06 — Added the "MCP security & governance / safe to use" section (self trust model, tamper-evident policy, fail-safe, egress control, no-shell exec, self-scan).

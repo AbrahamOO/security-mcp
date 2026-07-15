@@ -21,7 +21,7 @@ import {
   writeFile,
   readdir
 } from "node:fs/promises";
-import { existsSync, readFileSync, writeFileSync, renameSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, renameSync, mkdirSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -952,6 +952,46 @@ function sanitizeSkillContent(content: string, skillName: string): string {
   return clean.join("\n");
 }
 
+/**
+ * Read a bundled SKILL.md verbatim from the installed package (the trust root).
+ * Returns null when the skill is not bundled.
+ *
+ * No sanitization is applied here: bundled skills ship inside the package the
+ * consumer already trusts, and stripping lines (e.g. the orchestrator's legitimate
+ * `orchestration.ensure_skill` references) would corrupt the agent persona. Content
+ * sanitization is reserved for the untrusted network-download path in ensureSkill.
+ * Callers (MCP skill:// resources, agent prompts, ensureSkill) rely on the full,
+ * unaltered persona so every agent runs at full capability on every client.
+ */
+export function readBundledSkillBody(skillName: string): string | null {
+  // CWE-22: validate skillName before using it in a file path
+  if (!SAFE_SKILL_NAME_RE.test(skillName)) {
+    throw new Error(`Invalid skill name "${skillName}"`);
+  }
+  const bundledPath = join(BUNDLED_SKILLS_DIR, skillName, "SKILL.md");
+  if (!existsSync(bundledPath)) return null;
+  return readFileSync(bundledPath, "utf-8");
+}
+
+/**
+ * List every bundled agent/skill name (directories under the package `skills/` dir
+ * that contain a SKILL.md). Used to expose the full agent catalog over MCP so any
+ * host can discover and load the roster.
+ */
+export function listBundledSkills(): string[] {
+  try {
+    return readdirSync(BUNDLED_SKILLS_DIR)
+      .filter(
+        (name) =>
+          SAFE_SKILL_NAME_RE.test(name) &&
+          existsSync(join(BUNDLED_SKILLS_DIR, name, "SKILL.md"))
+      )
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
 export const EnsureSkillSchema = z.object({
   skillName: z.string().describe("Name of the skill to ensure is installed (e.g. 'threat-modeler')."),
   version: z.string().optional().describe("Required version; re-downloads if installed version differs.")
@@ -960,7 +1000,8 @@ export const EnsureSkillSchema = z.object({
 export async function ensureSkill(args: z.infer<typeof EnsureSkillSchema>): Promise<{
   downloaded: boolean;
   version: string;
-  path: string;
+  path?: string;
+  content: string;
 }> {
   const { skillName, version: requiredVersion } = args;
 
@@ -981,23 +1022,31 @@ export async function ensureSkill(args: z.infer<typeof EnsureSkillSchema>): Prom
     (!requiredVersion || installed.version === requiredVersion);
 
   if (alreadyCurrent) {
-    return { downloaded: false, version: installed.version, path: skillPath };
+    // Prefer the verbatim bundled persona; fall back to the on-disk copy.
+    const body = readBundledSkillBody(skillName) ?? readFileSync(skillPath, "utf-8");
+    return { downloaded: false, version: installed.version, path: skillPath, content: body };
   }
 
   // TRUST ROOT: prefer the skill bundled inside the installed package over the network.
   // No download, no manifest, no TOFU — the consumer already trusts the installed package.
-  const bundledPath = join(BUNDLED_SKILLS_DIR, skillName, "SKILL.md");
-  if (existsSync(bundledPath)) {
-    const sanitized = sanitizeSkillContent(readFileSync(bundledPath, "utf-8"), skillName);
-    mkdirSync(dirname(skillPath), { recursive: true, mode: 0o700 });
-    const tmp = `${skillPath}.tmp.${process.pid}`;
-    writeFileSync(tmp, sanitized, { encoding: "utf-8", mode: 0o600 });
-    renameSync(tmp, skillPath);
+  // The full body is always returned so any MCP host (Claude Code, Cursor, VS Code,
+  // Windsurf, Codex) can adopt the persona directly. The ~/.claude/skills materialization
+  // is Claude-Code ergonomics only, so it runs solely when that layout exists.
+  const bundledBody = readBundledSkillBody(skillName);
+  if (bundledBody !== null) {
     const bundledVersion = requiredVersion ?? "bundled";
-    versions[skillName] = { version: bundledVersion, installedAt: new Date().toISOString(), path: skillPath };
-    mkdirSync(dirname(SKILL_VERSIONS_PATH), { recursive: true, mode: 0o700 });
-    writeFileSync(SKILL_VERSIONS_PATH, JSON.stringify(versions, null, 2) + "\n", { encoding: "utf-8", mode: 0o600 });
-    return { downloaded: false, version: bundledVersion, path: skillPath };
+    let writtenPath: string | undefined;
+    if (existsSync(join(homedir(), ".claude"))) {
+      mkdirSync(dirname(skillPath), { recursive: true, mode: 0o700 });
+      const tmp = `${skillPath}.tmp.${process.pid}`;
+      writeFileSync(tmp, bundledBody, { encoding: "utf-8", mode: 0o600 });
+      renameSync(tmp, skillPath);
+      versions[skillName] = { version: bundledVersion, installedAt: new Date().toISOString(), path: skillPath };
+      mkdirSync(dirname(SKILL_VERSIONS_PATH), { recursive: true, mode: 0o700 });
+      writeFileSync(SKILL_VERSIONS_PATH, JSON.stringify(versions, null, 2) + "\n", { encoding: "utf-8", mode: 0o600 });
+      writtenPath = skillPath;
+    }
+    return { downloaded: false, version: bundledVersion, path: writtenPath, content: bundledBody };
   }
 
   // Fallback (skill not bundled): fetch from the manifest with mandatory integrity check.
@@ -1057,7 +1106,7 @@ export async function ensureSkill(args: z.infer<typeof EnsureSkillSchema>): Prom
   mkdirSync(dirname(SKILL_VERSIONS_PATH), { recursive: true, mode: 0o700 });
   writeFileSync(SKILL_VERSIONS_PATH, JSON.stringify(versions, null, 2) + "\n", { encoding: "utf-8", mode: 0o600 });
 
-  return { downloaded: true, version: entry.version, path: skillPath };
+  return { downloaded: true, version: entry.version, path: skillPath, content: sanitized };
 }
 
 // 5. read_agent_memory

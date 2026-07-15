@@ -74,7 +74,9 @@ COMMANDS
 OPTIONS (install)
   --claude-code        Write config for Claude Code only
   --cursor             Write config for Cursor only
-  --vscode             Write config for VS Code only
+  --vscode             Write config for VS Code / GitHub Copilot only
+  --windsurf           Write config for Windsurf only
+  --codex              Write config for Codex only
   --global             Write to global editor config (default)
   --use-global-binary  Write configs that execute "security-mcp serve" instead of npx
   --dry-run            Print what would change without writing
@@ -117,6 +119,7 @@ EXAMPLES
   security-mcp config --use-global-binary
 
 EDITOR CONFIG (add manually if install fails):
+  JSON clients use the "mcpServers" key (VS Code uses "servers" in .vscode/mcp.json):
   {
     "mcpServers": {
       "security-mcp": {
@@ -126,10 +129,12 @@ EDITOR CONFIG (add manually if install fails):
     }
   }
 
-  Claude Code:  ~/.claude/settings.json
-  Cursor:       ~/.cursor/mcp.json  or  .cursor/mcp.json
-  VS Code:      User settings.json  (via Preferences > Open User Settings JSON)
-  Windsurf:     ~/.windsurf/mcp.json
+  Claude Code:  ~/.claude/settings.json                         (key: mcpServers)
+  Cursor:       ~/.cursor/mcp.json  or  .cursor/mcp.json        (key: mcpServers)
+  VS Code:      .vscode/mcp.json                                (key: servers)
+  Windsurf:     ~/.codeium/windsurf/mcp_config.json             (key: mcpServers)
+  Codex:        ~/.codex/config.toml  or  .codex/config.toml    (TOML [mcp_servers.security-mcp])
+  Replit:       remote MCP only — add via the Integrations UI (no local config)
 
 MORE INFO
   https://github.com/AbrahamOO/security-mcp
@@ -139,12 +144,17 @@ function resolveHome(p: string): string {
   return p.replace(/^~/, homedir());
 }
 
-function getVsCodeSettingsPath(): string {
+// VS Code user settings dir — used only to detect whether VS Code is installed.
+// MCP config is written to the project-scoped .vscode/mcp.json (key "servers").
+function getVsCodeUserDir(): string {
   const os = platform();
-  if (os === "win32") return `${process.env["APPDATA"] ?? ""}\\Code\\User\\settings.json`;
-  if (os === "darwin") return `${homedir()}/Library/Application Support/Code/User/settings.json`;
-  return `${homedir()}/.config/Code/User/settings.json`;
+  if (os === "win32") return `${process.env["APPDATA"] ?? ""}\\Code\\User`;
+  if (os === "darwin") return `${homedir()}/Library/Application Support/Code/User`;
+  return `${homedir()}/.config/Code/User`;
 }
+
+const VSCODE_MCP_CONFIG = ".vscode/mcp.json";
+const WINDSURF_MCP_CONFIG = "~/.codeium/windsurf/mcp_config.json";
 
 // Compare two dotted versions. Returns <0 if a<b, 0 if equal, >0 if a>b.
 // Prerelease/build suffixes are stripped; only major.minor.patch are compared.
@@ -221,13 +231,46 @@ function checkPinnedConfig(configPath: string, serversKey: string, label: string
   }
 }
 
+// Codex config is TOML. Isolate the [mcp_servers.security-mcp] table and apply the
+// same pinned/unpinned logic as checkPinnedConfig (no TOML parser needed).
+function checkPinnedTomlConfig(configPath: string, label: string): DoctorCheck | null {
+  if (!existsSync(configPath)) return null;
+  try {
+    const raw = readFileSync(configPath, "utf-8");
+    const header = /^\[mcp_servers\.security-mcp\][ \t]*$/m.exec(raw);
+    if (!header) return null; // no security-mcp table here
+    const afterHeader = header.index + header[0].length;
+    const rest = raw.slice(afterHeader);
+    const nextTable = /\n\[[^\n]*\]/.exec(rest);
+    const block = rest.slice(0, nextTable ? nextTable.index : rest.length);
+    const commandMatch = /^\s*command\s*=\s*"([^"]*)"/m.exec(block);
+    const command = commandMatch?.[1];
+    if (command === "security-mcp") return null; // global-binary mode, intentional
+    if (command !== "npx") return null;
+    const pkgTok = (block.match(/"(security-mcp[^"]*)"/g) ?? [])
+      .map((s) => s.replace(/"/g, ""))
+      .find((s) => s.startsWith("security-mcp"));
+    const pinned = !!pkgTok && pkgTok.includes("@");
+    if (!pinned) {
+      return {
+        label: `${label} security-mcp launch is unpinned (${pkgTok ?? "security-mcp"})`,
+        ok: false,
+        hint: `Pin to @latest so npx never uses a stale build — re-run: npx -y security-mcp@latest install --codex`
+      };
+    }
+    return { label: `${label} security-mcp launch pinned (${pkgTok})`, ok: true };
+  } catch {
+    return null;
+  }
+}
+
 // Build the list of editor config-presence checks (files the installer writes).
 function collectConfigPresenceChecks(): DoctorCheck[] {
   const claudeConfig = resolveHome("~/.claude/settings.json");
   const skillPath = resolveHome("~/.claude/skills/senior-security-engineer/SKILL.md");
   const cursorConfig = resolveHome("~/.cursor/mcp.json");
-  const vscodePath = getVsCodeSettingsPath();
-  const windsurfConfig = resolveHome("~/.windsurf/mcp.json");
+  const windsurfConfig = resolveHome(WINDSURF_MCP_CONFIG);
+  const codexConfig = resolveHome("~/.codex/config.toml");
 
   const candidates: Array<DoctorCheck | null> = [
     { label: `Claude Code config (${claudeConfig})`, ok: existsSync(claudeConfig), hint: existsSync(claudeConfig) ? undefined : "Run: npx -y security-mcp@latest install --claude-code" },
@@ -235,9 +278,14 @@ function collectConfigPresenceChecks(): DoctorCheck[] {
     existsSync(resolveHome("~/.cursor"))
       ? { label: `Cursor config (${cursorConfig})`, ok: existsSync(cursorConfig), hint: existsSync(cursorConfig) ? undefined : "Run: npx -y security-mcp@latest install --cursor" }
       : null,
-    existsSync(vscodePath) ? { label: `VS Code config (${vscodePath})`, ok: true } : null,
-    existsSync(resolveHome("~/.windsurf"))
-      ? { label: `Windsurf config (${windsurfConfig})`, ok: existsSync(windsurfConfig), hint: existsSync(windsurfConfig) ? undefined : "Run: npx -y security-mcp@latest install" }
+    existsSync(".vscode") || existsSync(getVsCodeUserDir())
+      ? { label: `VS Code config (${VSCODE_MCP_CONFIG})`, ok: existsSync(VSCODE_MCP_CONFIG), hint: existsSync(VSCODE_MCP_CONFIG) ? undefined : "Run: npx -y security-mcp@latest install --vscode" }
+      : null,
+    existsSync(resolveHome("~/.codeium/windsurf")) || existsSync(resolveHome("~/.codeium"))
+      ? { label: `Windsurf config (${windsurfConfig})`, ok: existsSync(windsurfConfig), hint: existsSync(windsurfConfig) ? undefined : "Run: npx -y security-mcp@latest install --windsurf" }
+      : null,
+    existsSync(resolveHome("~/.codex"))
+      ? { label: `Codex config (${codexConfig})`, ok: existsSync(codexConfig), hint: existsSync(codexConfig) ? undefined : "Run: npx -y security-mcp@latest install --codex" }
       : null
   ];
 
@@ -259,8 +307,10 @@ function collectDoctorChecks(): DoctorCheck[] {
     checkPinnedConfig(resolveHome("~/.claude/settings.json"), "mcpServers", "Claude Code (settings.json):"),
     checkPinnedConfig(resolveHome("~/.claude.json"), "mcpServers", "Claude Code (~/.claude.json):"),
     checkPinnedConfig(resolveHome("~/.cursor/mcp.json"), "mcpServers", "Cursor:"),
-    checkPinnedConfig(getVsCodeSettingsPath(), "mcp.servers", "VS Code:"),
-    checkPinnedConfig(resolveHome("~/.windsurf/mcp.json"), "mcpServers", "Windsurf:")
+    checkPinnedConfig(VSCODE_MCP_CONFIG, "servers", "VS Code (.vscode/mcp.json):"),
+    checkPinnedConfig(resolveHome(WINDSURF_MCP_CONFIG), "mcpServers", "Windsurf:"),
+    checkPinnedTomlConfig(resolveHome("~/.codex/config.toml"), "Codex (~/.codex/config.toml):"),
+    checkPinnedTomlConfig(".codex/config.toml", "Codex (.codex/config.toml):")
   ];
 
   return candidates.filter((c): c is DoctorCheck => c !== null);
@@ -376,11 +426,14 @@ async function main(): Promise<void> {
 
     case "install": {
       const noEditorFlag =
-        !args.includes("--claude-code") && !args.includes("--cursor") && !args.includes("--vscode");
+        !args.includes("--claude-code") && !args.includes("--cursor") && !args.includes("--vscode") &&
+        !args.includes("--windsurf") && !args.includes("--codex");
       const options = {
         claudeCode: args.includes("--claude-code"),
         cursor: args.includes("--cursor"),
         vscode: args.includes("--vscode"),
+        windsurf: args.includes("--windsurf"),
+        codex: args.includes("--codex"),
         dryRun: args.includes("--dry-run"),
         useGlobalBinary,
         all: noEditorFlag,
@@ -392,11 +445,14 @@ async function main(): Promise<void> {
 
     case "install-global": {
       const noEditorFlag =
-        !args.includes("--claude-code") && !args.includes("--cursor") && !args.includes("--vscode");
+        !args.includes("--claude-code") && !args.includes("--cursor") && !args.includes("--vscode") &&
+        !args.includes("--windsurf") && !args.includes("--codex");
       const options = {
         claudeCode: args.includes("--claude-code"),
         cursor: args.includes("--cursor"),
         vscode: args.includes("--vscode"),
+        windsurf: args.includes("--windsurf"),
+        codex: args.includes("--codex"),
         dryRun: args.includes("--dry-run"),
         useGlobalBinary: true,
         all: noEditorFlag,
@@ -409,10 +465,12 @@ async function main(): Promise<void> {
     case "config": {
       process.stdout.write(JSON.stringify(getConfigSnippet(useGlobalBinary), null, 2) + "\n");
       process.stdout.write("\nAdd the above to your editor's MCP config file.\n");
-      process.stdout.write("  Claude Code:  ~/.claude/settings.json\n");
-      process.stdout.write("  Cursor:       ~/.cursor/mcp.json\n");
-      process.stdout.write("  VS Code:      User settings.json (Preferences > Open User Settings JSON)\n");
-      process.stdout.write("  Windsurf:     ~/.windsurf/mcp.json\n");
+      process.stdout.write("  Claude Code:  ~/.claude/settings.json                (key: mcpServers)\n");
+      process.stdout.write("  Cursor:       ~/.cursor/mcp.json                     (key: mcpServers)\n");
+      process.stdout.write("  VS Code:      .vscode/mcp.json                       (key: servers)\n");
+      process.stdout.write("  Windsurf:     ~/.codeium/windsurf/mcp_config.json    (key: mcpServers)\n");
+      process.stdout.write("  Codex:        ~/.codex/config.toml  (TOML: [mcp_servers.security-mcp] command/args)\n");
+      process.stdout.write("  Replit:       remote MCP only — add via the Integrations UI\n");
       break;
     }
 
