@@ -83,6 +83,20 @@ claims to match the code — nothing is left asserted-but-unproven.
   All 507 cases pass after these fixes: `tpRate=1.00`, `fpRate=0.00`. A follow-up adversarial
   review of the negative samples across a 15-module, ~210-case sample found no gamed or
   cosmetic negatives — each implements the rule's own documented remediation.
+- **CI self-scan exceptions file shrunk from 16 entries / 452 ids to 13 entries / 282 ids.**
+  A full non-diff-scoped self-scan (every git-tracked, non-ignored file, matching CI's own
+  invocation exactly) found that two entries — `self-scan-fixtures-and-cloud-controls` (208
+  ids) and `self-scan-agentic-instruction-and-ai-governance` (14 ids) — were entirely
+  redundant: their stated justification (`fixtures/`, `skills/*/SKILL.md`) is now handled
+  outright by CI's `SECURITY_GATE_IGNORE`, which excludes those paths from scanning
+  regardless of the exceptions file. Both were deleted. A third, `self-scan-v15-v16-fixtures-
+  and-teaching-skills`, was likewise deleted after confirming its 11 still-live ids no longer
+  reproduce for the reason stated (the same ignore-list) but do reproduce via the new Wave 2
+  corpus fixtures — moved to `self-scan-rule-corpus` with corrected justification rather than
+  left under an inaccurate one. Five smaller entries had their genuinely stale ids (confirmed
+  gone from a raw, unsuppressed full scan) removed in place. Net result: same self-scan
+  outcome (`PASS`, 7 non-blocking MEDIUM findings, identical before and after), with no
+  finding_id kept for a reason that no longer holds.
 
 ### Added: one-shot `security.fortify` — natural-language "lock down X" dispatch
 
