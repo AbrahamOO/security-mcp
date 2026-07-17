@@ -1,13 +1,14 @@
 import { Finding, sanitizeErrorMessage } from "../result.js";
 import { scopedFg as fg } from "../scan-scope.js";
 import { readFileSafe } from "../../repo/fs.js";
+import { getWorkspaceRoot } from "../../repo/workspace.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { readFile } from "node:fs/promises";
 import { checkActiveExploitation } from "../threat-intel.js";
 import { join } from "node:path";
 
-const THREAT_INTEL_CACHE_DIR = join(process.cwd(), ".mcp", "threat-intel");
+const threatIntelCacheDir = (): string => join(getWorkspaceRoot(), ".mcp", "threat-intel");
 
 const execFileAsync = promisify(execFile);
 
@@ -484,8 +485,31 @@ async function checkCveExploitation(): Promise<Finding[]> {
 		const cveIds = extractCveIds(audit);
 		if (cveIds.length === 0) return [];
 
-		const intel = await checkActiveExploitation(cveIds, THREAT_INTEL_CACHE_DIR);
-		if (intel.failed) return [];
+		const intel = await checkActiveExploitation(cveIds, threatIntelCacheDir());
+		if (intel.failed) {
+			// EVALUABILITY (do NOT fail open): the dependency audit found CVEs, but the
+			// live exploit-intelligence lookup (CISA KEV / EPSS) could not complete —
+			// network failure, rate limit, or an unreachable endpoint. Returning [] here
+			// would report "no actively-exploited CVEs" when the truth is "unknown",
+			// silently converting a coverage gap into a clean result. Emit an explicit
+			// unavailability finding instead. (SECURITY_OFFLINE=1 does NOT reach this
+			// branch — checkActiveExploitation returns failed:false when offline, which
+			// is the correct "not applicable, by operator choice" path.)
+			return [{
+				id: "EVAL_UNAVAILABLE_THREAT_INTEL",
+				title: "Active-exploitation check could not complete — CVE exploit status is UNKNOWN, not clean",
+				severity: "HIGH",
+				evidence: [
+					`${cveIds.length} CVE(s) from the dependency audit were not checked against CISA KEV / EPSS.`,
+					"The threat-intel lookup failed (network error, rate limit, or unreachable endpoint)."
+				],
+				requiredActions: [
+					"Re-run the gate with network access so CISA KEV and EPSS can be queried, or",
+					"Set SECURITY_OFFLINE=1 to intentionally skip live threat intel (findings will not claim exploit status either way).",
+					"Do not treat this run as evidence that the audited CVEs are not actively exploited."
+				]
+			}];
+		}
 
 		return buildThreatIntelFindings(intel);
 	} catch (err) {

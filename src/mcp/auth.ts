@@ -36,6 +36,13 @@ const SESSION_ID = randomBytes(16).toString("hex");
 let _authenticated = false;
 let _authenticatedAt: number | null = null;
 let _attempts = 0;
+// Unix-ms timestamp until which further auth attempts are rejected. Replaces the
+// old process.exit(1)-on-lockout, which let a 3-typo mistake kill the whole stdio
+// session (a self-inflicted DoS). Brute force is still throttled to a negligible
+// rate by exponential backoff, but a legitimate caller recovers after the cooldown.
+let _lockedUntil = 0;
+const AUTH_LOCKOUT_BASE_MS = 1000;
+const AUTH_LOCKOUT_MAX_MS = 30_000;
 
 /** Whether the caller must authenticate before using any other tool. */
 export function isAuthRequired(): boolean {
@@ -85,6 +92,7 @@ export function logout(): void {
   _authenticated = false;
   _authenticatedAt = null;
   _attempts = 0;
+  _lockedUntil = 0;
 }
 
 /**
@@ -107,7 +115,9 @@ export function getSessionId(): string {
  * Attempt to authenticate the session with the provided token.
  *
  * Uses constant-time HMAC comparison to prevent timing oracles regardless of
- * token length. After AUTH_MAX_ATTEMPTS failures, terminates the process.
+ * token length. After AUTH_MAX_ATTEMPTS failures the session enters an
+ * exponential-backoff lockout (it does NOT terminate the process — that would let
+ * a 3-typo mistake kill the stdio session for a legitimate operator).
  */
 export function attemptAuth(token: string): {
   success: boolean;
@@ -123,6 +133,17 @@ export function attemptAuth(token: string): {
     return { success: true, sessionId: SESSION_ID };
   }
 
+  // Cooldown gate: while locked out, reject every attempt without touching the
+  // HMAC path, so a brute-forcer cannot make progress during the backoff window.
+  const now = Date.now();
+  if (now < _lockedUntil) {
+    return {
+      success: false,
+      reason: "Authentication temporarily locked out. Try again later.",
+      attemptsRemaining: 0
+    };
+  }
+
   // NOTE: _attempts is incremented by recordAttempt() called BEFORE Zod parsing
   // in the server.ts handler. Do not increment here again to avoid double-counting.
   const remaining = AUTH_MAX_ATTEMPTS - _attempts;
@@ -132,10 +153,16 @@ export function attemptAuth(token: string): {
   // Fix: use <= 0 (not < 0). With < 0, remaining==0 (i.e. _attempts==AUTH_MAX_ATTEMPTS)
   // would still reach the HMAC comparison — granting one extra attempt beyond policy.
   if (remaining <= 0) {
-    setTimeout(() => process.exit(1), 200);
+    // Exponential backoff instead of process.exit(1): 2^(overshoot) * base, capped.
+    // A legitimate operator who fat-fingered the secret recovers after the cooldown;
+    // an attacker is throttled to at most one guess per (growing) window.
+    const overshoot = _attempts - AUTH_MAX_ATTEMPTS; // 0 on the first lockout
+    const backoff = Math.min(AUTH_LOCKOUT_BASE_MS * 2 ** overshoot, AUTH_LOCKOUT_MAX_MS);
+    _lockedUntil = now + backoff;
     return {
       success: false,
-      reason: "Authentication failed."
+      reason: "Authentication failed. Too many attempts — locked out temporarily.",
+      attemptsRemaining: 0
     };
   }
 

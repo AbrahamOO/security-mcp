@@ -301,10 +301,16 @@ export async function verifyChain(agentRunId: string): Promise<ChainVerification
   }
 
   const hmacKey = getAuditHmacKey();
-  const chainIsSigned = chain.links.some((l) => l.hmacSha256 !== undefined);
+  // A chain counts as signed only if EVERY link carries an HMAC. Using `some()`
+  // here would let an attacker strip the hmacSha256 field from all-but-one link
+  // (or all links) and have the chain re-classified as "unsigned", steering
+  // verification onto the hash-only pass path. Requiring `every()` means a
+  // partially-stripped chain is treated as signed-but-broken, not unsigned.
+  const chainIsSigned = chain.links.length > 0 && chain.links.every((l) => l.hmacSha256 !== undefined);
+  const chainHasAnySignature = chain.links.some((l) => l.hmacSha256 !== undefined);
 
-  // Key absent but chain is signed — cannot verify
-  if (!hmacKey && chainIsSigned) {
+  // Key absent but chain carries signatures — cannot verify
+  if (!hmacKey && chainHasAnySignature) {
     return {
       agentRunId,
       valid: false,
@@ -314,6 +320,24 @@ export async function verifyChain(agentRunId: string): Promise<ChainVerification
         linkIndex: 0,
         agentName: chain.links[0].agentName,
         reason: "Chain is signed but SECURITY_AUDIT_HMAC_KEY is not set — cannot verify integrity."
+      }
+    };
+  }
+
+  // Key configured but the chain is not fully signed — reject. This closes the
+  // "strip every hmacSha256 to downgrade to the unsigned pass path" bypass: once
+  // an operator has configured a key, an unsigned or partially-signed chain is a
+  // tamper signal, not a valid hash-only chain.
+  if (hmacKey && !chainIsSigned) {
+    return {
+      agentRunId,
+      valid: false,
+      linkCount: chain.links.length,
+      verifiedAt,
+      broken: {
+        linkIndex: chain.links.findIndex((l) => l.hmacSha256 === undefined),
+        agentName: chain.links.find((l) => l.hmacSha256 === undefined)?.agentName ?? "unknown",
+        reason: "SECURITY_AUDIT_HMAC_KEY is configured but one or more links are unsigned — signatures stripped or chain forged."
       }
     };
   }

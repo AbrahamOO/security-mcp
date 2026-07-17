@@ -42,6 +42,7 @@ import { Finding } from "../result.js";
 import { searchRepo } from "../../repo/search.js";
 import { scopedFg as fg } from "../scan-scope.js";
 import { readFileSafe } from "../../repo/fs.js";
+import { getWorkspaceRoot } from "../../repo/workspace.js";
 
 // Lockfiles and manifests that carry dependency-resolution metadata.
 const LOCKFILE_RE = /(?:^|\/)(?:package-lock\.json|yarn\.lock|pnpm-lock\.yaml|npm-shrinkwrap\.json)$/i;
@@ -594,7 +595,7 @@ async function checkModelPickleOpcodeDangerous(): Promise<Finding | null> {
 
   const { readFile, stat } = await import("node:fs/promises");
   const { resolve, sep } = await import("node:path");
-  const root = process.cwd();
+  const root = getWorkspaceRoot();
   const rootPrefix = root.endsWith(sep) ? root : root + sep;
 
   const evidence: string[] = [];

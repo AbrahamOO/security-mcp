@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
+import { getWorkspaceRoot } from "../repo/workspace.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = resolve(__dirname, "../..");
@@ -43,7 +44,7 @@ async function readJsonWithFallback(relPath: string, fallbackName: string): Prom
   if (overridePath) {
     // Guard against path traversal (VULN-003 / CWE-22): resolve() + startsWith() is required;
     // join() alone normalises '..' but does not prevent escape from the project directory.
-    const cwd = process.cwd();
+    const cwd = getWorkspaceRoot();
     const resolved = resolve(cwd, overridePath);
     if (resolved !== cwd && !resolved.startsWith(cwd + "/")) {
       throw new Error(`${overrideEnv} path escapes the project directory`);
@@ -52,7 +53,7 @@ async function readJsonWithFallback(relPath: string, fallbackName: string): Prom
   }
 
   try {
-    return await readFile(join(process.cwd(), relPath), "utf-8");
+    return await readFile(join(getWorkspaceRoot(), relPath), "utf-8");
   } catch {
     return await readFile(join(PKG_ROOT, "defaults", fallbackName), "utf-8");
   }

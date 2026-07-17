@@ -4,6 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Finding } from "./result.js";
 import type { Policy } from "./policy.js";
+import { getWorkspaceRoot } from "../repo/workspace.js";
 import type { CatalogControl, SurfaceScope } from "./catalog.js";
 import { loadControlCatalog, controlApplies } from "./catalog.js";
 
@@ -26,7 +27,7 @@ async function loadEvidenceMap(): Promise<EvidenceMap> {
   if (overridePath) {
     // Guard against path traversal (VULN-002 / CWE-22): join() normalises '..' sequences
     // but does NOT prevent escape; resolve() + startsWith() is the correct check.
-    const cwd = process.cwd();
+    const cwd = getWorkspaceRoot();
     const resolved = resolve(cwd, overridePath);
     if (resolved !== cwd && !resolved.startsWith(cwd + "/")) {
       throw new Error("SECURITY_GATE_EVIDENCE_MAP path escapes the project directory");
@@ -36,7 +37,7 @@ async function loadEvidenceMap(): Promise<EvidenceMap> {
   }
 
   try {
-    const raw = await readFile(join(process.cwd(), ".mcp", "mappings", "evidence-map.json"), "utf-8");
+    const raw = await readFile(join(getWorkspaceRoot(), ".mcp", "mappings", "evidence-map.json"), "utf-8");
     return JSON.parse(raw) as EvidenceMap;
   } catch {
     const raw = await readFile(join(PKG_ROOT, "defaults", "evidence-map.json"), "utf-8");
@@ -106,6 +107,7 @@ export async function evaluateEvidenceCoverage(opts: {
       const matches = await fg(globs, {
         dot: true,
         onlyFiles: true,
+        cwd: getWorkspaceRoot(),
         ignore: ["**/node_modules/**", "**/.git/**", "**/dist/**"]
       });
       if (matches.length === 0) {

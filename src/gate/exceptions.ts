@@ -4,6 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import type { Finding } from "./result.js";
+import { getWorkspaceRoot } from "../repo/workspace.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = resolve(__dirname, "../..");
@@ -83,8 +84,8 @@ async function readExceptionsJson(): Promise<{ raw: string; isCiFile: boolean; i
 
   if (overridePath) {
     // CWE-22: ensure path stays within the project directory
-    const resolved = resolve(process.cwd(), overridePath);
-    if (!resolved.startsWith(process.cwd() + "/") && resolved !== process.cwd()) {
+    const resolved = resolve(getWorkspaceRoot(), overridePath);
+    if (!resolved.startsWith(getWorkspaceRoot() + "/") && resolved !== getWorkspaceRoot()) {
       throw new Error(`SECURITY_GATE_EXCEPTIONS path '${overridePath}' escapes the project directory`);
     }
     const raw = await readFile(resolved, "utf-8");
@@ -93,7 +94,7 @@ async function readExceptionsJson(): Promise<{ raw: string; isCiFile: boolean; i
 
   // Project-level CI exceptions file (suppresses self-scan false positives)
   try {
-    const raw = await readFile(join(process.cwd(), ".github", "security-exceptions-ci.json"), "utf-8");
+    const raw = await readFile(join(getWorkspaceRoot(), ".github", "security-exceptions-ci.json"), "utf-8");
     // Fix 4: warn when CI exceptions are loaded outside CI context
     const isCI = !!(process.env["CI"] || process.env["GITHUB_ACTIONS"]);
     if (!isCI) {
@@ -123,7 +124,7 @@ async function readExceptionsJson(): Promise<{ raw: string; isCiFile: boolean; i
   } catch { /* not present — continue */ }
 
   try {
-    const raw = await readFile(join(process.cwd(), ".mcp", "exceptions", "security-exceptions.json"), "utf-8");
+    const raw = await readFile(join(getWorkspaceRoot(), ".mcp", "exceptions", "security-exceptions.json"), "utf-8");
     return { raw, isCiFile: false, isOverride: false, source: ".mcp/exceptions/security-exceptions.json", warnings };
   } catch {
     const raw = await readFile(join(PKG_ROOT, "defaults", "security-exceptions.json"), "utf-8");

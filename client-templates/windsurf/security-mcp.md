@@ -1,6 +1,6 @@
 # Windsurf rules — security-mcp
 
-Last updated: 2026-07-14
+Last updated: 2026-07-16
 Created: 2026-07-14
 
 This project has the **security-mcp** server configured
@@ -12,6 +12,13 @@ a deterministic policy gate over MCP.
 - Single-session review: invoke the `senior-security-engineer` MCP prompt. It picks a
   scan scope, runs the gate, writes the fixes (90% fixing), and attests.
 - Full audit: invoke the `ciso-orchestrator` MCP prompt.
+- One-shot fortify: for a plain "fortify"/"lock down X"/"harden to production grade"
+  request, call the `security.fortify` tool (or the `fortify` MCP prompt) with the named
+  target (e.g. "forms", "our API", "the whole codebase"). It always auto-applies —
+  resolves scope via repo search and pre-selects the specialist team, no confirmation gate.
+
+`security.start_review` now defaults to auto-apply when `remediationMode` is omitted;
+pass `remediationMode: "detection_only"` explicitly for a report-only run.
 
 ## Running any specialist agent
 
@@ -36,4 +43,5 @@ HIGH/CRITICAL findings.
 
 ## Change History
 
+- 2026-07-16 - Added: one-shot fortify guidance (`security.fortify` tool / `fortify` prompt) and noted `security.start_review` now defaults to auto-apply.
 - 2026-07-14 - Added: initial Windsurf rules template for MCP-native security-mcp usage.

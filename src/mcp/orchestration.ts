@@ -30,6 +30,7 @@ import { updateReviewStep } from "../review/store.js";
 import { getChain, verifyChain, computeFindingsHash } from "./audit-chain.js";
 import { enforceCapabilityFloor } from "./capability-enforcer.js";
 import { sanitizeErrorMessage } from "../gate/result.js";
+import { getWorkspaceRoot } from "../repo/workspace.js";
 import type {
   AgentName,
   AgentRunManifest,
@@ -191,7 +192,7 @@ function sanitizeStringArray(arr: string[] | undefined): string[] {
  * through unchanged. cloudProvider is re-narrowed to its literal union after
  * sanitization. Unknown extra string arrays (e.g. aptGroups) are also sanitized.
  */
-function sanitizeStackContext(ctx: StackContext): StackContext {
+export function sanitizeStackContext(ctx: StackContext): StackContext {
   const cloudProvider = sanitizeStringArray(ctx.cloudProvider as unknown as string[])
     .map((c) => (["aws", "gcp", "azure"].includes(c) ? c : "unknown")) as StackContext["cloudProvider"];
 
@@ -226,7 +227,7 @@ function agentRunDir(agentRunId: string): string {
   if (!SAFE_AGENT_RUN_ID_RE.test(agentRunId)) {
     throw new Error(`Invalid agentRunId "${agentRunId}"`);
   }
-  return join(process.cwd(), AGENT_RUNS_DIR, agentRunId);
+  return join(getWorkspaceRoot(), AGENT_RUNS_DIR, agentRunId);
 }
 
 function manifestPath(agentRunId: string): string {
@@ -261,7 +262,7 @@ function defaultAgentRecord(): AgentRecord {
  * relevant technology is actually detected — this avoids spawning and loading
  * skill files for surfaces that don't exist in the project.
  */
-function buildInitialAgents(stackContext: StackContext): Record<AgentName, AgentRecord> {
+export function buildInitialAgentNames(stackContext: StackContext): AgentName[] {
   const hasAWS   = stackContext.cloudProvider.includes("aws");
   const hasGCP   = stackContext.cloudProvider.includes("gcp");
   const hasAzure = stackContext.cloudProvider.includes("azure");
@@ -318,8 +319,13 @@ function buildInitialAgents(stackContext: StackContext): Record<AgentName, Agent
     );
   }
 
+  return names;
+}
+
+function buildInitialAgents(stackContext: StackContext, names?: AgentName[]): Record<AgentName, AgentRecord> {
+  const list = names ?? buildInitialAgentNames(stackContext);
   const record = {} as Record<AgentName, AgentRecord>;
-  for (const name of names) {
+  for (const name of list) {
     record[name] = defaultAgentRecord();
   }
   return record;
@@ -379,14 +385,18 @@ export const CreateAgentRunSchema = z.object({
     hasPayments: z.boolean().default(false),
     packageManagers: z.array(z.string()).default([]),
     ciPlatform: z.array(z.string()).default([])
-  }).describe("Tech stack context derived from project scan.")
+  }).describe("Tech stack context derived from project scan."),
+  agentNames: z.array(z.string()).optional().describe(
+    "Optional pre-filtered specialist roster (security.fortify uses this for scoped runs). " +
+    "Omit for the full auto-selected roster."
+  )
 });
 
 export async function createAgentRun(args: z.infer<typeof CreateAgentRunSchema>): Promise<{
   agentRunId: string;
   manifestPath: string;
 }> {
-  const { runId, scope, internetPermitted, stackContext } = args;
+  const { runId, scope, internetPermitted, stackContext, agentNames } = args;
   // Use 16 bytes of CSPRNG entropy (not Date.now()) so the ID cannot be
   // predicted or brute-forced even when runId is known.
   const agentRunId = createHash("sha256")
@@ -402,6 +412,12 @@ export async function createAgentRun(args: z.infer<typeof CreateAgentRunSchema>)
   // and BEFORE it reaches any spawned-agent prompt.
   const safeStackContext = sanitizeStackContext(stackContext as StackContext);
 
+  // A caller-supplied roster (security.fortify's scoped runs) is intersected against
+  // the real agent universe so an invalid or out-of-band name can never poison the
+  // manifest — only names buildInitialAgentNames would itself produce are honored.
+  const validAgentNames = new Set(buildInitialAgentNames(safeStackContext));
+  const filteredAgentNames = agentNames?.filter((n): n is AgentName => validAgentNames.has(n as AgentName));
+
   const manifest: AgentRunManifest = {
     agentRunId,
     runId,
@@ -411,7 +427,7 @@ export async function createAgentRun(args: z.infer<typeof CreateAgentRunSchema>)
     internetPermitted,
     stackContext: safeStackContext,
     scope,
-    agents: buildInitialAgents(safeStackContext)
+    agents: buildInitialAgents(safeStackContext, filteredAgentNames && filteredAgentNames.length > 0 ? filteredAgentNames : undefined)
   };
 
   await writeManifest(manifest);

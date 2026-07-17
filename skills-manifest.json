@@ -1,12 +1,12 @@
 {
   "version": "1.6.1",
-  "updatedAt": "2026-07-14",
+  "updatedAt": "2026-07-16",
   "baseUrl": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills",
   "skills": {
     "ciso-orchestrator": {
       "version": "1.0.1",
       "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/ciso-orchestrator/SKILL.md",
-      "description": "Master coordinator. Spins up all 39 specialist agents across Phase 1 and Phase 2. User-invocable via /ciso-orchestrator.",
+      "description": "Master coordinator. Spins up all 39 specialist agents across Phase 1 and Phase 2. User-invocable via /ciso-orchestrator. For a scoped \"lock down X\" ask, calls security.fortify first for the pre-scoped roster.",
       "userInvocable": true,
       "phase": 0,
       "subAgents": [
@@ -32,7 +32,7 @@
         "industry vertical APT matching",
         "ghost agent escalation"
       ],
-      "sha256": "83d308a96f13cf271463db77568487e4a017ca57c6c3444f89d6091e9084afe3"
+      "sha256": "b8b0b8c33f29a96691b81477d216905b7fa5755207c29628b13d6201862cc0d6"
     },
     "threat-modeler": {
       "version": "1.0.0",
@@ -1093,7 +1093,7 @@
     "senior-security-engineer": {
       "version": "1.0.0",
       "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/senior-security-engineer/SKILL.md",
-      "description": "Active fortification engineer. 90% fixing, 10% advisory. Hardens code, APIs, mobile, cloud, and AI/LLMs. Delegates to ciso-orchestrator for full parallel review.",
+      "description": "Active fortification engineer. 90% fixing, 10% advisory. Hardens code, APIs, mobile, cloud, and AI/LLMs. Delegates to ciso-orchestrator for full parallel review. Calls security.fortify first on plain \"fortify\"/\"lock down X\" requests.",
       "userInvocable": true,
       "phase": 0,
       "subAgents": [
@@ -1111,7 +1111,7 @@
         "post-quantum readiness",
         "AI-assisted adversary simulation"
       ],
-      "sha256": "454e7491d88d5792e6f41629b20a5625082f7c569cf4e916bd8e13aeaaf18d55"
+      "sha256": "311b8064e6a049c8eb292c130733cdddb070e7fbf9f23be0cb204aba606a968e"
     },
     "linddun-privacy-analyst": {
       "version": "1.0.0",

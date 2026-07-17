@@ -1,6 +1,6 @@
 # security-mcp
 
-Last updated: 2026-07-14
+Last updated: 2026-07-16
 
 [![npm version](https://img.shields.io/npm/v/security-mcp.svg)](https://www.npmjs.com/package/security-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -25,12 +25,7 @@ npx -y security-mcp@latest install
 
 - [Why this exists](#why-this-exists)
 - [Is security-mcp safe to use?](#is-security-mcp-safe-to-use-the-mcps-own-security--governance)
-- [What's new in 1.3.5](#whats-new-in-135)
-- [What's new in 1.6.1](#whats-new-in-161)
-- [What's new in 1.6.0](#whats-new-in-160)
-- [What's new in 1.5.0](#whats-new-in-150)
-- [What's new in 1.4.0](#whats-new-in-140)
-- [What's new in 1.3.3](#whats-new-in-133)
+- [What's new in 1.3.6](#whats-new-in-136)
 - [System overview](#system-overview)
 - [The two entry points](#the-two-entry-points)
   - [/senior-security-engineer](#senior-security-engineer)
@@ -112,90 +107,15 @@ security-mcp is honest about where its trust model stops: this is a single-tenan
 
 ---
 
-## What's new in 1.3.5
+## What's new in 1.3.6
 
-1.3.5 is the first version published to npm since 1.3.4. The "What's new" sections below it (1.4.0 through 1.6.1) describe internal milestones that never reached the registry; everything they describe ships publicly in this release.
+**One-shot fortify.** Say "fortify my codebase", "lock down my forms", "secure our payment flow", or "harden the AWS account to enterprise grade", and the assistant calls the new `security.fortify` tool (or the `fortify` MCP prompt) with your own words as the target. It always auto-applies: no "detection only or auto-apply?" question, no pause to ask whether to fix what it found. It resolves your target to concrete files via repo search, then dispatches the right specialist team immediately — a generic core app-security team (injection, auth/session, business logic, race conditions, serialization, privacy) for any named surface, plus cloud, crypto, AI/LLM, mobile, or supply-chain specialists layered on when those technical domains are detected. The target is free text, not a fixed category list: any surface you can name resolves the same way.
 
-**Pre-release checklist synced with the detection engine.** `security.checklist` now carries a section for every detection domain the gate's check modules actually cover, growing from roughly 180 to 246 items across 8 new sections: Containers / Docker, Database, Data Platform (Databricks / Snowflake), GitOps (ArgoCD / Flux / Helm), Cryptography / PKI, AI-Assisted Development (Vibe Coding), Data Leakage Prevention, and Emerging Threats. Each item is derived from the real finding IDs in `src/gate/checks/`, so the human attestation checklist and the automated gate now agree on what "covered" means. See the [CHANGELOG](CHANGELOG.md) for the full breakdown.
+**Auto-apply is now the default everywhere.** `security.start_review` previously required you to choose `auto_apply` or `detection_only` before it would do anything. Omitting `remediationMode` now means `auto_apply` — findings get fixed as they are discovered, matching the 90%-fixing mandate the rest of the product already states. Pass `remediationMode: "detection_only"` explicitly for a report-only run; that path, including the gate's "should specialist agents apply the fixes?" checkpoint, is unchanged.
 
----
+**Stale-install detection.** `security-mcp doctor` now detects a global install older than the running version and unpinned `npx security-mcp` launch entries across Claude Code, Cursor, VS Code, and Windsurf, and `ciso-orchestrator` halts with exact remediation instead of silently degrading to a deterministic-only run when the `orchestration.*` control plane is genuinely missing.
 
-## What's new in 1.6.1
-
-1.6.1 (internal milestone, published as part of 1.3.5) completes the 90%-fix mandate and closes web-hardening detection blindspots: a sixth always-on check module, and a remediation map that now covers every detection ID the engine ships.
-
-### Does security-mcp detect open redirect, clickjacking, and hardcoded session secrets?
-
-Yes. A new always-on module, `src/gate/checks/web-hardening.ts` (`checkWebHardening`), is wired into `runAllChecks` and `CHECK_NAMES` as `web-hardening` and runs unconditionally on every scan, the same way `vibe-coding` and `emerging-supply-ai` do, because these flaws are dangerous regardless of what surface the changed files suggest. Six new rules, each verified firing on a planted vulnerability:
-
-- **`WEB_MISSING_SECURITY_HEADERS`** (MEDIUM, CWE-1021/693): a web-server surface exists but there is no response-header hardening anywhere in the repo, no `helmet`, no `X-Frame-Options`, no HSTS, no Content-Security-Policy, leaving the app open to clickjacking and protocol downgrade with no CSP as a backstop. This rule is conservative by design: it fires once at repo level and skips static or library repos that have no server surface to harden.
-- **`WEB_OPEN_REDIRECT`** (HIGH, CWE-601): a redirect target taken directly from user input, for example `res.redirect(req.query.url)` or an unvalidated `NextResponse.redirect`.
-- **`WEB_HARDCODED_SESSION_SECRET`** (HIGH, CWE-798/330): a session, cookie, or JWT signing secret hardcoded as a literal or a well-known weak default (the classic `"keyboard cat"` case). The rule excludes `process.env` reads and `.env.example` files, and truncates the secret value in evidence so the finding never echoes the whole thing.
-- **`WEB_EMAIL_HEADER_INJECTION`** (HIGH, CWE-93/88): user input flowing unsanitized into email envelope fields (nodemailer/SendGrid `to`, `subject`, or custom headers), which opens the door to CRLF header injection and mail-relay abuse.
-- **`WEB_SERVER_ACTION_NO_AUTHZ`** (HIGH, CWE-306/862): a Next.js Server Action (`'use server'`) that performs a database mutation or read with no server-side auth verifier. A Server Action is a publicly-invocable POST endpoint under the hood, so hiding the triggering button in the UI does not protect it.
-- **`WEB_SENSITIVE_FIELD_IN_RESPONSE`** (MEDIUM, CWE-213/200): a database row or object serialized straight into a response even though it carries a secret field (`passwordHash`, `salt`, `mfaSecret`, `apiKey`, `refreshToken`, `ssn`), or a `SELECT *` shape returned as-is.
-
-These six rules lift first-party static rule coverage from roughly 883 to roughly 887 finding IDs. Detection stays regex/heuristic, the same convention as the rest of the gate: no AST, no data-flow graph.
-
-### How does security-mcp fix vulnerabilities automatically?
-
-By shipping a concrete remediation template, keyed by finding ID, for essentially every rule the engine can fire, so the AI-assisted-development gate can write the fix instead of just filing a finding. Before 1.6.1, that was true for only 71 of roughly 882 finding IDs (about 8%). 1.6.1 adds six domain remediation partials under `src/gate/remediation-parts/` — `cloud.ts` (256 templates: Kubernetes, IaC, Docker, ArgoCD, Flux, Helm, GitOps, infrastructure, runtime), `ai.ts` (69: AI and agentic findings), `data.ts` (172: crypto, JWT, SAML, OAuth, passwords, database, Snowflake, Databricks, supply-chain hygiene), `web.ts` (203: web, API, business logic, GraphQL, Android, iOS, DLP, CI), `misc.ts` (112: injection, deserialization, SSRF, TLS, tokens, mobile storage, XSS), and `web-hardening-remediations.ts` (6, one per new rule above) — all merged into `REMEDIATION_MAP`.
-
-The result: **888 fix templates covering 100% (887 of 887) of detection IDs**, up from roughly 8% before this release. Every template ships a realistic vulnerable pattern, a concrete secure fix in the correct language, a plain-language explanation, and standards references (CWE plus OWASP Top 10, API Security Top 10, LLM Top 10, or MASVS, and NIST/CIS/PCI DSS/FIPS or the relevant provider's docs). This is what turns the product's "90% fixing, 10% advisory" mandate from a description of how the agent tends to behave into a deterministic, verifiable property of the detection engine itself.
-
-### What version is security-mcp on, and does that matter for upgrades?
-
-1.6.1, up from 1.6.0. This is a detection-and-remediation-coverage release under the project's odometer versioning rule (every version segment stays below 10), so it is a drop-in upgrade with no breaking changes.
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for where `web-hardening` plugs into `runAllChecks`, and [docs/WIKI.md](docs/WIKI.md) for the full rule list, severities, and remediation-coverage detail.
-
----
-
-## What's new in 1.6.0
-
-**A new always-on module targeting how attackers exploit vibe-coded apps.** `src/gate/checks/vibe-coding.ts` (`checkVibeCoding`) runs on every scan regardless of surface, the same way `emerging-supply-ai` does, because the class of bug it targets, a leaked admin key or an open database rule, is dangerous whether or not the repo happens to look like "web" or "api" from its changed files. It is grounded in a run of 2025-2026 breaches in apps generated by Cursor, Lovable, Bolt, v0, and Replit: the Moltbook Supabase `service_role` key leak, Lovable's "VibeScamming" Row-Level-Security gap (CVE-2025-48757), the Tea app's world-writable Firebase rules, and Base44's frontend-only auth check with no server-side enforcement. Sixteen new `VIBE_`-prefixed rule IDs cover the recurring failure modes: client-shipped Supabase `service_role`/`sb_secret_` keys and provider API keys, a `NEXT_PUBLIC_`/`VITE_`/`REACT_APP_`/`EXPO_PUBLIC_` variable holding a real secret, Supabase tables without Row-Level Security or with a `USING (true)` policy, public Firebase/Firestore rules, API routes with no server-side authorization check, client-side-only auth guards, wildcard CORS paired with credentials, client-controlled payment prices, tokens in `localStorage`, unrestricted file uploads, committed `.env`/key files, production source maps, debug mode left on, a slopsquatting heuristic for dependencies missing from the lockfile, and unsafe prompt-injection chains (user input into a system prompt, or model output into `eval`/`exec`/a shell/`dangerouslySetInnerHTML`). Detection is the same regex/heuristic approach as the rest of the gate: the client-vs-server split is a path/extension heuristic, not a bundler analysis, and the slopsquatting rule is an offline heuristic where a dependency missing from the lockfile is a candidate for review, not proof of a hallucinated package. First-party static rule coverage grows from roughly 867 to roughly 883 finding IDs.
-
-**Remediation map grows to 70-plus templates.** Every one of the 16 new `VIBE_` finding IDs ships a concrete fix template in `src/gate/remediation-map.ts` (rotate-and-move-server-side for leaked keys, an `ENABLE ROW LEVEL SECURITY` + ownership-policy snippet, a server-side session check for API routes, an httpOnly-cookie pattern for token storage, and so on), keeping the same roughly 90%-fixing, 10%-advisory posture as the rest of the product.
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for where the module plugs into `runAllChecks`, and [docs/WIKI.md](docs/WIKI.md) for the full rule list, severities, and the breach each rule maps to.
-
----
-
-## What's new in 1.5.0
-
-**Twenty new detection rules for 2025-2026 threats.** Three new check modules cover ground the pattern libraries did not reach before: `emerging-web` (Next.js middleware auth bypass CVE-2025-29927, the "React2Shell" RSC flight deserialization RCE CVE-2025-55182, Django ORM connector SQL injection CVE-2025-64459, Kestrel chunked-transfer smuggling CVE-2025-55315, JWT `jku`/`x5u` SSRF, `path-to-regexp` ReDoS, and an unstripped proxy-middleware header gap), `emerging-cloud` (the "IngressNightmare" ingress-nginx snippet injection CVE-2025-1974, an AWS `PassRole` privilege-escalation chain that now also covers the Bedrock AgentCore code-interpreter vector, unpinned git-ref Terraform modules, a GCP token-creator-on-project IAM binding pattern, and the runc container-escape delivery surface behind CVE-2025-31133/52565/52881), and `emerging-supply-ai` (the Shai-Hulud npm worm IOCs, off-registry-resolved lockfile entries, the `mcp-remote` command-injection CVE-2025-6514, invisible-Unicode prompt injection, MCP config "rug pull" CVE-2025-54136/54135, dangerous pickle opcodes in model files, and A2A credential forwarding). `emerging-web` runs on web/API surfaces, `emerging-cloud` runs on infrastructure surfaces, and `emerging-supply-ai` always runs. Detection is the same regex- and manifest-based heuristic approach as the rest of the gate, not AST or data-flow analysis: version-gated rules read the vulnerable package's manifest or lockfile and fall back to a MEDIUM advisory rather than an assertion when the exact version cannot be resolved, and the pickle-opcode scan is a best-effort binary heuristic that can both miss obfuscated payloads and flag benign files. First-party static rule coverage grows from roughly 847 to roughly 867 finding IDs.
-
-**Capability-floor enforcement for spawned agents.** A new `enforceCapabilityFloor` check, wired into `orchestration.merge_agent_findings` as an additional thoroughness gate, asserts that every agent in a `/ciso-orchestrator` run actually operated at the capability its task required: the model tier the task demands under `model-router`'s task-capability map, the SKILL.md allowed-tools floor, non-empty evidence for high-risk leads, and section coverage. An agent that falls short raises a HIGH `CAPABILITY_DEGRADED` finding, and any degraded agent in the run raises one run-level CRITICAL `CAPABILITY_FLOOR_NOT_MET` finding that forces the gate to FAIL. Two of the four floors are honest about a real gap: orchestration does not yet record which model, task type, and tools a spawned agent actually used, so the model-tier and tool-floor checks currently surface as MEDIUM `CAPABILITY_UNVERIFIED` advisories until that metadata is captured (tracked as a follow-up; the schema for it already exists).
-
-**Remediation coverage more than tripled.** The remediation map grew from 15 templates to 55, adding a concrete fix for every new 1.5.0 finding ID and for the largest previously-uncovered gaps from earlier releases. The orphaned `DEP_FLOATING_VERSION` template, which had no matching finding ID, was removed in favor of `DEP_UNPINNED_VERSION`. This keeps the product's 90%-fixing, 10%-advisory posture intact as detection coverage grows.
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how the new modules fit into the gate pipeline, and [docs/WIKI.md](docs/WIKI.md) for the full rule list and severities.
-
----
-
-## What's new in 1.4.0
-
-**Full-power model routing by default.** The model router now runs security agents at maximum capability instead of cheapest-first. Security-critical reasoning tasks — code review, remediation, threat modeling, compliance analysis, exploit chains, AI red-teaming, pentesting, crypto analysis, auth analysis, incident response, risk scoring — default to the advanced capability tier, and within that tier the most capable model (Claude Opus 4.8) is selected first, with cost only a tiebreak. Light mechanical tasks (secret scanning, DLP, pattern matching, manifest/lockfile parsing, config reads, dependency scans) stay on the cheap tier, and report generation stays standard. A budget safety valve still exists: once spend utilization crosses `downgrade_threshold_pct` (default 80%), non-protected advanced tasks drop to standard — but exploit-chain, pentest, AI red-team, crypto, auth, threat-model, and remediation tasks never downgrade, no matter the spend. New `model_budget` policy fields: `downgrade_threshold_pct` and an opt-**out** `force_standard_tier_for` list. Model IDs are refreshed to Claude Sonnet 5, Claude Opus 4.8, and Claude Haiku 4.5.
-
-**Orchestration thoroughness enforcement.** A green gate now requires proof that agents actually did the work, not just that they reported success. `orchestration.merge_agent_findings` verifies SKILL.md section coverage and fails the gate if it drops below 90% (`SECURITY_MIN_SKILL_COVERAGE_PCT`), detects ghost or missing required Phase-1 leads, and flags findings marked remediated with no remediation summary. Failed agents are retried up to twice before being escalated, which also forces the gate to FAIL. `stackContext` values are now sanitized before they reach spawned-agent prompts.
-
-**155 new detection rules.** The check engine grew across injection, auth, crypto, business logic, cloud, CI/CD, mobile, AI/LLM, and MCP-specific threats — among them HTTP request smuggling, template/code injection (XSLT, Groovy, Perl), MongoDB operator injection, JWT `kid` injection, SAML XXE, static-IV and AEAD-bypass crypto flaws, hardcoded webhook and registry secrets, payment idempotency and wallet-balance race conditions, IAM privilege escalation via `PassRole`, Kubernetes default-SA token automount, unsafe model deserialization (pickle/joblib/torch), MCP tool-description poisoning, and WebView/keychain issues on Android and iOS. Four new AWS cloud-control rules were added to the controls engine, bringing total coverage to 1,002 rules.
-
-Earlier releases (1.3.3) closed inter-agent payload integrity and per-tool-call audit gaps; 1.3.2 added the cloud security controls engine. See the [CHANGELOG](CHANGELOG.md) for the full list.
-
----
-
-## What's new in 1.3.3
-
-**Inter-agent payload integrity.** `orchestration.merge_agent_findings` is the single trust sink for a whole agent run, so it now validates every agent's findings against a strict schema and verifies each file's hash against that agent's signed attestation before the findings reach the gate. With an attestation chain present it runs **enforced**: unattested or tampered agent files are rejected, and a hash mismatch or failed chain forces the gate to FAIL even with zero findings. Set `SECURITY_REQUIRE_AGENT_ATTESTATION` to fail closed unless the run is HMAC-signed, enforced, and chain-valid.
-
-**Per-tool-call audit log.** Every MCP tool invocation emits one structured JSONL record with the eight mandatory fields — timestamp, agent id, tool, input parameters (secrets redacted), output (outcome + size + truncated preview), credentials used (session id, never the secret), user context, and outcome status — to `.mcp/audit/tool-calls.jsonl` (`0o600`). Point `SECURITY_TOOL_AUDIT_LOG` at an append-only sink for tamper-proof retention. Logging never interrupts tool execution.
-
-Both close gaps identified in a threat model of security-mcp's own multi-agent system and were hardened accordingly. See the [CHANGELOG](CHANGELOG.md) for details and the tool's residual-risk disclosure.
-
-**1.3.2 — cloud security controls engine.** A registry-driven engine that scans infrastructure-as-code against 998 rules mapped to AWS FSBP, CIS Benchmarks (AWS / GCP / Azure), and the Microsoft Cloud Security Benchmark, across Terraform, CloudFormation, and Bicep. Terraform violations can be auto-remediated with `security-mcp autoharden` ([dedicated section](#cloud-security-controls-engine)). It also added the `security-mcp ci:pr-gate` and `sign-policy` CLI commands, and hardened the tool against itself (unsigned policies and exceptions can no longer relax the gate; data at rest is written `0o600`) — see [self-protection and supply-chain posture](#self-protection-and-supply-chain-posture).
-
-Earlier releases expanded the deep-analysis pattern libraries (injection, authentication, supply chain, business logic), brought OWASP Top 10 to full coverage, and wired the industry scanners into the gate.
+For every prior release — the cloud controls engine, the vibe-coding and web-hardening modules, 888 remediation templates at 100% detection-ID coverage, capability-floor enforcement, and inter-agent payload integrity — see the [CHANGELOG](CHANGELOG.md).
 
 ---
 
@@ -224,6 +144,14 @@ You drive security-mcp through two skills. One is your daily security engineer. 
 
 Rule of thumb: run `/senior-security-engineer` on every PR, and `/ciso-orchestrator` before a release or an audit.
 
+### One-shot fortify
+
+Both entry points respond to plain language, not just slash commands. Say "fortify my codebase," "lock down my forms," "secure our payment flow," or "harden the AWS account for enterprise grade," and the assistant calls the `security.fortify` MCP tool (or the `fortify` prompt) with your own words as the `target` — free text, not a fixed category list, so any named surface resolves the same way.
+
+`security.fortify` always auto-applies: no "detection only or auto-apply?" question, no pause to ask whether to fix what it finds. It resolves your target to concrete files via repo search (or scans the whole codebase if you didn't name a specific surface), and dispatches the right specialist team immediately — a generic core app-security team (injection, auth/session, business logic, race conditions, serialization, privacy) for any named surface, plus cloud, crypto, AI/LLM, mobile, or supply-chain specialists layered on top when those technical domains are detected. For "lock down the forms on my website for highest security," that means the auth/injection/business-logic specialists go straight to your form and login files and write the fixes, then the gate re-runs to a PASS attestation.
+
+`security.start_review` itself defaults to auto-apply too — omit `remediationMode` and it fixes findings as it finds them rather than asking first. Pass `remediationMode: "detection_only"` explicitly if you want a report without any file changes.
+
 ### /senior-security-engineer
 
 A single elite security-engineer agent. It operates 90% fixing, 10% advisory: it writes the secure code rather than handing you a report to act on. You pick the scope at the start (recent changes via git diff, the full codebase, or specific files and folders), and it runs a strategy pass, then the gate, then inline fixes, and finishes with a SHA-256 attested report you can keep as an audit artifact.
@@ -236,7 +164,7 @@ This is the daily driver. Use it on every PR.
 
 ### /ciso-orchestrator
 
-A full security program in one command, held to the same 90% fixing, 10% advisory mandate as the single agent: every specialist writes the fix rather than filing a finding. Nine specialist lead agents command 30 sub-agents, for 39 named agents in the static spawn tree. At runtime the orchestrator dynamically spawns additional ghost and coverage agents based on cross-domain findings, so a real run typically fields 40 or more. It draws on a registry of 91 specialist skills (registry version 1.6.0), loaded on demand based on your detected stack, and covers PCI DSS 4.0, SOC 2, ISO 27001, NIST 800-53, HIPAA, and GDPR mapping.
+A full security program in one command, held to the same 90% fixing, 10% advisory mandate as the single agent: every specialist writes the fix rather than filing a finding. Nine specialist lead agents command 30 sub-agents, for 39 named agents in the static spawn tree. At runtime the orchestrator dynamically spawns additional ghost and coverage agents based on cross-domain findings, so a real run typically fields 40 or more. It draws on a registry of 91 specialist skills (registry version 1.6.1), loaded on demand based on your detected stack. `security.generate_compliance_report` provides partial control mappings for SOC 2, PCI DSS 4.0, NIST 800-53, and ISO 27001 — a control is marked satisfied only when a gate run completed its required steps with no adverse finding, never by default, and the report is an evidence-gathering aid, not an audit.
 
 It runs in three phases:
 
@@ -472,13 +400,14 @@ A security tool is part of your supply chain, so security-mcp is built to resist
 
 ## MCP tools
 
-Your AI calls these automatically; you rarely invoke them by hand. There are around 40, grouped into three namespaces plus two MCP prompts.
+Your AI calls these automatically; you rarely invoke them by hand. There are 41, grouped into three namespaces plus 6 MCP prompts.
 
 ### Most useful tools
 
 | Tool | Purpose |
 | --- | --- |
-| `security.start_review` | Open a stateful review run and get a `runId` |
+| `security.fortify` | One-shot: auto-apply review + scoped specialist team for a named surface |
+| `security.start_review` | Open a stateful review run and get a `runId` (defaults to auto-apply) |
 | `security.run_pr_gate` | Run the gate, return PASS/FAIL with findings |
 | `security.attest_review` | Write a SHA-256 attestation (PASS-gated) |
 | `security.threat_model` | STRIDE + PASTA + ATT&CK model for a surface |
@@ -486,7 +415,7 @@ Your AI calls these automatically; you rarely invoke them by hand. There are aro
 | `security.generate_policy` | Generate a policy tailored to your stack |
 | `security.terraform_hardening_blueprint` | Terraform hardening baseline + mappings |
 | `security.generate_opa_rego` | OPA/Rego for plans, pipelines, admission |
-| `security.generate_compliance_report` | Map findings to SOC 2, PCI, ISO, NIST, HIPAA, GDPR |
+| `security.generate_compliance_report` | Partial control mapping for SOC 2, PCI DSS 4.0, NIST 800-53, ISO 27001 (evidence aid, not an audit) |
 | `security.generate_remediations` | Concrete fix template per finding |
 | `repo.read_file` / `repo.search` | Read or search the codebase (guarded) |
 | `orchestration.create_agent_run` | Stand up the multi-agent run + manifest |
@@ -502,7 +431,7 @@ Beyond the tools above, the rest of the surface clusters into four families:
 - **Attestation hash chain.** `init_chain`, `attest_agent`, `verify_chain`, `get_chain`.
 - **Caller auth and lifecycle.** `authenticate`, `logout`, plus update tools `orchestration.check_updates` / `apply_updates` and skill loading `orchestration.ensure_skill`.
 
-Namespace counts: `security.*` (29 tools), `repo.*` (2), `orchestration.*` (9), and 2 MCP prompts.
+Namespace counts: `security.*` (30 tools), `repo.*` (2), `orchestration.*` (9), and 6 MCP prompts (`security-engineer`, `threat-model-template`, `ciso-orchestrator`, `senior-security-engineer`, `agentic-instruction-auditor`, `fortify`).
 
 ---
 
@@ -678,6 +607,7 @@ The `security-mcp` binary exposes:
 
 ## Change History
 
+- 2026-07-16 — Added `security.fortify` (one-shot, auto-apply, natural-language-scoped hardening) and the `fortify` MCP prompt; documented in a new "One-shot fortify" section. `security.start_review` now defaults to `remediationMode: "auto_apply"` instead of asking first (`detection_only` is an explicit opt-out). Updated the tools table and namespace counts. Collapsed the six stacked "What's new" sections into a single one for the current release; release history now lives only in the CHANGELOG.
 - 2026-07-14 — Multi-client parity: corrected manual-config paths/keys (VS Code `.vscode/mcp.json` with `servers`, Windsurf `~/.codeium/windsurf/mcp_config.json`, added Codex TOML and the Replit remote-only note); added the "Runs on every client, at full capability" section describing MCP-native agent delivery (prompts, `skill://` resources, `ensure_skill`).
 - 2026-07-07 — Added the "What's new in 1.3.5" section: pre-release checklist synced with the detection engine (8 new sections, 246 items) and the note that internal milestones 1.4.0–1.6.1 ship publicly in 1.3.5.
 - 2026-07-07 — Tightened the 1.4.0 self-hardening note to an outcome statement (removed internal review-process mechanics), keeping the residual-risk disclosure pointer.

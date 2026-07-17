@@ -1,6 +1,7 @@
 import fg from "fast-glob";
 import { readFileSafe } from "./fs.js";
 import { scanIgnoreGlobs } from "../gate/scan-scope.js";
+import { getWorkspaceRoot } from "./workspace.js";
 
 export type RepoMatch = { file: string; line: number; preview: string };
 
@@ -89,6 +90,9 @@ function scanLines(
 export async function searchRepo(opts: SearchOptions): Promise<RepoMatch[]> {
 	const files = await fg(["**/*.*"], {
 		dot: true,
+		// Discover files under the active workspace root, not the process directory,
+		// so discovery and readFileSafe() resolve against the same tree under withWorkspace().
+		cwd: getWorkspaceRoot(),
 		followSymbolicLinks: false,  // Prevent glob-based symlink traversal outside workspace root.
 		// scanIgnoreGlobs adds the always-ignore set (node_modules, .git, dist, .mcp)
 		// and any SECURITY_GATE_IGNORE project paths (e.g. fixtures/) on top of the

@@ -63,6 +63,7 @@ export type GateResult = {
       mobileIos: boolean;
       mobileAndroid: boolean;
       ai: boolean;
+      agentic: boolean;
     };
   };
   findings: Finding[];

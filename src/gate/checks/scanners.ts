@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { tmpdir } from "node:os";
+import { getWorkspaceRoot } from "../../repo/workspace.js";
 import { z } from "zod";
 import { Finding, FindingSeverity, sanitizeErrorMessage } from "../result.js";
 import { SurfaceScope } from "../catalog.js";
@@ -42,8 +43,8 @@ async function loadScannerConfig(): Promise<ScannerConfig> {
   const overridePath = process.env["SECURITY_GATE_SCANNERS"];
   if (overridePath) {
     // CWE-22: resolve to absolute path and ensure it stays within cwd
-    const resolved = resolve(process.cwd(), overridePath);
-    if (!resolved.startsWith(process.cwd() + "/") && resolved !== process.cwd()) {
+    const resolved = resolve(getWorkspaceRoot(), overridePath);
+    if (!resolved.startsWith(getWorkspaceRoot() + "/") && resolved !== getWorkspaceRoot()) {
       throw new Error(`SECURITY_GATE_SCANNERS path '${overridePath}' escapes the project directory`);
     }
     const raw = await readFile(resolved, "utf-8");
@@ -51,7 +52,7 @@ async function loadScannerConfig(): Promise<ScannerConfig> {
   }
 
   try {
-    const raw = await readFile(join(process.cwd(), ".mcp", "scanners", "security-tools.json"), "utf-8");
+    const raw = await readFile(join(getWorkspaceRoot(), ".mcp", "scanners", "security-tools.json"), "utf-8");
     return ScannerConfigSchema.parse(JSON.parse(raw));
   } catch {
     const raw = await readFile(join(PKG_ROOT, "defaults", "security-tools.json"), "utf-8");
@@ -105,7 +106,7 @@ async function runScannerToFile(
   await execFileAsync(command, args, {
     timeout: timeoutMs,
     maxBuffer: 50 * 1024 * 1024, // 50MB
-    cwd: process.cwd()
+    cwd: getWorkspaceRoot()
   });
 }
 
@@ -137,7 +138,7 @@ async function runGitleaks(
       [
         "detect",
         "--source",
-        process.cwd(),
+        getWorkspaceRoot(),
         "--report-format",
         "json",
         "--report-path",

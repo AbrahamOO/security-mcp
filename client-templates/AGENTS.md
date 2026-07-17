@@ -1,6 +1,6 @@
 # AGENTS.md — security-mcp
 
-Last updated: 2026-07-14
+Last updated: 2026-07-16
 Created: 2026-07-14
 
 This project has the **security-mcp** server available over MCP. It provides a full
@@ -15,6 +15,14 @@ Copilot, Windsurf, Claude Code).
   a scan scope, runs the gate, writes the fixes (90% fixing, 10% advisory), and attests.
 - **Full audit:** invoke the `ciso-orchestrator` MCP prompt. It coordinates the complete
   specialist roster across discovery and adversarial phases.
+- **One-shot fortify:** for a plain "fortify"/"lock down X"/"harden to production grade"
+  request (e.g. "lock down my forms", "secure our API", "fortify the whole codebase"),
+  call the `security.fortify` tool (or the `fortify` MCP prompt) with the named target.
+  It always auto-applies — no confirmation gate — resolves scope via repo search, and
+  pre-selects the specialist team to dispatch immediately.
+
+`security.start_review` itself now defaults to auto-apply when `remediationMode` is
+omitted; pass `remediationMode: "detection_only"` explicitly for a report-only run.
 
 ## Running any specialist agent
 
@@ -42,4 +50,5 @@ It exits non-zero on HIGH/CRITICAL findings.
 
 ## Change History
 
+- 2026-07-16 - Added: one-shot fortify guidance (`security.fortify` tool / `fortify` prompt) and noted `security.start_review` now defaults to auto-apply.
 - 2026-07-14 - Added: initial AGENTS.md template describing MCP-native agent delivery and the review/audit entry points.

@@ -5,6 +5,88 @@ All notable changes to `security-mcp` are documented here. Format follows
 
 ## [1.3.6] - 2026-07-14
 
+### Hardening: truth-and-integrity pass (enterprise-grade foundation, phase 1)
+
+A ground-truth audit of the product's own claims found several places where the engine
+overstated what it verifies. This pass makes the code match the claims, or narrows the
+claims to match the code — nothing is left asserted-but-unproven.
+
+- **Compliance reports no longer default to "satisfied".** `security.generate_compliance_report`
+  previously marked every control satisfied whenever no adverse finding matched — so a call
+  with *no gate run at all* returned a fully "compliant" report (SOC 2: 9/9 satisfied from
+  zero evidence). A control is now `satisfied` only when a gate run completed the control's
+  required workflow steps with no adverse finding; absent a run every control is `unverified`.
+  Reports carry an explicit "partial mapping, not an audit" caveat. GDPR and HIPAA are
+  retracted from the offered frameworks (1–2 mapped controls could not represent them
+  honestly); SOC 2, PCI DSS 4.0, NIST 800-53, and ISO 27001 remain as partial control
+  mappings. Regression-tested.
+- **Threat-intel unavailability is no longer reported as "clean".** When the dependency
+  audit found CVEs but the live CISA KEV / EPSS lookup failed (network error, rate limit,
+  unreachable endpoint), the check silently returned no findings — turning "exploit status
+  unknown" into "no actively-exploited CVEs". It now emits a HIGH `EVAL_UNAVAILABLE_THREAT_INTEL`
+  coverage-gap finding. `SECURITY_OFFLINE=1` is unaffected (intentional skip, not a failure).
+- **`safeTool` error responses no longer leak filesystem paths (CWE-209).** The MCP error
+  wrapper returned the raw `err.message` — which for IO failures contains absolute paths —
+  despite a comment claiming it was sanitized. It now runs `sanitizeErrorMessage` for real.
+- **Attestation-chain downgrade hardened.** `verifyChain` classified a chain as signed via
+  `.some(hasHmac)`; it now requires `.every(hasHmac)` and fails closed when a key is
+  configured but any link is unsigned, so signatures cannot be stripped to reach the
+  hash-only pass path.
+- **Audit-log rotation retains history.** The single-rotation guard overwrote `.1` on every
+  rotation, silently destroying older audit segments; it now keeps `.1`–`.5`. The log path
+  is also resolved per-call against the workspace root instead of once at module load.
+- **Failed auth no longer kills the process.** Three failed attempts triggered
+  `process.exit(1)`, a self-inflicted DoS on the stdio session; it is now an
+  exponential-backoff lockout (1s→30s) that a legitimate operator recovers from.
+- **Internals:** workspace root is resolved through an `AsyncLocalStorage` seam
+  (`src/repo/workspace.ts`) instead of `process.cwd()` across 40+ sites, so the gate can
+  scan a target directory without `process.chdir` — which also fixes tests polluting the
+  repo's own `.mcp/baselines/latest.json` on every run. The parallel `CHECK_NAMES` array was
+  replaced by a single `CHECKS` registry co-locating each check's name, gate, and runner, so
+  a crash can no longer be misattributed to the wrong module. `GateResult.scope.surfaces`
+  now declares the `agentic` surface it already carried.
+
+### Added: one-shot `security.fortify` — natural-language "lock down X" dispatch
+
+Plain requests like "fortify my codebase" or "lock down the forms on my website for
+highest security" previously had no single tool to call — the calling model had to already
+know to chain `start_review(auto_apply)` → `generate_remediations` → apply → re-verify,
+with no way to narrow either the file scope or the specialist team to a named surface.
+
+- New MCP tool `security.fortify` (`src/mcp/server.ts`) and matching `fortify` MCP prompt:
+  a single call that always auto-applies (no `remediationMode` question, no confirmation
+  gate), resolves a free-text `target` to concrete files via the existing repo-search
+  engine, and pre-selects the specialist agent team.
+- New module `src/mcp/fortify.ts`: agent selection is not a fixed feature-name table (users
+  name arbitrary surfaces — forms, a payment flow, an admin panel). Instead it's two axes —
+  a generic core app-security team (`threat-modeler`, `attack-navigator`,
+  `appsec-code-auditor`, `injection-specialist`, `auth-session-hacker`,
+  `business-logic-attacker`, `logic-race-fuzzer`, `serialization-memory-attacker`,
+  `privacy-flow-analyst`) dispatched for any named surface, plus domain-specific additions
+  gated on genuine technology signals (cloud, crypto, supply-chain, AI/LLM, mobile) rather
+  than on the feature's name.
+- `src/mcp/orchestration.ts`: `buildInitialAgents` split into an exported
+  `buildInitialAgentNames(stackContext)` plus a thin wrapper, so `orchestration.create_agent_run`
+  can accept an optional pre-filtered `agentNames` list (intersected against the real agent
+  universe before use) without changing behavior for existing callers that omit it.
+- Trigger wording added across `skills/senior-security-engineer/SKILL.md`,
+  `skills/ciso-orchestrator/SKILL.md`, `skills-manifest.json`, `README.md`, and
+  `client-templates/*` so plain "fortify"/"lock down X"/"harden to production grade"
+  requests reliably route to `security.fortify` on every MCP host, not just Claude Code.
+
+### Changed: `security.start_review` defaults to `auto_apply`
+
+Omitting `remediationMode` on `security.start_review` previously returned a
+`required_user_decision` question and did nothing until answered. It now defaults to
+`auto_apply` — fixes are written immediately as findings are discovered, matching the
+"90% fixing, 10% advisory" operating mandate this project already states elsewhere.
+`detection_only` remains fully supported as an explicit opt-out for a report-only run;
+`security.run_pr_gate`'s "should specialist agents apply the fixes?" prompt is unchanged
+and now only fires for callers who explicitly chose `detection_only`.
+
+**Migration:** pass `remediationMode: "detection_only"` explicitly if you relied on the old
+ask-first default to get a report without any file changes.
+
 ### Fixed: stale/unpinned security-mcp installs silently degrading the CISO orchestrator
 
 `npx security-mcp` without a pinned version can resolve to a stale global install or npx

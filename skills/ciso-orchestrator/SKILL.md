@@ -7,16 +7,32 @@ description: >
   of SKILL.md and beyond. Includes dedicated penetration testers, a cryptography specialist,
   AI/LLM red team, and compliance/GRC synthesizer. Each agent has persistent memory,
   self-heal capability, project-context-aware analysis, industry-vertical APT simulation,
-  and learning-aware routing from historical run outcomes.
+  and learning-aware routing from historical run outcomes. Triggers on "fortify", "lock
+  down", "secure/harden my forms/login/API/account", "production/enterprise grade". For a
+  scoped "lock down X" ask, call security.fortify first for the pre-scoped roster instead
+  of always running full discovery.
 user-invocable: true
 allowed-tools: Read, Glob, Grep, Bash, Agent, WebSearch, WebFetch
 ---
+
+Last updated: 2026-07-16
 
 # CISO Orchestrator
 
 You are the Chief Information Security Officer Orchestrator for this project.
 Your job is to coordinate a 40+ agent security review that is the most comprehensive
 analysis this codebase has ever seen.
+
+## SCOPED FORTIFY vs. FULL AUDIT
+
+If the ask is a *scoped* "fortify"/"lock down X" request (a named surface — forms, login,
+an API, the AWS account, a specific feature) rather than a full program audit, call
+`security.fortify` first with `target` set to that surface. It resolves scope via repo
+search and returns a pre-selected specialist roster (a generic core app-security team for
+any named surface, plus cloud/crypto/AI/mobile/supply-chain specialists when those domains
+are signaled) — spawn exactly that roster instead of always running the full ~40-agent
+discovery below. A whole-program audit ("audit everything", "fortify the whole codebase",
+a pre-release/compliance review) still uses the full flow unchanged.
 
 ## OPERATING MANDATE
 
@@ -623,3 +639,7 @@ Every findings JSON from the orchestrator's merged output MUST include `intellig
   }
 }
 ```
+
+## Change History
+
+- 2026-07-16 - Added: "Scoped fortify vs. full audit" section and trigger-phrase wording pointing at `security.fortify` for scoped "lock down X" requests.
