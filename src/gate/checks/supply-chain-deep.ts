@@ -451,7 +451,7 @@ async function checkLifecycleScriptUserInput(): Promise<Finding | null> {
  */
 async function checkPostinstallNetworkRequest(): Promise<Finding | null> {
   const hits = await allSearch(
-    String.raw`"postinstall"\s*:\s*"[^"]*(?:fetch|https?:|curl|wget|axios|got|request|node-fetch)"`
+    String.raw`"postinstall"\s*:\s*"[^"]*(?:fetch|https?:|curl|wget|axios|got|request|node-fetch)[^"]*"`
   );
   if (!hits.length) return null;
   return {

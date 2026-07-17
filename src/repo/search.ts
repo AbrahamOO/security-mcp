@@ -88,7 +88,11 @@ function scanLines(
 }
 
 export async function searchRepo(opts: SearchOptions): Promise<RepoMatch[]> {
-	const files = await fg(["**/*.*"], {
+	// "**/*" (not "**/*.*") — the dotted form silently excludes every
+	// extensionless file (Dockerfile, Makefile, Jenkinsfile, Procfile, ...),
+	// which are exactly the filenames several checks (docker-deep's
+	// isDockerfile()) search for.
+	const files = await fg(["**/*"], {
 		dot: true,
 		// Discover files under the active workspace root, not the process directory,
 		// so discovery and readFileSafe() resolve against the same tree under withWorkspace().

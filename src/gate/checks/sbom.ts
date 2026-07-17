@@ -8,6 +8,7 @@ import { join } from "node:path";
 import fg from "fast-glob";
 import { Finding } from "../result.js";
 import { getWorkspaceRoot } from "../../repo/workspace.js";
+import { readFileSafe } from "../../repo/fs.js";
 
 const execFileAsync = promisify(execFile);
 // Resolved per-call (not at module load) so the workspace root is honored even
@@ -69,7 +70,10 @@ async function getPackageJsonDeps(): Promise<string[]> {
   const deps: string[] = [];
   for (const manifest of manifests.slice(0, 5)) {
     try {
-      const raw = await readFile(manifest, "utf-8");
+      // `manifest` is workspace-relative (fg's cwd is getWorkspaceRoot()), so it must
+      // resolve through readFileSafe rather than a bare readFile — otherwise it
+      // silently reads against process.cwd() instead of the active workspace.
+      const raw = await readFileSafe(manifest);
       const pkg = JSON.parse(raw) as Record<string, unknown>;
       const allDeps = {
         ...((pkg["dependencies"] as Record<string, string> | undefined) ?? {}),

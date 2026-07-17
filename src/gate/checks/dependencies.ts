@@ -4,7 +4,6 @@ import { readFileSafe } from "../../repo/fs.js";
 import { getWorkspaceRoot } from "../../repo/workspace.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { readFile } from "node:fs/promises";
 import { checkActiveExploitation } from "../threat-intel.js";
 import { join } from "node:path";
 
@@ -79,7 +78,7 @@ async function checkDependencyConfusion(): Promise<Finding[]> {
 	try {
 		let pkgRaw: string;
 		try {
-			pkgRaw = await readFile("package.json", "utf8");
+			pkgRaw = await readFileSafe("package.json");
 		} catch {
 			return [];
 		}
@@ -97,7 +96,7 @@ async function checkDependencyConfusion(): Promise<Finding[]> {
 		// Read .npmrc for private registry scope routing
 		let npmrcContent = "";
 		try {
-			npmrcContent = await readFile(".npmrc", "utf8");
+			npmrcContent = await readFileSafe(".npmrc");
 		} catch {
 			// .npmrc absent
 		}
@@ -243,7 +242,7 @@ async function checkNpmProvenance(): Promise<{ findings: Finding[] }> {
 
 		// 2. OpenSSF Scorecard — check all prod deps and CI-executed dev deps, up to 20 total
 		try {
-			const pkgRaw = await readFile("package.json", "utf8");
+			const pkgRaw = await readFileSafe("package.json");
 			const pkg = JSON.parse(pkgRaw) as {
 				dependencies?: Record<string, string>;
 				devDependencies?: Record<string, string>;
@@ -341,7 +340,6 @@ export async function checkDependencies(_: { changedFiles: string[] }): Promise<
 				"Pin versions and enable dependency scanning in CI."
 			]
 		});
-		return findings;
 	}
 
 	// Basic check: ensure package.json exists and is valid JSON
@@ -642,7 +640,7 @@ async function checkTransitiveDependencies(): Promise<Finding[]> {
 
 		// ── npm package-lock.json ──────────────────────────────────────────────
 		try {
-			const lockRaw = await readFile("package-lock.json", "utf8");
+			const lockRaw = await readFileSafe("package-lock.json");
 			let lock: { packages?: Record<string, LockfilePackage> };
 			try {
 				lock = JSON.parse(lockRaw) as { packages?: Record<string, LockfilePackage> };
@@ -661,7 +659,7 @@ async function checkTransitiveDependencies(): Promise<Finding[]> {
 		// ── yarn.lock ──────────────────────────────────────────────────────────
 		if (!lockfileFound) {
 			try {
-				const yarnRaw = await readFile("yarn.lock", "utf8");
+				const yarnRaw = await readFileSafe("yarn.lock");
 				const result = scanYarnLockForMaliciousScripts(yarnRaw);
 				scriptPkgs = result.scriptPkgs;
 				maliciousScriptPkgs = result.maliciousScriptPkgs;
@@ -675,7 +673,7 @@ async function checkTransitiveDependencies(): Promise<Finding[]> {
 		// ── pnpm-lock.yaml ─────────────────────────────────────────────────────
 		if (!lockfileFound) {
 			try {
-				const pnpmRaw = await readFile("pnpm-lock.yaml", "utf8");
+				const pnpmRaw = await readFileSafe("pnpm-lock.yaml");
 				const result = scanPnpmLockForMaliciousScripts(pnpmRaw);
 				scriptPkgs = result.scriptPkgs;
 				maliciousScriptPkgs = result.maliciousScriptPkgs;
@@ -743,7 +741,7 @@ async function checkTransitiveDependencies(): Promise<Finding[]> {
 async function checkIgnoreScripts(): Promise<Finding[]> {
 	let npmrcContent = "";
 	try {
-		npmrcContent = await readFile(".npmrc", "utf8");
+		npmrcContent = await readFileSafe(".npmrc");
 	} catch {
 		// .npmrc absent — treat as missing
 	}
@@ -847,7 +845,7 @@ async function checkTyposquatting(): Promise<Finding[]> {
 	try {
 		let pkgRaw: string;
 		try {
-			pkgRaw = await readFile("package.json", "utf8");
+			pkgRaw = await readFileSafe("package.json");
 		} catch {
 			return [];
 		}

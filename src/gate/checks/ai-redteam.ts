@@ -2,9 +2,11 @@
  * AI/LLM Red-Team Automation.
  * Static analysis + optional dynamic probing of AI endpoints.
  */
+import path from "node:path";
 import { Finding } from "../result.js";
 import { scopedFg as fg } from "../scan-scope.js";
 import { readFileSafe } from "../../repo/fs.js";
+import { getWorkspaceRoot } from "../../repo/workspace.js";
 
 const SOURCE_FILE_RE = /\.(ts|tsx|js|jsx|mjs|cjs|py|go|java)$/i;
 const MAX_FILE_SIZE = 1024 * 1024; // 1MB
@@ -42,7 +44,7 @@ const TOOL_ALLOWLIST_RE = /allowlist|allowedTools|ALLOWED_TOOLS|permittedTools|t
 async function isBinaryFile(filePath: string): Promise<boolean> {
   try {
     const { readFile: rf } = await import("node:fs/promises");
-    const buf = await rf(filePath);
+    const buf = await rf(path.join(getWorkspaceRoot(), filePath));
     if (buf.length > MAX_FILE_SIZE) return true;
     const slice = buf.slice(0, 512);
     for (let i = 0; i < slice.length; i++) {

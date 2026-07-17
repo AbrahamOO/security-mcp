@@ -850,8 +850,12 @@ async function checkWalletNonAtomicDecrement(): Promise<Finding | null> {
 
 async function checkRefundWithoutPurchase(): Promise<Finding | null> {
   // Refund issued without first verifying the original order was paid/captured.
+  // The (?<!function\s) lookbehind excludes function declarations named "refund"
+  // (e.g. `async function refund(orderId, order)`) — without it, the declaration
+  // line itself false-fires as an unguarded call site, even when the real call
+  // inside the function body is correctly guarded on a different line.
   const hits = await codeSearch(
-    String.raw`(?:refund|createRefund|issueRefund|processRefund|stripe\.refunds\.create)\s*\(`
+    String.raw`(?<!function\s)(?:refund|createRefund|issueRefund|processRefund|stripe\.refunds\.create)\s*\(`
   );
   const safeRe = /status\s*===?\s*['"](?:paid|captured|succeeded|completed)['"]|isPaid|paidAt|verifyPayment|paymentStatus|charge(?:Id)?\s*[,)]|original.*paid|hasPaid/i;
   const unsafe = hits.filter((h) => !safeRe.test(h.preview));

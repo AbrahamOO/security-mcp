@@ -27,12 +27,18 @@ const OUTPUT_TO_EVAL_B_RE = /exec\s*\([^)]*(?:response|completion|output)|spawn\
 // Split by direction (PII-then-prompt vs prompt-then-PII) to reduce per-regex complexity.
 const PII_FIELDS_FRAG = "ssn|socialSecurity|cardNumber|cvv|password|secret";
 const PROMPT_KEYS_FRAG = "messages|prompt|system";
+// Bounds the gap between the template literal and the prompt-key reference to
+// at most 2 line breaks. An unbounded "[^`]*" gap here would span the entire
+// rest of the file — matching e.g. a `messages` variable near the top and an
+// unrelated PII substring inside a completely different, later function (such
+// as a masking helper) that shares no actual data flow with it.
+const PROXIMITY_GAP = "[^`\\n]*(?:\\n[^`\\n]*){0,2}";
 const PII_IN_PROMPT_A_RE = new RegExp(
-  "`[^`]*(?:" + PII_FIELDS_FRAG + ")[^`]*`[^`]*(?:" + PROMPT_KEYS_FRAG + ")",
+  "`[^`]*(?:" + PII_FIELDS_FRAG + ")[^`]*`" + PROXIMITY_GAP + "(?:" + PROMPT_KEYS_FRAG + ")",
   "i"
 );
 const PII_IN_PROMPT_B_RE = new RegExp(
-  "(?:" + PROMPT_KEYS_FRAG + ")[^`]*`[^`]*(?:" + PII_FIELDS_FRAG + ")[^`]*`",
+  "(?:" + PROMPT_KEYS_FRAG + ")" + PROXIMITY_GAP + "`[^`]*(?:" + PII_FIELDS_FRAG + ")[^`]*`",
   "i"
 );
 

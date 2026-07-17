@@ -45,6 +45,44 @@ claims to match the code — nothing is left asserted-but-unproven.
   replaced by a single `CHECKS` registry co-locating each check's name, gate, and runner, so
   a crash can no longer be misattributed to the wrong module. `GateResult.scope.surfaces`
   now declares the `agentic` surface it already carried.
+- **First-ever measured false-positive rate.** A new per-rule test corpus
+  (`src/tests/corpus/`, one file per check module, 507 true-positive/true-negative cases
+  across all 35 modules) is now part of the test suite and reports `tpRate`/`fpRate` to
+  `.mcp/reports/rule-quality.json` on every run. Triaging the first real run (which started
+  at 40 failures) found and fixed real detection-engine defects, not just corpus mistakes:
+  - `searchRepo`'s file-discovery glob was `**/*.*`, which silently excludes every
+    extensionless file — `Dockerfile`, `Makefile`, `Jenkinsfile`, etc. Every Docker-deep rule
+    gated on `isDockerfile()` was unreachable on a conventionally-named `Dockerfile`. Fixed to
+    `**/*`.
+  - `checkDependencies` emitted `LOCKFILE_MISSING` and returned immediately, skipping
+    typosquat, dependency-confusion, suspicious-version, CVE, maintainer-risk,
+    git-protocol-pinning, local-path-override, and scorecard checks entirely whenever a
+    lockfile was absent — a realistic, common state, not an edge case. It now keeps running
+    the rest of the checks.
+  - `ai-redteam.ts`'s `isBinaryFile()` read files via a bare relative path instead of one
+    resolved against the workspace root — a second, independent instance of the Wave 0
+    `process.chdir()` regression that the original sweep missed. Every file was silently
+    treated as binary and skipped.
+  - `supply-chain-deep.ts`'s postinstall-network-request regex required the network keyword
+    to be the literal last token before the closing quote, so it missed the single most
+    common attack shape (`"curl ... | bash"`) entirely.
+  - `graphql.ts`'s GraphQL-error-leak check matched the bare substring `stacktrace` inside
+    the property name `includeStacktraceInErrorResponses`, so it fired even when that flag
+    was correctly set to `false` — the recommended remediation triggered its own violation.
+  - `secrets.ts`'s container-registry-password rule used an unbounded `\s+` after
+    `--password-stdin` (the safe form), letting the match span a newline and swallow the
+    next line's leading token as a fake password value.
+  - `business-logic.ts`'s refund-without-purchase-check rule matched `refund(` with no
+    guard against function *declarations* — `async function refund(orderId, order)` itself
+    false-fired as an unguarded call site, independent of how the real call inside the
+    function body was written.
+  - `ai.ts`'s PII-in-prompt rule had no bound between the template-literal match and the
+    nearby prompt-key reference, so it could span the entire rest of a file — matching a
+    `messages` variable near the top against an unrelated PII substring inside a completely
+    different, later function (e.g. a masking helper) with no real data flow between them.
+  All 507 cases pass after these fixes: `tpRate=1.00`, `fpRate=0.00`. A follow-up adversarial
+  review of the negative samples across a 15-module, ~210-case sample found no gamed or
+  cosmetic negatives — each implements the rule's own documented remediation.
 
 ### Added: one-shot `security.fortify` — natural-language "lock down X" dispatch
 

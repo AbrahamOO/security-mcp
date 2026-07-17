@@ -472,7 +472,12 @@ async function checkGraphqlVerboseErrors(graphqlInUse: boolean): Promise<Finding
 	});
 	// Explicit leaking of internals to the client.
 	const leakHits = await searchRepo({
-		query: String.raw`includeStacktraceInErrorResponses\s*:\s*true|debug\s*:\s*true|stacktrace|originalError\.stack|err\.stack.*response`,
+		// No bare "stacktrace" alternative: it would match as a substring of the
+		// property name "includeStacktraceInErrorResponses" regardless of whether
+		// that flag is set to true or false, false-firing on the recommended
+		// remediation itself. The explicit ":\s*true" variant already covers the
+		// real leak case.
+		query: String.raw`includeStacktraceInErrorResponses\s*:\s*true|debug\s*:\s*true|originalError\.stack|err\.stack.*response`,
 		isRegex: true,
 		maxMatches: 200
 	});
