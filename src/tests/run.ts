@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { loadCorpusPolicy, runCase, summarize } from "./corpus/runner.js";
+import type { RuleCase } from "./corpus/types.js";
 import { runPrGate } from "../gate/policy.js";
 import { autoHardenTree } from "../gate/cloud-controls/apply.js";
 import { checkCloudControls } from "../gate/checks/cloud-controls.js";
@@ -525,6 +527,49 @@ async function runComplianceTruthTests(): Promise<void> {
   }
 }
 
+// Runs every per-rule TP/TN corpus case (src/tests/corpus/*.corpus.ts) against the
+// real CHECKS registry, and writes the empirical result to
+// .mcp/reports/rule-quality.json — the product's first-ever measured false-positive
+// rate. A case fails the build if its rule does not fire on the positive sample or
+// DOES fire on the negative sample: either signals a genuine problem (a broken rule,
+// or a corpus case that doesn't actually discriminate).
+async function runRuleCorpusTests(): Promise<void> {
+  const corpusDir = repoPath("dist", "tests", "corpus");
+  const files = existsSync(corpusDir)
+    ? readdirSync(corpusDir).filter((f) => f.endsWith(".corpus.js"))
+    : [];
+
+  const allCases: RuleCase[] = [];
+  for (const file of files) {
+    const mod = (await import(path.join(corpusDir, file).replace(/\\/g, "/"))) as { cases?: RuleCase[] };
+    if (mod.cases) allCases.push(...mod.cases);
+  }
+
+  if (allCases.length === 0) {
+    console.log("[rule-corpus] no corpus cases found yet — skipping (bootstrap-safe).");
+    return;
+  }
+
+  const policy = await loadCorpusPolicy();
+  const results = [];
+  for (const kase of allCases) {
+    results.push(await runCase(policy, kase));
+  }
+  const report = summarize(results);
+
+  const reportDir = repoPath(".mcp", "reports");
+  mkdirSync(reportDir, { recursive: true });
+  writeFileSync(path.join(reportDir, "rule-quality.json"), JSON.stringify(report, null, 2) + "\n", "utf-8");
+
+  console.log(
+    `[rule-corpus] ${report.totalCases} case(s) — tpRate=${report.tpRate.toFixed(2)} fpRate=${report.fpRate.toFixed(2)}`
+  );
+  if (report.failures.length > 0) {
+    console.error("[rule-corpus] failures:", JSON.stringify(report.failures, null, 2));
+  }
+  assert.equal(report.failures.length, 0, `${report.failures.length} rule-corpus case(s) failed — see .mcp/reports/rule-quality.json`);
+}
+
 async function main(): Promise<void> {
   await runAgentDeliveryTests();
   await runInstallerWriterTests();
@@ -538,6 +583,7 @@ async function main(): Promise<void> {
   await runCfnBicepDetectionTests();
   await runReviewWorkflowTests();
   await runFortifyLogicTests();
+  await runRuleCorpusTests();
   console.log("security-mcp tests passed");
 }
 

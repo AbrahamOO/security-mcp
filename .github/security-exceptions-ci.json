@@ -535,6 +535,23 @@
       "approver": "ciso-review-board",
       "approval_role": "SecurityLead",
       "expires_on": "2027-06-15"
+    },
+    {
+      "id": "self-scan-rule-corpus",
+      "finding_ids": [
+        "OPEN_REDIRECT",
+        "POST_LOGIN_OPEN_REDIRECT",
+        "WEB_HARDCODED_SESSION_SECRET",
+        "DYNAMIC_IMPORT_NON_LITERAL",
+        "MONETARY_FLOAT_ARITHMETIC"
+      ],
+      "control_ids": [],
+      "justification": "src/tests/corpus/*.corpus.ts intentionally embeds realistic vulnerable code (an unvalidated res.redirect, a hardcoded 'keyboard cat' session secret) as string-literal true-positive fixtures for the per-rule detection corpus added in this release (src/tests/corpus/runner.ts) — the same false-positive class already excepted for REMEDIATION_MAP's own before/after examples under self-scan-remediation-map, extended here for the new corpus files. OPEN_REDIRECT/POST_LOGIN_OPEN_REDIRECT/WEB_HARDCODED_SESSION_SECRET all cite src/tests/corpus/web-hardening.corpus.ts only, never live application code. DYNAMIC_IMPORT_NON_LITERAL cites src/tests/run.ts's corpus-file loader: the imported path is built from a fixed repo-relative directory (dist/tests/corpus) plus a filename returned by readdirSync of that same trusted directory, filtered to *.corpus.js — never user- or network-controlled input, so the dynamic import carries no injection risk; a static import list is not possible because corpus files are added over time without code changes elsewhere. MONETARY_FLOAT_ARITHMETIC cites a tpRate/fpRate percentage formatted with .toFixed(2) in the same file — a detection-rate ratio in [0,1], not a monetary amount; the rule's currency-arithmetic concern does not apply.",
+      "ticket": "self-scan/rule-corpus-harness",
+      "owner": "security-mcp-team",
+      "approver": "ciso-review-board",
+      "approval_role": "SecurityLead",
+      "expires_on": "2027-07-17"
     }
   ]
 }
