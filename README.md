@@ -485,6 +485,21 @@ Expired exceptions automatically become blocking findings until they are renewed
 
 ## Environment variables
 
+### Strict mode
+
+| Variable | Purpose |
+| --- | --- |
+| `SECURITY_STRICT` | Set to `1` to require every integrity/auth key below and force offline mode, refusing to start if any required key is missing |
+
+Every permissive default below (no MCP auth secret required, unsigned policy/audit
+chains allowed, live third-party network egress permitted) exists for frictionless
+local use. `SECURITY_STRICT=1` flips all of them to their locked-down setting in one
+step: `SECURITY_POLICY_HMAC_KEY` and `SECURITY_AUDIT_HMAC_KEY` become mandatory for
+both the CLI gate and the MCP server, `SECURITY_MCP_SHARED_SECRET` additionally
+becomes mandatory for the MCP server, and `SECURITY_OFFLINE` is forced on regardless
+of its own setting. If a required key is missing, the process throws and refuses to
+start rather than silently falling back to a weaker default — see `src/config.ts`.
+
 ### Gate and scope
 
 | Variable | Default | Purpose |
@@ -607,6 +622,10 @@ The `security-mcp` binary exposes:
 
 ## Change History
 
+- 2026-07-17 — Added the "Strict mode" environment-variable section documenting
+  `SECURITY_STRICT=1` (Track C): a single switch that requires both HMAC keys plus
+  the MCP shared secret and forces offline mode, refusing to start if any
+  required key is missing rather than silently falling back to a weaker default.
 - 2026-07-17 — Remediation-template count updated from 888 to 900: added 12
   `EVAL_UNAVAILABLE_*` findings (Track E, the fail-open/evaluability sweep) and a
   matching template for each, keeping the "100% detection-ID coverage" claim exact.

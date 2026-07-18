@@ -331,6 +331,18 @@
       "note": "The general form of the evaluability guarantee added by the Track E fail-open sweep. Verified concretely via checkCveExploitation (dependencies.ts): forcing npm audit to fail (empty PATH -> ENOENT, no stdout) must produce EVAL_UNAVAILABLE_NPM_AUDIT, not a silently-clean gate PASS. The other 11 EVAL_UNAVAILABLE_* sites added in the same sweep (cloud-controls, scanners x5, nuclei, runtime x2, auth-deep, business-logic) follow the identical pattern and are covered by the coverage-rule-remediation-parity claim (every one has a real rule id and a real template) plus manual code review, but are not independently adversarially tested here \u2014 extending this test to each would require a network/tool-failure seam per site, deferred as a follow-up rather than blocking this pass."
     },
     {
+      "id": "guarantee-strict-mode-refuses-misconfigured-start",
+      "type": "GUARANTEE",
+      "status": "TRUE",
+      "source": {
+        "file": "src/config.ts"
+      },
+      "verbatim": "SECURITY_STRICT=1 flipping every permissive default and throwing at startup if a required key is absent",
+      "test": "attempt_strict_mode_without_keys__is_rejected",
+      "owner": "security-mcp-team",
+      "note": "Verified by actually spawning a child process with SECURITY_STRICT=1 and no HMAC keys set and asserting it fails at import time with the expected error, not by asserting the code should do this. Also manually verified (not part of the automated test, since it requires spawning and killing a long-running stdio server): the MCP server additionally requires SECURITY_MCP_SHARED_SECRET via assertStrictMcpAuthRequirements(), and with all three keys set, strict mode logs its startup banner and proceeds normally."
+    },
+    {
       "id": "guarantee-compliance-report-unverified-default",
       "type": "GUARANTEE",
       "status": "TRUE",

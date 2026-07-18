@@ -147,6 +147,25 @@ claims to match the code — nothing is left asserted-but-unproven.
   adversarial GUARANTEE test (`node scripts/verify-claims.mjs --strict`): forcing `npm
   audit` to fail (empty PATH) must produce `EVAL_UNAVAILABLE_NPM_AUDIT`, not a silently
   clean gate PASS.
+- **New `SECURITY_STRICT=1` mode (Track C).** Every permissive default
+  (no MCP auth secret required, unsigned policy/audit chains allowed, live
+  third-party network egress permitted) is intentional for frictionless local use
+  — but there was previously no single switch to lock all of them down at once, and
+  no guarantee that a "strict" run wasn't quietly falling back to a weaker default
+  when a key was missing. `src/config.ts` computes a frozen `CONFIG` once at import
+  time: `SECURITY_STRICT=1` requires `SECURITY_POLICY_HMAC_KEY` and
+  `SECURITY_AUDIT_HMAC_KEY` for both the CLI gate and the MCP server, additionally
+  requires `SECURITY_MCP_SHARED_SECRET` for the MCP server (a CI gate run has no
+  session to authenticate a caller against, so that requirement is server-specific),
+  and forces `SECURITY_OFFLINE` on regardless of its own setting. If a required key
+  is absent, the process throws at startup and refuses to run rather than silently
+  proceeding with a weaker default. The three `SECURITY_OFFLINE` call sites
+  (threat-intel KEV/EPSS, dependency scorecard, npm audit) now read `CONFIG.offline`
+  instead of the raw environment variable directly, so the strict-mode override
+  actually reaches them. Verified with a new adversarial GUARANTEE test that spawns
+  a real child process with `SECURITY_STRICT=1` and no keys set and asserts it fails
+  at import time with the expected error — plus manual verification of the MCP
+  server's additional shared-secret requirement.
 
 ### Added: one-shot `security.fortify` — natural-language "lock down X" dispatch
 

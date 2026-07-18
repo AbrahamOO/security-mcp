@@ -1,5 +1,12 @@
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+// Importing CONFIG is what makes the SECURITY_STRICT=1 startup check run for the
+// two HMAC keys — it throws synchronously at module-load time (before main()
+// below) if strict mode is set but either key is missing. Must stay as one of
+// the first imports so a misconfigured strict server never starts. The MCP
+// shared-secret requirement is server-specific and asserted explicitly in
+// main() via assertStrictMcpAuthRequirements().
+import { CONFIG, assertStrictMcpAuthRequirements } from "../config.js";
 import { readFileSync, existsSync } from "node:fs";
 import { attemptAuth, authSystemPromptPreamble, getSessionId, isAuthRequired, isAuthenticated, logout, recordAttempt } from "./auth.js";
 import { dirname, join, resolve } from "node:path";
@@ -2958,6 +2965,10 @@ tool(
 // ---------------------------------------------------------------------------
 
 export async function main(): Promise<void> {
+  assertStrictMcpAuthRequirements();
+  if (CONFIG.strict) {
+    console.error("[security-mcp] SECURITY_STRICT=1: strict mode active (auth required, both HMAC keys required, offline).");
+  }
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }

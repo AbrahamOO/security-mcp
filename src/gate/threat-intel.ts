@@ -4,6 +4,7 @@
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { CONFIG } from "../config.js";
 
 const CISA_KEV_URL =
   "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json";
@@ -160,8 +161,9 @@ export async function checkActiveExploitation(
 
   // CWE-200: the EPSS lookup places this repo's CVE IDs in a cleartext query to
   // a third party (api.first.org). Operators of private repos can disable all
-  // threat-intel egress with SECURITY_OFFLINE so the unpatched-CVE set never leaves.
-  if (process.env["SECURITY_OFFLINE"] === "1" || process.env["SECURITY_OFFLINE"] === "true") {
+  // threat-intel egress with SECURITY_OFFLINE (or SECURITY_STRICT, which forces
+  // it) so the unpatched-CVE set never leaves.
+  if (CONFIG.offline) {
     return { kevMatches: [], highEpss: [], failed: false };
   }
 

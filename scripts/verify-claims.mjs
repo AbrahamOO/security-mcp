@@ -225,9 +225,30 @@ async function attemptNpmAuditUnavailableDoesNotReportClean() {
   }
 }
 
+async function attemptStrictModeWithoutKeysIsRejected() {
+  // config.js computes CONFIG at import time, so this must run in a child process
+  // (module caching would otherwise make a second import in this same process a
+  // no-op regardless of env vars).
+  try {
+    execFileSync(process.execPath, ["-e", "import('./dist/config.js')"], {
+      cwd: ROOT,
+      env: { ...process.env, SECURITY_STRICT: "1", SECURITY_POLICY_HMAC_KEY: "", SECURITY_AUDIT_HMAC_KEY: "" },
+      stdio: "pipe"
+    });
+    return { ok: false, detail: "expected SECURITY_STRICT=1 with no HMAC keys set to throw at import time, but the process exited 0" };
+  } catch (err) {
+    const stderr = String(err.stderr ?? "");
+    if (!stderr.includes("SECURITY_STRICT=1 requires")) {
+      return { ok: false, detail: `process failed as expected but not with the strict-mode error: ${stderr.slice(0, 300)}` };
+    }
+    return { ok: true };
+  }
+}
+
 const GUARANTEE_TESTS = {
   attempt_empty_severity_block_unsigned__is_rejected: attemptEmptySeverityBlockUnsignedIsRejected,
-  attempt_npm_audit_unavailable__does_not_report_clean: attemptNpmAuditUnavailableDoesNotReportClean
+  attempt_npm_audit_unavailable__does_not_report_clean: attemptNpmAuditUnavailableDoesNotReportClean,
+  attempt_strict_mode_without_keys__is_rejected: attemptStrictModeWithoutKeysIsRejected
 };
 
 async function verifyGuarantee(claim) {

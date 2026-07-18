@@ -1,4 +1,5 @@
 import { Finding, sanitizeErrorMessage } from "../result.js";
+import { CONFIG } from "../../config.js";
 import { scopedFg as fg } from "../scan-scope.js";
 import { readFileSafe } from "../../repo/fs.js";
 import { getWorkspaceRoot } from "../../repo/workspace.js";
@@ -279,7 +280,7 @@ async function checkNpmProvenance(): Promise<{ findings: Finding[] }> {
 
 			// CWE-200: allow operators of private repos to disable all third-party
 			// network egress (scorecard/EPSS/registry lookups) with SECURITY_OFFLINE.
-			const offline = process.env["SECURITY_OFFLINE"] === "1" || process.env["SECURITY_OFFLINE"] === "true";
+			const offline = CONFIG.offline;
 
 			for (const dep of (offline ? [] : depsToCheck)) {
 				const score = await fetchScorecardScore(dep);
@@ -461,7 +462,7 @@ async function checkCveExploitation(): Promise<Finding[]> {
 	// SECURITY_OFFLINE is an intentional opt-out of network egress (npm audit calls
 	// the npm registry) — that must map to "not applicable", not to the same
 	// EVAL_UNAVAILABLE_NPM_AUDIT finding an unexpected failure would produce.
-	const offline = process.env["SECURITY_OFFLINE"] === "1" || process.env["SECURITY_OFFLINE"] === "true";
+	const offline = CONFIG.offline;
 	if (offline) return [];
 	try {
 		let stdout: string;
