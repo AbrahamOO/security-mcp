@@ -500,7 +500,8 @@ Every check module, including the three added in 1.5.0, follows the same contrac
    `explanation`, and `references`. A finding with no remediation template is still valid,
    but it erodes the product's fixing-vs-advisory ratio, so treat this as a required step,
    not an optional one.
-8. **Verify.** Run `npm run build` (tsc) and `npm test` (`src/tests/run.ts`) before
+8. **Verify.** Run `npm run build` (tsc) and `npm test` (`node --test` over
+   `dist/tests/legacy.test.js` plus every `src/tests/corpus/*.corpus.ts` case) before
    considering the module complete.
 
 ## Environment variables relevant to 1.5.0

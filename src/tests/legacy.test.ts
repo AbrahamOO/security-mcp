@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import test from "node:test";
 import { cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -570,24 +571,21 @@ async function runRuleCorpusTests(): Promise<void> {
   assert.equal(report.failures.length, 0, `${report.failures.length} rule-corpus case(s) failed — see .mcp/reports/rule-quality.json`);
 }
 
-async function main(): Promise<void> {
-  await runAgentDeliveryTests();
-  await runInstallerWriterTests();
-  await runMcpSurfaceTests();
-  await runStartReviewDefaultTests();
-  await runComplianceTruthTests();
-  await runPromptConformanceTests();
-  await runFixtureGateTests();
-  await runCloudControlRemediationTests();
-  await runNestedRemediationTests();
-  await runCfnBicepDetectionTests();
-  await runReviewWorkflowTests();
-  await runFortifyLogicTests();
-  await runRuleCorpusTests();
-  console.log("security-mcp tests passed");
-}
-
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+// Registered (and awaited, one at a time) in the same order the old hand-rolled
+// main() called them in — several share fixture state (web-insecure's .mcp/
+// artifacts) via cleanupFixtureReviewArtifacts() before/after, so this preserves
+// the sequential guarantee that ordering depended on rather than assuming
+// node:test's default scheduling would happen to match.
+await test("agent delivery (bundled skills serveable over MCP)", runAgentDeliveryTests);
+await test("installer writers (VS Code / Windsurf / Codex TOML)", runInstallerWriterTests);
+await test("MCP surface (prompts + skill:// resources)", runMcpSurfaceTests);
+await test("start_review defaults to auto_apply", runStartReviewDefaultTests);
+await test("compliance report truth (no satisfied-by-default)", runComplianceTruthTests);
+await test("prompt conformance (SECURITY_PROMPT/skills/README/server.ts)", runPromptConformanceTests);
+await test("fixture gate findings (web/infra/ai/agentic/aws insecure)", runFixtureGateTests);
+await test("cloud-control remediation (AWS autoharden, idempotent)", runCloudControlRemediationTests);
+await test("nested cloud-control remediation (GCP + Azure)", runNestedRemediationTests);
+await test("CFN/Bicep detection", runCfnBicepDetectionTests);
+await test("review workflow (run -> attest)", runReviewWorkflowTests);
+await test("fortify logic (agent selection + scope resolution)", runFortifyLogicTests);
+await test("rule corpus (per-rule TP/TN, measures tpRate/fpRate)", runRuleCorpusTests);

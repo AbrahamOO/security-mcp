@@ -166,6 +166,21 @@ claims to match the code — nothing is left asserted-but-unproven.
   a real child process with `SECURITY_STRICT=1` and no keys set and asserts it fails
   at import time with the expected error — plus manual verification of the MCP
   server's additional shared-secret requirement.
+- **Migrated the test suite to `node:test` (Track B).** `src/tests/run.ts`'s
+  hand-rolled `main()` — 13 async test functions each manually `await`-chained,
+  with `process.exit(1)` on the first thrown assertion — is now
+  `src/tests/legacy.test.ts`: the same 13 functions, unchanged, each registered
+  via `await test(name, fn)` in the identical order the old `main()` called them
+  in (several share fixture state through `cleanupFixtureReviewArtifacts()`
+  before/after, so the explicit sequential `await` preserves that ordering
+  guarantee rather than assuming `node:test`'s default scheduling would happen to
+  match). `npm test` is now `node --test --experimental-test-coverage
+  dist/tests` — zero new dependencies, and `--experimental-test-coverage` adds a
+  per-file coverage report the hand-rolled runner never had. All 13 tests
+  (507-case rule corpus included) verified passing after the migration, in the
+  same 13/13 shape as before. `scripts/verify-claims.mjs`'s delegated-GUARANTEE
+  path and every doc/exception-file reference to the old `src/tests/run.ts` /
+  `dist/tests/run.js` path updated to match.
 
 ### Added: one-shot `security.fortify` — natural-language "lock down X" dispatch
 

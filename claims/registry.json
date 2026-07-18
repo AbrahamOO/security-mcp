@@ -351,11 +351,11 @@
       },
       "verbatim": "a control is marked satisfied only when a gate run completed its required steps with no adverse finding, never by default",
       "delegatesTo": {
-        "file": "dist/tests/run.js",
+        "file": "dist/tests/legacy.test.js",
         "testFunction": "runComplianceTruthTests"
       },
       "owner": "security-mcp-team",
-      "note": "Already covered by the existing e2e test suite (added in the Wave 1 hardening pass): security.generate_compliance_report with no gate run must return 0 satisfied / all unverified, carry the not-an-audit caveat, and reject GDPR. Delegated rather than reimplemented \u2014 verify-claims.mjs runs `node dist/tests/run.js` once and this claim passes iff that run's exit code is 0."
+      "note": "Already covered by the existing e2e test suite (added in the Wave 1 hardening pass): security.generate_compliance_report with no gate run must return 0 satisfied / all unverified, carry the not-an-audit caveat, and reject GDPR. Delegated rather than reimplemented \u2014 verify-claims.mjs runs `node --test dist/tests` once and this claim passes iff that run's exit code is 0."
     },
     {
       "id": "scoped-wiki-90pct-fixing-determinism",

@@ -10,7 +10,8 @@
 //   COVERAGE  — set-diff (or bulk-integrity-check) against the live registry/manifest.
 //   GUARANTEE — an adversarial test: arrange the violation, act, assert the defense held.
 //   CAPABILITY / GUARANTEE-by-delegation — some guarantees are already proven by the
-//               existing e2e suite (dist/tests/run.js); those delegate rather than
+//               existing e2e suite (dist/tests/legacy.test.js, run via `node --test`);
+//               those delegate rather than
 //               reimplement, and pass iff that run's exit code is 0 (run once, shared).
 //   SCOPED    — the doc must contain `rewrite.newVerbatim`, not the original `verbatim`
 //               (or at least the rewrite must be present — a scoped claim's whole point
@@ -139,7 +140,7 @@ let delegatedRunCache = null;
 function runDelegatedSuite() {
   if (delegatedRunCache !== null) return delegatedRunCache;
   try {
-    execFileSync(process.execPath, ["dist/tests/run.js"], { cwd: ROOT, stdio: "pipe" });
+    execFileSync(process.execPath, ["--test", "dist/tests"], { cwd: ROOT, stdio: "pipe" });
     delegatedRunCache = { ok: true };
   } catch (err) {
     delegatedRunCache = { ok: false, detail: String(err.stderr ?? err.message ?? err).slice(0, 500) };
