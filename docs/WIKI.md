@@ -365,7 +365,7 @@ writing the returned template's fix directly into the working tree, then re-runn
 check to confirm the finding cleared. As of 1.6.1, `REMEDIATION_MAP` is composed from six
 domain partials under `src/gate/remediation-parts/` — `cloud.ts` (256 templates), `ai.ts`
 (69), `data.ts` (172), `web.ts` (203), `misc.ts` (112), and `web-hardening-remediations.ts`
-(6) — for **888 fix templates covering 100% (888/888) of detection IDs**, up from just 71
+(6), plus the evaluability-gap templates in the base map — for **900 fix templates covering 100% (900/900) of detection IDs**, up from just 71
 templates (roughly 8% of finding IDs) before this release. Each template pairs a realistic
 vulnerable pattern with a concrete secure fix in the correct language, a plain-language
 explanation, and standards references (CWE plus OWASP Top 10 / API Security Top 10 / LLM
@@ -463,9 +463,32 @@ Every check module, including the three added in 1.5.0, follows the same contrac
    conventions already in use: CRITICAL for a confirmed, exploitable condition; HIGH for
    a serious but conditional or unresolved-version case; MEDIUM for advisory or
    unresolvable-version cases; LOW for hardening gaps that are not exploitable alone.
-5. **Fail safe.** Wrap your detection logic in try/catch. Log failures with
-   `sanitizeErrorMessage`, never throw, and return an empty array on any internal error.
-   A check that cannot run should produce no finding for its rule, not a crashed gate.
+5. **Fail safe — but distinguish "one file" from "the whole check."** Wrap your
+   detection logic in try/catch and log failures with `sanitizeErrorMessage`. The
+   right response to a caught error depends on its scope:
+   - **One input among many** (a single file that's malformed, binary, or too large;
+     a glob that matches zero files because the pattern genuinely doesn't apply):
+     return an empty array or `continue` past that one file. This is the common
+     case, and README:191's "the absence of a result is itself a result" and this
+     guide's older wording ("a check that cannot run should produce no finding for
+     its rule, not a crashed gate") both apply correctly — a check that legitimately
+     has nothing to check should report nothing, silently.
+   - **The check's entire evidence source** (a network/API call the whole check
+     depends on fails, a required external binary is missing, an external service
+     is unreachable): do **not** return `[]`. That silently converts "I could not
+     determine this" into "clean," which is worse than a crash, because a crash at
+     least produces a visible `GATE_CHECK_CRASHED` finding. Emit an explicit
+     `EVAL_UNAVAILABLE_<NAME>` finding instead (HIGH severity, mirroring
+     `GATE_CHECK_CRASHED`'s intent) — see `checkCveExploitation` in
+     `src/gate/checks/dependencies.ts` for the canonical example, and give it a
+     remediation template in `src/gate/remediation-map.ts` like every other
+     finding id (the "fix" describes restoring the resource, not a code diff).
+     If the failure is an intentional, operator-chosen skip (`SECURITY_OFFLINE=1`),
+     that is not this case either — check for it explicitly and return `[]` with no
+     finding, the same as "not applicable."
+   The dividing line: if this specific failure happens, does the user lose ALL of
+   this check's signal for the entire run with no indication anything went wrong?
+   If yes, it needs an `EVAL_UNAVAILABLE_<NAME>` finding, not silence.
 6. **Wire it in.** This is done in `src/gate/policy.ts`, not inside your module:
    - Add your function call to the check-promise array inside `runAllChecks`, gated on
      whichever `surfaces.*` flag (or `isApiOrWeb`) matches where your check should run, or
@@ -502,6 +525,17 @@ environment-variable configuration, as of 1.5.0.
 
 ## Change History
 
+- 2026-07-17 — Rewrote the "Fail safe" check-authoring rule (item 5) to distinguish
+  a per-file skip (legitimately silent) from the whole check's evidence source
+  being unavailable (must emit `EVAL_UNAVAILABLE_<NAME>`, not `[]`) — the old
+  unconditional "return an empty array on any internal error" wording was itself
+  the reason this bug class kept getting introduced by new check authors following
+  the guide as written. Reconciles with README's "the absence of a result is
+  itself a result" (which was about crashes and remains accurate).
+- 2026-07-17 — Remediation-template count updated from 888 to 900: added 12
+  `EVAL_UNAVAILABLE_*` findings (Track E, the fail-open/evaluability sweep across all
+  check modules) and a matching template for each, keeping "100% detection-ID
+  coverage" exact.
 - 2026-07-17 — Corrected the "90% fixing" claim: applying and verifying a remediation
   template is still the calling agent's job, not something the engine enforces
   deterministically (Terraform via `autoharden` is the one exception). Updated the

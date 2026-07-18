@@ -123,6 +123,30 @@ claims to match the code — nothing is left asserted-but-unproven.
   WIKI.md and ARCHITECTURE.md, and README's unconditional "audit trail cannot be silently
   rewritten," were rewritten to what's true (SCOPED) rather than left overstated — see the
   registry's `rewrite.reason` on each for the full explanation.
+- **Fail-open sweep (Track E): 12 more evaluability gaps found and fixed.** A full audit
+  of all 34 check modules for the "catch → return `[]`" pattern (three parallel reviews,
+  ~300 catch sites examined) found 12 additional sites — beyond the
+  `EVAL_UNAVAILABLE_THREAT_INTEL` fix already shipped — where a whole check's evidence
+  source becoming unavailable silently produced a "clean" result instead of surfacing the
+  gap: `checkCveExploitation`'s `npm audit` call (dependencies.ts, also newly threaded
+  through `SECURITY_OFFLINE`), the bundled cloud-controls ruleset failing to load
+  (cloud-controls.ts, now partial-degrades per-provider instead of losing everything),
+  all 5 external scanners' unreadable-output paths (scanners.ts: gitleaks, semgrep,
+  trivy, checkov, osv-scanner), nuclei DAST's missing-binary and failed-scan paths
+  (nuclei.ts — the module's own "scanner readiness will flag this" comment was false,
+  since nuclei was never in the default scanner config), a configured live target's
+  header/TLS probes failing (runtime.ts), and the two sites the original audit had
+  already named (`auth-deep.ts`, `business-logic.ts` — an internal error in any one of
+  ~40 or ~37 sub-checks was discarding every other sub-check's result too). Each gets a
+  new `EVAL_UNAVAILABLE_<NAME>` finding (HIGH) and a matching remediation template — the
+  remediation-template count moves from 888 to 900, keeping "100% detection-ID coverage"
+  exactly true rather than approximately true. Also rewrote the check-authoring "fail
+  safe" guidance in WIKI.md and ARCHITECTURE.md, which previously told new check authors
+  to unconditionally "return an empty array on any internal error" with no carve-out —
+  that wording is itself why this bug class kept getting introduced. Added a new
+  adversarial GUARANTEE test (`node scripts/verify-claims.mjs --strict`): forcing `npm
+  audit` to fail (empty PATH) must produce `EVAL_UNAVAILABLE_NPM_AUDIT`, not a silently
+  clean gate PASS.
 
 ### Added: one-shot `security.fortify` — natural-language "lock down X" dispatch
 

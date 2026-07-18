@@ -71,32 +71,49 @@ const PROVIDER_FILES: Record<CloudProvider, string> = {
   azure: "defaults/cloud-controls/azure.json"
 };
 
-async function loadProvider(cloud: CloudProvider): Promise<CloudRule[]> {
+async function loadProvider(cloud: CloudProvider): Promise<{ rules: CloudRule[]; loadError: string | null }> {
   const path = resolve(PKG_ROOT, PROVIDER_FILES[cloud]);
   let raw: string;
   try {
     raw = await readFile(path, "utf-8");
-  } catch {
-    return [];
+  } catch (err) {
+    // A missing/unreadable ruleset file (stale or partial install) is a genuine
+    // evaluability gap, not "zero violations" — the caller must be able to tell
+    // the two apart, so it's surfaced via loadError rather than swallowed here.
+    return { rules: [], loadError: err instanceof Error ? err.message : String(err) };
   }
   const parsed = RegistrySchema.parse(JSON.parse(raw));
-  return parsed.rules.map((rule) => ({ ...rule, cloud }));
+  return { rules: parsed.rules.map((rule) => ({ ...rule, cloud })), loadError: null };
 }
 
 /** Load every cloud-control rule across all providers, tagged with its cloud. */
 export async function loadCloudRules(providers?: CloudProvider[]): Promise<CloudRule[]> {
+  return (await loadCloudRulesWithStatus(providers)).rules;
+}
+
+/**
+ * Same as loadCloudRules, but also reports which providers' rulesets failed to
+ * load, so a caller (checkCloudControls) can distinguish "genuinely 0 rules
+ * loaded" or "one provider's ruleset is unavailable" from "no violations found"
+ * — and still scan against whatever DID load rather than losing all signal.
+ */
+export async function loadCloudRulesWithStatus(
+  providers?: CloudProvider[]
+): Promise<{ rules: CloudRule[]; failedProviders: CloudProvider[] }> {
   const list = providers ?? (["aws", "gcp", "azure"] as CloudProvider[]);
   const groups = await Promise.all(list.map(loadProvider));
   const seen = new Set<string>();
   const rules: CloudRule[] = [];
-  for (const group of groups) {
-    for (const rule of group) {
+  const failedProviders: CloudProvider[] = [];
+  groups.forEach((group, i) => {
+    if (group.loadError) failedProviders.push(list[i]);
+    for (const rule of group.rules) {
       if (seen.has(rule.ruleId)) {
         throw new Error(`Duplicate cloud-control ruleId: ${rule.ruleId}`);
       }
       seen.add(rule.ruleId);
       rules.push(rule);
     }
-  }
-  return rules;
+  });
+  return { rules, failedProviders };
 }

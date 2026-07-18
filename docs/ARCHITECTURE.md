@@ -36,7 +36,7 @@ flowchart TD
     CI["CI runner<br/>src/ci/pr-gate.ts"] --> GATE
     MCP --> GATE["Gate engine<br/>runAllChecks — src/gate/policy.ts"]
     GATE --> CC["Cloud-controls engine<br/>src/gate/cloud-controls/ (1,002 IaC rules)"]
-    GATE --> RM["Remediation map<br/>src/gate/remediation-map.ts (888 templates)"]
+    GATE --> RM["Remediation map<br/>src/gate/remediation-map.ts (900 templates)"]
     GATE --> VERDICT{{"PASS / FAIL"}}
 ```
 
@@ -162,9 +162,20 @@ Detection is one of three patterns, sometimes combined:
   than it delivers.
 
 Because there is no semantic understanding of the code, every check module is written to
-fail safe: wrapped in try/catch, logging via `sanitizeErrorMessage` rather than throwing,
-and returning an empty array rather than crashing the gate on any internal error. A check
-that cannot run produces no finding for that rule, not a false one.
+fail safe: wrapped in try/catch, logging via `sanitizeErrorMessage` rather than throwing.
+What "fail safe" returns depends on scope, though — a caught error affecting one input
+file among many (malformed content, a glob matching nothing because the pattern doesn't
+apply) legitimately returns an empty array; that file is skipped, every other file is
+still checked, and a check with genuinely nothing to check should report nothing. But a
+caught error that takes out the check's *entire* evidence source — a network/API call the
+whole check depends on failing, a required external binary missing — must not silently
+return `[]` too: that reports "clean" when the truth is "unknown," which is worse than
+crashing (a crash at least produces a visible `GATE_CHECK_CRASHED` finding). Those cases
+emit a dedicated `EVAL_UNAVAILABLE_<NAME>` finding instead — see
+`checkCveExploitation` in `src/gate/checks/dependencies.ts` for the canonical example.
+`SECURITY_OFFLINE=1` is a third case: an intentional, operator-chosen skip, checked for
+explicitly and also returning `[]` with no finding — not a false clean, since nothing was
+silently lost, the operator asked for this.
 
 ## Where the 1.5.0 checks fit
 
@@ -438,7 +449,7 @@ crypto, JWT, SAML, OAuth, passwords, database, Snowflake, Databricks, supply-cha
 hygiene), `web.ts` (203: web, API, business logic, GraphQL, Android, iOS, DLP, CI),
 `misc.ts` (112: injection, deserialization, SSRF, TLS, tokens, mobile storage, XSS), and
 `web-hardening-remediations.ts` (6, one per new `WEB_` rule from the 1.6.1 `web-hardening`
-module). The result is 888 fix templates covering 100% (888 of 888) of detection IDs, up
+module), plus the evaluability-gap templates in the base map. The result is 900 fix templates covering 100% (900 of 900) of detection IDs, up
 from roughly 8% — every finding the gate can raise now has a concrete template to work
 from, so the "90% fixing, 10% advisory" mandate is no longer bottlenecked by missing
 templates. Applying a template is still the calling agent's responsibility: nothing in the
@@ -461,6 +472,15 @@ produce the final verdict that either blocks a merge or clears it.
 
 ## Change History
 
+- 2026-07-17 — Rewrote the "fail safe" paragraph to distinguish a per-file skip
+  (legitimately silent) from the whole check's evidence source being unavailable
+  (must emit `EVAL_UNAVAILABLE_<NAME>`, not `[]`) — reconciles with README's "the
+  absence of a result is itself a result" (about crashes, which remains accurate)
+  and matches the corresponding rewrite in WIKI.md's check-authoring guide.
+- 2026-07-17 — Remediation-template count updated from 888 to 900: added 12
+  `EVAL_UNAVAILABLE_*` findings (Track E, the fail-open/evaluability sweep across all
+  check modules) and a matching template for each, keeping "100% detection-ID
+  coverage" exact.
 - 2026-07-17 — Corrected the "90% fixing" claim: applying and verifying a remediation
   template is still the calling agent's job, not something the engine enforces
   deterministically (Terraform via `autoharden` is the one exception). Updated the

@@ -188,8 +188,46 @@ async function attemptEmptySeverityBlockUnsignedIsRejected() {
   }
 }
 
+async function attemptNpmAuditUnavailableDoesNotReportClean() {
+  const savedPath = process.env["PATH"];
+  const tmp = mkdtempSync(join(tmpdir(), "claims-guarantee-"));
+  try {
+    const { runPrGate } = await import(join(ROOT, "dist/gate/policy.js"));
+    const { withWorkspace } = await import(join(ROOT, "dist/repo/workspace.js"));
+
+    const policyPath = ".mcp/policies/security-policy.json";
+    mkdirSync(join(tmp, ".mcp/policies"), { recursive: true });
+    writeFileSync(join(tmp, policyPath), JSON.stringify({ name: "claims-test-policy", version: "1.0.0" }, null, 2));
+    // A minimal manifest + lockfile so checkDependencies doesn't early-return on
+    // LOCKFILE_MISSING before ever reaching checkCveExploitation.
+    writeFileSync(join(tmp, "package.json"), JSON.stringify({ name: "t", version: "1.0.0", dependencies: {} }, null, 2));
+    writeFileSync(join(tmp, "package-lock.json"), JSON.stringify({ name: "t", lockfileVersion: 3, packages: {} }, null, 2));
+
+    // Empty PATH makes `npm audit` fail with ENOENT and no stdout — simulating
+    // "npm unavailable," the same evaluability gap a real broken PATH or a
+    // container missing npm would produce. checkCveExploitation reads
+    // process.env["PATH"] itself (with `?? fallback`, which only applies to
+    // null/undefined, not ""), so this reliably forces the failure path.
+    process.env["PATH"] = "";
+
+    const result = await withWorkspace(tmp, () =>
+      runPrGate({ policyPath, mode: "file_by_file", targets: ["package.json"] })
+    );
+
+    const hasEvalFinding = result.findings.some((f) => f.id === "EVAL_UNAVAILABLE_NPM_AUDIT");
+    if (!hasEvalFinding) {
+      return { ok: false, detail: "expected EVAL_UNAVAILABLE_NPM_AUDIT when npm is unavailable, but it did not fire — the gate would silently report dependency CVE status as clean" };
+    }
+    return { ok: true };
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+    if (savedPath !== undefined) process.env["PATH"] = savedPath;
+  }
+}
+
 const GUARANTEE_TESTS = {
-  attempt_empty_severity_block_unsigned__is_rejected: attemptEmptySeverityBlockUnsignedIsRejected
+  attempt_empty_severity_block_unsigned__is_rejected: attemptEmptySeverityBlockUnsignedIsRejected,
+  attempt_npm_audit_unavailable__does_not_report_clean: attemptNpmAuditUnavailableDoesNotReportClean
 };
 
 async function verifyGuarantee(claim) {

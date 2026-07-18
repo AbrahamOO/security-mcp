@@ -2,7 +2,7 @@ import { scopedFg as fg } from "../scan-scope.js";
 import { readFileSafe } from "../../repo/fs.js";
 import { Finding } from "../result.js";
 import { detectBicep, detectCloudFormation, detectTerraform, Violation } from "../cloud-controls/detect.js";
-import { CloudRule, loadCloudRules } from "../cloud-controls/types.js";
+import { CloudRule, loadCloudRulesWithStatus } from "../cloud-controls/types.js";
 
 // .tf = Terraform (HCL); .bicep = Bicep; json/yaml/template are CloudFormation/SAM
 // candidates (gated by a content check so arbitrary JSON/YAML is skipped cheaply).
@@ -44,8 +44,24 @@ function toFinding(ruleId: string, rule: CloudRule, violations: Violation[]): Fi
  */
 export async function checkCloudControls(opts: { changedFiles: string[] }): Promise<Finding[]> {
   void opts; // matching scans the whole working tree, consistent with checkIac
-  const rules = await loadCloudRules();
-  if (rules.length === 0) return [];
+  const { rules, failedProviders } = await loadCloudRulesWithStatus();
+
+  const findings: Finding[] = [];
+  if (failedProviders.length > 0) {
+    const scope = failedProviders.length === 3 ? "all providers" : failedProviders.join("/");
+    findings.push({
+      id: "EVAL_UNAVAILABLE_CLOUD_CONTROLS",
+      title: `Cloud-control ruleset failed to load for ${failedProviders.join(", ")} — IaC misconfiguration status for ${scope} is UNKNOWN, not clean`,
+      severity: "HIGH",
+      evidence: failedProviders.map((p) => `defaults/cloud-controls/${p}.json could not be read`),
+      requiredActions: [
+        "Verify the security-mcp package installation is complete and not corrupted (reinstall with npm install).",
+        `Confirm ${failedProviders.map((p) => `defaults/cloud-controls/${p}.json`).join(", ")} exist and are readable.`,
+        "Do not treat this run as evidence that infrastructure-as-code for the affected provider(s) is free of misconfigurations."
+      ]
+    });
+  }
+  if (rules.length === 0) return findings;
 
   const files = await fg(GLOBS, { dot: true, followSymbolicLinks: false, ignore: IGNORE });
   const byRule = new Map<string, Violation[]>();
@@ -64,7 +80,6 @@ export async function checkCloudControls(opts: { changedFiles: string[] }): Prom
     }
   }
 
-  const findings: Finding[] = [];
   for (const [ruleId, violations] of byRule) {
     findings.push(toFinding(ruleId, violations[0].rule, violations));
   }

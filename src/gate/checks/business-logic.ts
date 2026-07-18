@@ -1142,7 +1142,19 @@ export async function checkBusinessLogic(_opts: { changedFiles: string[] }): Pro
       ...raceResults,
     ];
   } catch (err) {
+    // EVALUABILITY: an internal error here (a bug in any one of ~37 sub-checks)
+    // currently discards every other sub-check's result too — returning [] would
+    // report a full business-logic pass when the truth is this check never ran.
     console.warn("[checkBusinessLogic] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));
-    return [];
+    return [{
+      id: "EVAL_UNAVAILABLE_BUSINESS_LOGIC",
+      title: "Business-logic checks could not complete — refund/inventory/race-condition status is UNKNOWN, not clean",
+      severity: "HIGH",
+      evidence: [sanitizeErrorMessage(err instanceof Error ? err.message : String(err))],
+      requiredActions: [
+        "Check the gate logs for the underlying error and file a bug if it reproduces.",
+        "Do not treat this run as evidence that refund, inventory, payment, or race-condition logic is free of the issues this module checks for."
+      ]
+    }];
   }
 }

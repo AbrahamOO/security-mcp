@@ -36,7 +36,7 @@
         "file": "README.md",
         "line": 118
       },
-      "verbatim": "888 remediation templates",
+      "verbatim": "900 remediation templates",
       "probe": "remediationTemplateCount",
       "owner": "security-mcp-team"
     },
@@ -48,7 +48,7 @@
         "file": "docs/ARCHITECTURE.md",
         "line": 39
       },
-      "verbatim": "888 templates",
+      "verbatim": "900 templates",
       "probe": "remediationTemplateCount",
       "owner": "security-mcp-team"
     },
@@ -60,7 +60,7 @@
         "file": "docs/WIKI.md",
         "line": 368
       },
-      "verbatim": "888 fix templates",
+      "verbatim": "900 fix templates",
       "probe": "remediationTemplateCount",
       "owner": "security-mcp-team"
     },
@@ -228,6 +228,45 @@
       "note": "Same historical-baseline treatment as historical-remediation-baseline-wiki, for the 1.5.0 milestone narrative a few paragraphs earlier in ARCHITECTURE.md."
     },
     {
+      "id": "historical-1.6.1-milestone-readme",
+      "type": "QUANTITY",
+      "status": "TRUE",
+      "source": {
+        "file": "README.md",
+        "line": 624
+      },
+      "verbatim": "reaching 888 templates / 100% (887/887) detection-ID coverage",
+      "probe": null,
+      "owner": "security-mcp-team",
+      "note": "Dated (2026-07-06) Change History entry describing the 1.6.1 milestone historically. Same historical-baseline treatment as historical-remediation-baseline-wiki."
+    },
+    {
+      "id": "historical-1.6.1-milestone-arch",
+      "type": "QUANTITY",
+      "status": "TRUE",
+      "source": {
+        "file": "docs/ARCHITECTURE.md",
+        "line": 480
+      },
+      "verbatim": "reaching 888 templates / 100% (887/887) detection-ID",
+      "probe": null,
+      "owner": "security-mcp-team",
+      "note": "Dated (2026-07-06) Change History entry describing the 1.6.1 milestone historically."
+    },
+    {
+      "id": "historical-1.6.1-milestone-wiki",
+      "type": "QUANTITY",
+      "status": "TRUE",
+      "source": {
+        "file": "docs/WIKI.md",
+        "line": 524
+      },
+      "verbatim": "documenting the remediation map's expansion to 888 templates / 100% (887/887)",
+      "probe": null,
+      "owner": "security-mcp-team",
+      "note": "Dated (2026-07-06) Change History entry describing the 1.6.1 milestone historically."
+    },
+    {
       "id": "skill-section-count-readme",
       "type": "QUANTITY",
       "status": "TRUE",
@@ -247,7 +286,7 @@
         "file": "docs/WIKI.md",
         "line": 368
       },
-      "verbatim": "888 fix templates covering 100% (888/888) of detection IDs",
+      "verbatim": "900 fix templates covering 100% (900/900) of detection IDs",
       "probeA": "ruleIds",
       "probeB": "remediationTemplateIds",
       "mode": "set-equal",
@@ -278,6 +317,18 @@
       "test": "attempt_empty_severity_block_unsigned__is_rejected",
       "owner": "security-mcp-team",
       "note": "An attacker who can edit the unsigned .mcp/policies/security-policy.json could otherwise set severity_block:[] and force every verdict to PASS. Verified: a workspace with severity_block:[] (no SECURITY_POLICY_HMAC_KEY set) and a CRITICAL-triggering sample must still produce status FAIL."
+    },
+    {
+      "id": "guarantee-evaluability-not-false-clean",
+      "type": "GUARANTEE",
+      "status": "TRUE",
+      "source": {
+        "file": "src/gate/checks/dependencies.ts"
+      },
+      "verbatim": "a check whose entire evidence source is unavailable emits EVAL_UNAVAILABLE_<NAME> instead of silently reporting clean",
+      "test": "attempt_npm_audit_unavailable__does_not_report_clean",
+      "owner": "security-mcp-team",
+      "note": "The general form of the evaluability guarantee added by the Track E fail-open sweep. Verified concretely via checkCveExploitation (dependencies.ts): forcing npm audit to fail (empty PATH -> ENOENT, no stdout) must produce EVAL_UNAVAILABLE_NPM_AUDIT, not a silently-clean gate PASS. The other 11 EVAL_UNAVAILABLE_* sites added in the same sweep (cloud-controls, scanners x5, nuclei, runtime x2, auth-deep, business-logic) follow the identical pattern and are covered by the coverage-rule-remediation-parity claim (every one has a real rule id and a real template) plus manual code review, but are not independently adversarially tested here \u2014 extending this test to each would require a network/tool-failure seam per site, deferred as a follow-up rather than blocking this pass."
     },
     {
       "id": "guarantee-compliance-report-unverified-default",

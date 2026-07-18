@@ -115,7 +115,7 @@ security-mcp is honest about where its trust model stops: this is a single-tenan
 
 **Stale-install detection.** `security-mcp doctor` now detects a global install older than the running version and unpinned `npx security-mcp` launch entries across Claude Code, Cursor, VS Code, and Windsurf, and `ciso-orchestrator` halts with exact remediation instead of silently degrading to a deterministic-only run when the `orchestration.*` control plane is genuinely missing.
 
-For every prior release — the cloud controls engine, the vibe-coding and web-hardening modules, 888 remediation templates at 100% detection-ID coverage, capability-floor enforcement, and inter-agent payload integrity — see the [CHANGELOG](CHANGELOG.md).
+For every prior release — the cloud controls engine, the vibe-coding and web-hardening modules, 900 remediation templates at 100% detection-ID coverage, capability-floor enforcement, and inter-agent payload integrity — see the [CHANGELOG](CHANGELOG.md).
 
 ---
 
@@ -607,6 +607,9 @@ The `security-mcp` binary exposes:
 
 ## Change History
 
+- 2026-07-17 — Remediation-template count updated from 888 to 900: added 12
+  `EVAL_UNAVAILABLE_*` findings (Track E, the fail-open/evaluability sweep) and a
+  matching template for each, keeping the "100% detection-ID coverage" claim exact.
 - 2026-07-17 — Corrected the SKILL.md-coverage tool description (was "§0-§24", a
   nonexistent range; now "§1-§24 plus the 4 universal sections, 28 total") and the
   audit-chain integrity claim (was an unconditional "cannot be silently rewritten"; now

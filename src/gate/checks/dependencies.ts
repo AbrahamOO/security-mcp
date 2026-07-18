@@ -458,6 +458,11 @@ function buildThreatIntelFindings(intel: Awaited<ReturnType<typeof checkActiveEx
 }
 
 async function checkCveExploitation(): Promise<Finding[]> {
+	// SECURITY_OFFLINE is an intentional opt-out of network egress (npm audit calls
+	// the npm registry) — that must map to "not applicable", not to the same
+	// EVAL_UNAVAILABLE_NPM_AUDIT finding an unexpected failure would produce.
+	const offline = process.env["SECURITY_OFFLINE"] === "1" || process.env["SECURITY_OFFLINE"] === "true";
+	if (offline) return [];
 	try {
 		let stdout: string;
 		try {
@@ -471,13 +476,39 @@ async function checkCveExploitation(): Promise<Finding[]> {
 			stdout = (err as { stdout?: string })?.stdout ?? "";
 		}
 
-		if (!stdout) return [];
+		// EVALUABILITY: empty stdout means `npm audit` produced no output at all — the
+		// binary is missing, the command timed out, or it crashed before writing JSON.
+		// That's "the dependency audit could not run", not "zero vulnerabilities" (a
+		// clean audit still writes `{"vulnerabilities":{}}`), so it must not silently
+		// fall through to the same [] a genuinely-clean run would return.
+		if (!stdout) {
+			return [{
+				id: "EVAL_UNAVAILABLE_NPM_AUDIT",
+				title: "Dependency vulnerability audit could not run — CVE/exploit status is UNKNOWN, not clean",
+				severity: "HIGH",
+				evidence: ["`npm audit --json` produced no output (npm missing, timed out, or crashed before writing a report)."],
+				requiredActions: [
+					"Ensure npm is installed and on PATH in the environment running the gate.",
+					"Run `npm audit --json` manually to confirm it completes and produces valid output.",
+					"Do not treat this run as evidence that dependencies are free of known vulnerabilities."
+				]
+			}];
+		}
 
 		let audit: { vulnerabilities?: Record<string, NpmAuditVuln> };
 		try {
 			audit = JSON.parse(stdout) as { vulnerabilities?: Record<string, NpmAuditVuln> };
 		} catch {
-			return [];
+			return [{
+				id: "EVAL_UNAVAILABLE_NPM_AUDIT",
+				title: "Dependency vulnerability audit produced unparseable output — CVE/exploit status is UNKNOWN, not clean",
+				severity: "HIGH",
+				evidence: ["`npm audit --json` returned output that failed to parse as JSON."],
+				requiredActions: [
+					"Run `npm audit --json` manually to see the raw output and diagnose the parse failure.",
+					"Do not treat this run as evidence that dependencies are free of known vulnerabilities."
+				]
+			}];
 		}
 
 		const cveIds = extractCveIds(audit);
