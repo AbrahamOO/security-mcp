@@ -1,6 +1,6 @@
 # Wiki
 
-Last updated: 2026-07-14
+Last updated: 2026-07-17
 
 A practical reference for running security-mcp, understanding how the gate decides
 PASS/FAIL, the full list of rule IDs added in 1.5.0, 1.6.0, and 1.6.1, how capability
@@ -365,14 +365,20 @@ writing the returned template's fix directly into the working tree, then re-runn
 check to confirm the finding cleared. As of 1.6.1, `REMEDIATION_MAP` is composed from six
 domain partials under `src/gate/remediation-parts/` — `cloud.ts` (256 templates), `ai.ts`
 (69), `data.ts` (172), `web.ts` (203), `misc.ts` (112), and `web-hardening-remediations.ts`
-(6) — for **888 fix templates covering 100% (887/887) of detection IDs**, up from just 71
+(6) — for **888 fix templates covering 100% (888/888) of detection IDs**, up from just 71
 templates (roughly 8% of finding IDs) before this release. Each template pairs a realistic
 vulnerable pattern with a concrete secure fix in the correct language, a plain-language
 explanation, and standards references (CWE plus OWASP Top 10 / API Security Top 10 / LLM
 Top 10 / MASVS, and NIST / CIS / PCI DSS / FIPS or the relevant provider's docs). This is
-what makes the "90% fixing, 10% advisory" operating mandate a deterministic property of the
-gate engine, verifiable by calling `security.generate_remediations`, rather than something
-that depends on the live agent's judgment call in the moment.
+what makes the "90% fixing, 10% advisory" operating mandate achievable in practice: every
+detection ID has a concrete template to work from via `security.generate_remediations`,
+rather than the agent having to invent a fix from scratch. Applying the template and
+verifying the fix is still the calling agent's job — the re-verification step re-runs the
+same detection rule that originally fired, which confirms the flagged pattern no longer
+matches but cannot independently prove the underlying vulnerability is resolved rather than
+merely evaded. The one path where this is fully deterministic end-to-end is Terraform:
+`security-mcp autoharden` applies the fix, re-detects, and reverts automatically if the
+finding doesn't clear, with no agent judgment call in the loop.
 
 ## Capability enforcement
 
@@ -496,6 +502,12 @@ environment-variable configuration, as of 1.5.0.
 
 ## Change History
 
+- 2026-07-17 — Corrected the "90% fixing" claim: applying and verifying a remediation
+  template is still the calling agent's job, not something the engine enforces
+  deterministically (Terraform via `autoharden` is the one exception). Updated the
+  remediation-template coverage ratio from 887/887 to 888/888 to match the live rule
+  count, and fixed a real 1-rule coverage gap it surfaced (`EVAL_UNAVAILABLE_THREAT_INTEL`
+  had no template) as part of adding the claims registry (Track A).
 - 2026-07-14 — Added the "Client support matrix" and "Portable agent delivery" sections: per-client MCP config paths/keys (VS Code `servers`, Windsurf `~/.codeium/windsurf/mcp_config.json`, Codex TOML, Replit remote-only) and how agents are delivered over MCP prompts/resources so every client runs the full roster.
 - 2026-07-07 — Added the version note (internal milestones 1.4.0–1.6.1 ship publicly in
   1.3.5) and the "pre-release checklist" section documenting the checklist's sync with

@@ -1,6 +1,6 @@
 # Architecture
 
-Last updated: 2026-07-14
+Last updated: 2026-07-17
 
 > **Version note:** 1.4.0, 1.5.0, 1.6.0, and 1.6.1 referenced throughout this document
 > are internal milestones that were never published to npm. All of them ship publicly in
@@ -429,7 +429,7 @@ introduced by the three emerging-* modules. The orphaned `DEP_FLOATING_VERSION` 
 which had no corresponding finding ID anywhere in the check engine, was removed and
 replaced with `DEP_UNPINNED_VERSION`.
 
-**1.6.1 completes the 90%-fix mandate deterministically.** Before 1.6.1, only 71 of
+**1.6.1 completes the remediation-template coverage the 90%-fix mandate depends on.** Before 1.6.1, only 71 of
 roughly 882 finding IDs (about 8%) had a concrete remediation template. `remediation-map.ts`
 now composes `REMEDIATION_MAP` from six domain partials under
 `src/gate/remediation-parts/`: `cloud.ts` (256 templates: Kubernetes, IaC, Docker, ArgoCD,
@@ -438,12 +438,16 @@ crypto, JWT, SAML, OAuth, passwords, database, Snowflake, Databricks, supply-cha
 hygiene), `web.ts` (203: web, API, business logic, GraphQL, Android, iOS, DLP, CI),
 `misc.ts` (112: injection, deserialization, SSRF, TLS, tokens, mobile storage, XSS), and
 `web-hardening-remediations.ts` (6, one per new `WEB_` rule from the 1.6.1 `web-hardening`
-module). The result is 888 fix templates covering 100% (887 of 887) of detection IDs, up
-from roughly 8%. This is what keeps the product's stated operating mandate, roughly 90% of
-findings resolved with a concrete fix and 10% left as advisory guidance, actually true, and
-turns it into a property the engine itself can verify rather than something the live agent
-merely tends toward: a rule with no remediation template would silently erode that ratio,
-and as of 1.6.1 there are none left.
+module). The result is 888 fix templates covering 100% (888 of 888) of detection IDs, up
+from roughly 8% — every finding the gate can raise now has a concrete template to work
+from, so the "90% fixing, 10% advisory" mandate is no longer bottlenecked by missing
+templates. Applying a template is still the calling agent's responsibility: nothing in the
+engine itself writes the fix, and the re-verification step re-runs the same detection rule
+that originally fired, which confirms the flagged pattern is gone but cannot independently
+prove the vulnerability is resolved rather than merely evaded. `security-mcp autoharden` is
+the one path where this is fully deterministic — for Terraform, it applies the fix,
+re-detects, and reverts automatically if the finding doesn't clear, with no agent judgment
+call in the loop.
 
 ## Summary of the request lifecycle
 
@@ -457,6 +461,12 @@ produce the final verdict that either blocks a merge or clears it.
 
 ## Change History
 
+- 2026-07-17 — Corrected the "90% fixing" claim: applying and verifying a remediation
+  template is still the calling agent's job, not something the engine enforces
+  deterministically (Terraform via `autoharden` is the one exception). Updated the
+  remediation-template coverage ratio from 887/887 to 888/888 to match the live rule
+  count, and fixed a real 1-rule coverage gap it surfaced (`EVAL_UNAVAILABLE_THREAT_INTEL`
+  had no template) as part of adding the claims registry (Track A).
 - 2026-07-14 — Added the "Portable agent delivery (all clients)" subsection: agents are served over MCP prompts + `skill://` resources and `ensure_skill` returns the full persona body, so every MCP host runs the complete roster (parallel or sequential) under the same thoroughness gate.
 - 2026-07-07 — Added mermaid architecture diagrams (one engine / two callers overview,
   gate-engine pipeline, orchestration + attestation flow) and the version note that

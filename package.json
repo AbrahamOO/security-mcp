@@ -61,6 +61,7 @@
     "ci:pr-gate": "node dist/ci/pr-gate.js",
     "version:bump": "node scripts/bump-version.mjs",
     "version:check": "node scripts/check-version.mjs",
+    "verify:claims": "node scripts/verify-claims.mjs --strict",
     "test": "npm run build && node dist/tests/run.js"
   },
   "dependencies": {

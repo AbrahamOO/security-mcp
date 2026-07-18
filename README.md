@@ -1,6 +1,6 @@
 # security-mcp
 
-Last updated: 2026-07-16
+Last updated: 2026-07-17
 
 [![npm version](https://img.shields.io/npm/v/security-mcp.svg)](https://www.npmjs.com/package/security-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -185,7 +185,7 @@ Cloud, AI/LLM, and mobile sub-agents are conditional: they activate only when th
 The gate is the deterministic core. On every run it executes 38 security checks in parallel (36 distinct check modules plus 2 precomputed coverage feeds). It is surface-aware: it first detects which surfaces a change touches (web, API, infrastructure, iOS, Android, AI/LLM, agentic) and runs the relevant checks against them.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/assets/diagrams/gate-engine.svg" alt="Gate engine pipeline: load HMAC-verified policy, resolve scope, classify change, detect surfaces, run 38 checks in parallel, assign SLAs, build coverage manifest, apply exceptions, score confidence, diff against baseline, and produce a verdict." width="760">
+  <img src="https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/assets/diagrams/gate-engine.svg" alt="Gate engine pipeline: load HMAC-verified policy, resolve scope, classify change, detect surfaces, run 40 checks in parallel, assign SLAs, build coverage manifest, apply exceptions, score confidence, diff against baseline, and produce a verdict." width="760">
 </p>
 
 A crashed check module never disappears quietly. It becomes a HIGH coverage-gap finding, so the absence of a result is itself a result. A control that regresses from satisfied to missing against the saved baseline also becomes a HIGH finding.
@@ -376,7 +376,7 @@ Four platform subsystems let a security team operate security-mcp at scale, not 
 
 **Learning engine.** Remembers confirmed patterns and false positives per project, with rate-limited false-positive suppression so noise drops over time. Routing decisions are written to an ISO 42001 audit log.
 
-**Tamper-evident attestation hash chain.** Each agent attestation is chained (`init_chain`, `attest_agent`, `verify_chain`, `get_chain`), so the audit trail cannot be silently rewritten after the fact.
+**Tamper-evident attestation hash chain.** Each agent attestation is chained (`init_chain`, `attest_agent`, `verify_chain`, `get_chain`). With `SECURITY_AUDIT_HMAC_KEY` set, every link is signed and a rewrite requires the key, not just filesystem access — that configuration is what actually makes the audit trail resistant to silent rewriting. Without a key, the chain is hash-only: still detects an accidental edit, but anyone with write access to the attestation files can recompute the chain over edited content, since no secret is required to forge it.
 
 **MCP caller authentication.** An optional shared-secret gate on the MCP channel uses constant-time HMAC comparison, a 3-strike lockout, and a session TTL (8 hours by default, capped at 24). When unset, the channel stays open for frictionless local use.
 
@@ -420,7 +420,7 @@ Your AI calls these automatically; you rarely invoke them by hand. There are 41,
 | `repo.read_file` / `repo.search` | Read or search the codebase (guarded) |
 | `orchestration.create_agent_run` | Stand up the multi-agent run + manifest |
 | `orchestration.merge_agent_findings` | Dedupe and sort findings across agents |
-| `orchestration.verify_skill_coverage` | Check §0-§24 SKILL.md coverage |
+| `orchestration.verify_skill_coverage` | Check §1-§24 plus the 4 universal SKILL.md sections (28 total) |
 
 ### Operational families
 
@@ -607,6 +607,12 @@ The `security-mcp` binary exposes:
 
 ## Change History
 
+- 2026-07-17 — Corrected the SKILL.md-coverage tool description (was "§0-§24", a
+  nonexistent range; now "§1-§24 plus the 4 universal sections, 28 total") and the
+  audit-chain integrity claim (was an unconditional "cannot be silently rewritten"; now
+  scoped to when `SECURITY_AUDIT_HMAC_KEY` is set, since the unsigned hash-only chain
+  detects accidental edits but not a deliberate rewrite by anyone with file access).
+  Added as part of building the claims registry (Track A).
 - 2026-07-16 — Added `security.fortify` (one-shot, auto-apply, natural-language-scoped hardening) and the `fortify` MCP prompt; documented in a new "One-shot fortify" section. `security.start_review` now defaults to `remediationMode: "auto_apply"` instead of asking first (`detection_only` is an explicit opt-out). Updated the tools table and namespace counts. Collapsed the six stacked "What's new" sections into a single one for the current release; release history now lives only in the CHANGELOG.
 - 2026-07-14 — Multi-client parity: corrected manual-config paths/keys (VS Code `.vscode/mcp.json` with `servers`, Windsurf `~/.codeium/windsurf/mcp_config.json`, added Codex TOML and the Replit remote-only note); added the "Runs on every client, at full capability" section describing MCP-native agent delivery (prompts, `skill://` resources, `ensure_skill`).
 - 2026-07-07 — Added the "What's new in 1.3.5" section: pre-release checklist synced with the detection engine (8 new sections, 246 items) and the note that internal milestones 1.4.0–1.6.1 ship publicly in 1.3.5.

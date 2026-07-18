@@ -1,0 +1,343 @@
+{
+  "version": "1.0.0",
+  "_description": "Every measurable claim security-mcp's docs make about itself, with a probe or test that proves or disproves it. Run `node scripts/verify-claims.mjs --strict`. status TRUE means the claim is currently verified true; SCOPED means the doc was rewritten to what is actually true and the registry records the walk-back (rewrite.reason explains why).",
+  "claims": [
+    {
+      "id": "cloud-rule-count-readme",
+      "type": "QUANTITY",
+      "status": "TRUE",
+      "source": {
+        "file": "README.md",
+        "line": 221
+      },
+      "verbatim": "1,002 rules",
+      "probe": "cloudRuleCount",
+      "probeField": "total",
+      "owner": "security-mcp-team"
+    },
+    {
+      "id": "cloud-rule-count-arch",
+      "type": "QUANTITY",
+      "status": "TRUE",
+      "source": {
+        "file": "docs/ARCHITECTURE.md",
+        "line": 283
+      },
+      "verbatim": "1,002 rules",
+      "probe": "cloudRuleCount",
+      "probeField": "total",
+      "owner": "security-mcp-team"
+    },
+    {
+      "id": "remediation-template-count-readme",
+      "type": "QUANTITY",
+      "status": "TRUE",
+      "source": {
+        "file": "README.md",
+        "line": 118
+      },
+      "verbatim": "888 remediation templates",
+      "probe": "remediationTemplateCount",
+      "owner": "security-mcp-team"
+    },
+    {
+      "id": "remediation-template-count-arch-diagram",
+      "type": "QUANTITY",
+      "status": "TRUE",
+      "source": {
+        "file": "docs/ARCHITECTURE.md",
+        "line": 39
+      },
+      "verbatim": "888 templates",
+      "probe": "remediationTemplateCount",
+      "owner": "security-mcp-team"
+    },
+    {
+      "id": "remediation-template-count-wiki-body",
+      "type": "QUANTITY",
+      "status": "TRUE",
+      "source": {
+        "file": "docs/WIKI.md",
+        "line": 368
+      },
+      "verbatim": "888 fix templates",
+      "probe": "remediationTemplateCount",
+      "owner": "security-mcp-team"
+    },
+    {
+      "id": "agent-count-readme-table",
+      "type": "QUANTITY",
+      "status": "TRUE",
+      "source": {
+        "file": "README.md",
+        "line": 138
+      },
+      "verbatim": "39 named agents",
+      "probe": "maxAgentCount",
+      "owner": "security-mcp-team"
+    },
+    {
+      "id": "agent-count-readme-body",
+      "type": "QUANTITY",
+      "status": "TRUE",
+      "source": {
+        "file": "README.md",
+        "line": 167
+      },
+      "verbatim": "39 named agents in the static spawn tree",
+      "probe": "maxAgentCount",
+      "owner": "security-mcp-team"
+    },
+    {
+      "id": "skill-count-readme",
+      "type": "QUANTITY",
+      "status": "TRUE",
+      "source": {
+        "file": "README.md",
+        "line": 167
+      },
+      "verbatim": "91 specialist skills",
+      "probe": "skillCount",
+      "owner": "security-mcp-team"
+    },
+    {
+      "id": "manifest-version-readme",
+      "type": "QUANTITY",
+      "status": "TRUE",
+      "source": {
+        "file": "README.md",
+        "line": 167
+      },
+      "verbatim": "registry version 1.6.1",
+      "probe": "manifestVersion",
+      "owner": "security-mcp-team"
+    },
+    {
+      "id": "checklist-counts-wiki",
+      "type": "QUANTITY",
+      "status": "TRUE",
+      "source": {
+        "file": "docs/WIKI.md",
+        "line": 21
+      },
+      "verbatim": "246 items across 21 sections",
+      "probe": "checklistCounts",
+      "probeField": [
+        "items",
+        "sections"
+      ],
+      "owner": "security-mcp-team"
+    },
+    {
+      "id": "check-module-count-readme-diagram",
+      "type": "QUANTITY",
+      "status": "TRUE",
+      "source": {
+        "file": "README.md",
+        "line": 188
+      },
+      "verbatim": "run 40 checks in parallel",
+      "probe": "checkModuleCount",
+      "owner": "security-mcp-team",
+      "note": "This is the <img alt=\"...\"> text on the gate-engine.svg diagram, which was found stale at 38 during the first --strict run (live count is 40) and corrected. The rendered SVG asset itself is a binary/graphic file this registry cannot verify or regenerate; only the editable alt text is covered."
+    },
+    {
+      "id": "k8s-check-count-readme",
+      "type": "QUANTITY",
+      "status": "TRUE",
+      "source": {
+        "file": "README.md",
+        "line": 207
+      },
+      "verbatim": "Kubernetes (74 checks)",
+      "probe": "ruleIdCountByFile",
+      "probeArgs": [
+        "k8s.ts"
+      ],
+      "owner": "security-mcp-team"
+    },
+    {
+      "id": "iac-check-count-readme",
+      "type": "QUANTITY",
+      "status": "TRUE",
+      "source": {
+        "file": "README.md",
+        "line": 207
+      },
+      "verbatim": "IaC (63)",
+      "probe": "ruleIdCountByFile",
+      "probeArgs": [
+        "iac.ts"
+      ],
+      "owner": "security-mcp-team"
+    },
+    {
+      "id": "cloud-ts-template-count-wiki",
+      "type": "QUANTITY",
+      "status": "TRUE",
+      "source": {
+        "file": "docs/WIKI.md",
+        "line": 366
+      },
+      "verbatim": "`cloud.ts` (256 templates)",
+      "probe": "remediationPartTemplateCount",
+      "probeArgs": [
+        "cloud.ts"
+      ],
+      "owner": "security-mcp-team"
+    },
+    {
+      "id": "cloud-ts-template-count-arch",
+      "type": "QUANTITY",
+      "status": "TRUE",
+      "source": {
+        "file": "docs/ARCHITECTURE.md",
+        "line": 435
+      },
+      "verbatim": "`cloud.ts` (256 templates",
+      "probe": "remediationPartTemplateCount",
+      "probeArgs": [
+        "cloud.ts"
+      ],
+      "owner": "security-mcp-team"
+    },
+    {
+      "id": "historical-remediation-baseline-wiki",
+      "type": "QUANTITY",
+      "status": "TRUE",
+      "source": {
+        "file": "docs/WIKI.md",
+        "line": 368
+      },
+      "verbatim": "up from just 71 templates (roughly 8% of finding IDs) before this release",
+      "probe": null,
+      "owner": "security-mcp-team",
+      "note": "Point-in-time historical fact (the pre-1.6.1 baseline), not a live-state claim \u2014 no probe to verify against, since nothing in the current codebase should equal a superseded baseline. Registered so the unregistered-number scan doesn't flag it as an unaccounted-for number; the QUANTITY verifier treats a null probe as auto-pass once the verbatim-presence check succeeds."
+    },
+    {
+      "id": "historical-remediation-baseline-arch",
+      "type": "QUANTITY",
+      "status": "TRUE",
+      "source": {
+        "file": "docs/ARCHITECTURE.md",
+        "line": 427
+      },
+      "verbatim": "As of 1.5.0 the map held 55 templates, up from 15",
+      "probe": null,
+      "owner": "security-mcp-team",
+      "note": "Same historical-baseline treatment as historical-remediation-baseline-wiki, for the 1.5.0 milestone narrative a few paragraphs earlier in ARCHITECTURE.md."
+    },
+    {
+      "id": "skill-section-count-readme",
+      "type": "QUANTITY",
+      "status": "TRUE",
+      "source": {
+        "file": "README.md",
+        "line": 423
+      },
+      "verbatim": "28 total",
+      "probe": "skillSectionCount",
+      "owner": "security-mcp-team"
+    },
+    {
+      "id": "coverage-rule-remediation-parity",
+      "type": "COVERAGE",
+      "status": "TRUE",
+      "source": {
+        "file": "docs/WIKI.md",
+        "line": 368
+      },
+      "verbatim": "888 fix templates covering 100% (888/888) of detection IDs",
+      "probeA": "ruleIds",
+      "probeB": "remediationTemplateIds",
+      "mode": "set-equal",
+      "owner": "security-mcp-team",
+      "note": "First run of this claim (2026-07-17) found the sets were NOT equal despite equal counts: EVAL_UNAVAILABLE_THREAT_INTEL (a live rule, added in the Wave-1 evaluability fix) had no template, and DEP_UNPINNED_VERSION (a template) had no live rule pointing to it \u2014 a dangling remnant of a renamed check. Fixed both in src/gate/remediation-map.ts so the claim is now literally true, not just count-coincidentally true."
+    },
+    {
+      "id": "coverage-skill-manifest-integrity",
+      "type": "COVERAGE",
+      "status": "TRUE",
+      "source": {
+        "file": "skills-manifest.json"
+      },
+      "verbatim": "every shipped skill is registered in skills-manifest.json with a sha256 that matches its current SKILL.md content",
+      "mode": "skill-manifest-integrity",
+      "owner": "security-mcp-team",
+      "note": "Verifies two things per skill, bulk (91 skills, one claim \u2014 see the note in scripts/verify-claims.mjs on why this replaced 91 near-duplicate per-skill entries): (1) skills-manifest.json's key set equals the set of skills/*/SKILL.md directories (excluding _TEMPLATE); (2) each entry's sha256 equals sha256(readFileSync(skills/<name>/SKILL.md)) \u2014 this hash is actively enforced at skill-load time (src/mcp/orchestration.ts's remote-fetch integrity check throws on mismatch). First run found 3 stale hashes (aws/gcp/azure-penetration-tester, edited after the manifest was last regenerated) and fixed them. Deliberately does NOT check description-field parity between the manifest and the SKILL.md frontmatter: verified empirically that all 91 differ by design \u2014 the frontmatter description carries Claude-facing trigger phrases, the manifest description is an independent short capability summary for the MCP prompt listing. Treating that as a bug would be enforcing an invariant that was never actually promised."
+    },
+    {
+      "id": "guarantee-severity-block-fail-safe",
+      "type": "GUARANTEE",
+      "status": "TRUE",
+      "source": {
+        "file": "src/gate/policy.ts",
+        "line": 578
+      },
+      "verbatim": "an unsigned policy cannot relax severity_block below the HIGH/CRITICAL floor",
+      "test": "attempt_empty_severity_block_unsigned__is_rejected",
+      "owner": "security-mcp-team",
+      "note": "An attacker who can edit the unsigned .mcp/policies/security-policy.json could otherwise set severity_block:[] and force every verdict to PASS. Verified: a workspace with severity_block:[] (no SECURITY_POLICY_HMAC_KEY set) and a CRITICAL-triggering sample must still produce status FAIL."
+    },
+    {
+      "id": "guarantee-compliance-report-unverified-default",
+      "type": "GUARANTEE",
+      "status": "TRUE",
+      "source": {
+        "file": "src/mcp/server.ts"
+      },
+      "verbatim": "a control is marked satisfied only when a gate run completed its required steps with no adverse finding, never by default",
+      "delegatesTo": {
+        "file": "dist/tests/run.js",
+        "testFunction": "runComplianceTruthTests"
+      },
+      "owner": "security-mcp-team",
+      "note": "Already covered by the existing e2e test suite (added in the Wave 1 hardening pass): security.generate_compliance_report with no gate run must return 0 satisfied / all unverified, carry the not-an-audit caveat, and reject GDPR. Delegated rather than reimplemented \u2014 verify-claims.mjs runs `node dist/tests/run.js` once and this claim passes iff that run's exit code is 0."
+    },
+    {
+      "id": "scoped-wiki-90pct-fixing-determinism",
+      "type": "SCOPED",
+      "status": "SCOPED",
+      "source": {
+        "file": "docs/WIKI.md",
+        "line": 373
+      },
+      "verbatim": "This is what makes the \"90% fixing, 10% advisory\" operating mandate a deterministic property of the gate engine, verifiable by calling security.generate_remediations, rather than something that depends on the live agent's judgment call in the moment.",
+      "rewrite": {
+        "newVerbatim": "operating mandate achievable in practice: every detection ID has a concrete template to work from",
+        "reason": "The original claim overstated what the engine verifies. Every remediation template is a static {pattern, fix, explanation, references} object \u2014 nothing in src/ applies it; the calling agent reads the template and writes the fix by hand, and \"verification\" re-runs the same regex that originally fired, which cannot distinguish a real fix from a regex-evasion. The only path that is genuinely deterministic end-to-end is Terraform via security-mcp autoharden (apply -> re-detect -> revert). Rewritten 2026-07-17 to claim what's true: template coverage, not deterministic verification, except where autoharden actually delivers it."
+      },
+      "owner": "security-mcp-team"
+    },
+    {
+      "id": "scoped-arch-90pct-fixing-determinism",
+      "type": "SCOPED",
+      "status": "SCOPED",
+      "source": {
+        "file": "docs/ARCHITECTURE.md",
+        "line": 441
+      },
+      "verbatim": "This is what keeps the product's stated operating mandate, roughly 90% of findings resolved with a concrete fix and 10% left as advisory guidance, actually true, and turns it into a property the engine itself can verify rather than something the live agent merely tends toward",
+      "rewrite": {
+        "newVerbatim": "every finding the gate can raise now has a concrete template to work from, so the \"90% fixing, 10% advisory\" mandate is no longer bottlenecked by missing templates. Applying a template is still the calling agent's responsibility",
+        "reason": "Same overstatement as scoped-wiki-90pct-fixing-determinism, in ARCHITECTURE.md's parallel passage. Rewritten 2026-07-17."
+      },
+      "owner": "security-mcp-team"
+    },
+    {
+      "id": "scoped-readme-audit-chain-tamper-proof",
+      "type": "SCOPED",
+      "status": "SCOPED",
+      "source": {
+        "file": "README.md",
+        "line": 379
+      },
+      "verbatim": "so the audit trail cannot be silently rewritten after the fact",
+      "rewrite": {
+        "newVerbatim": "a rewrite requires the key, not just filesystem access",
+        "reason": "The original claim was unconditional. In the default (unsigned) configuration, the hash chain alone provides no forgery resistance to an attacker with filesystem write access to .mcp/agent-runs/ \u2014 they can simply recompute every hash over their edited content. Only the HMAC-signed case (SECURITY_AUDIT_HMAC_KEY configured) actually delivers tamper-evidence against that threat model, matching the residual-risk note already present elsewhere in the docs. Rewritten 2026-07-17 to scope the claim to the case where it holds."
+      },
+      "owner": "security-mcp-team"
+    }
+  ]
+}

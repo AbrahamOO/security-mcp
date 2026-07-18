@@ -323,13 +323,14 @@ const BASE_REMEDIATION_MAP: Record<string, RemediationTemplate> = {
   },
 
   // ---------------------------------------------------------------------------
-  // Dependency hygiene (replacement for the removed DEP_FLOATING_VERSION orphan)
-  // ---------------------------------------------------------------------------
-  "DEP_UNPINNED_VERSION": {
-    pattern: "\"express\": \"^4.0.0\" // floating range, no lockfile enforcement",
-    fix: "\"express\": \"4.19.2\" // exact pin + committed lockfile\n// enforce with `npm ci` in CI",
-    explanation: "Floating version ranges let unexpected transitive updates (including malicious ones) resolve on each install. Pin exact versions, commit the lockfile, and install with `npm ci` so builds are reproducible.",
-    references: ["CWE-829", "SLSA L1", "NIST 800-218 PS-3"]
+  // Coverage-gap signal: the CISA KEV/EPSS lookup itself could not run, so exploit
+  // status is unknown rather than clean. Not a code-pattern fix like the rest of this
+  // map — the "fix" is restoring evaluability, not editing source.
+  "EVAL_UNAVAILABLE_THREAT_INTEL": {
+    pattern: "# npm audit found CVEs, but the CISA KEV / EPSS lookup failed (network error, rate limit, unreachable endpoint) — exploit status unknown, not confirmed clean",
+    fix: "# Re-run the gate with network access so CISA KEV and EPSS can be queried\n# Or, if intentionally offline: SECURITY_OFFLINE=1 (skips the check rather than reporting clean)",
+    explanation: "A failed threat-intel lookup is not the same as \"no actively-exploited CVEs\" — treating a network failure as a clean result would silently hide known-exploited or high-EPSS dependencies. Re-run with connectivity, or explicitly opt out with SECURITY_OFFLINE=1 so the gap is recorded rather than hidden.",
+    references: ["CWE-1188", "NIST 800-218 RV-1"]
   },
 
   // ---------------------------------------------------------------------------

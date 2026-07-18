@@ -97,6 +97,32 @@ claims to match the code — nothing is left asserted-but-unproven.
   gone from a raw, unsuppressed full scan) removed in place. Net result: same self-scan
   outcome (`PASS`, 7 non-blocking MEDIUM findings, identical before and after), with no
   finding_id kept for a reason that no longer holds.
+- **Claims registry (`claims/registry.json` + `node scripts/verify-claims.mjs --strict`,
+  wired into CI).** Every quantitative or guarantee-style claim security-mcp's own docs make
+  about itself now has a probe or test that proves or disproves it, run on every push. 25
+  claims registered: 15 QUANTITY (headline numbers — 1,002 cloud rules, 888 remediation
+  templates, 91 skills, 40 check modules, 39 named agents, etc. — each checked against a live
+  probe that reads the actual built artifact, never a cached value), 2 COVERAGE (set-equality
+  checks, not just count-equality), 2 GUARANTEE (one adversarial: an unsigned policy with
+  `severity_block:[]` plus a known CRITICAL finding must still FAIL; one delegated to the
+  existing e2e compliance-truth test), and 3 SCOPED (claims rewritten to what's actually true,
+  with the walk-back recorded in the registry). A `--strict` unregistered-number scan also
+  checks README/WIKI/ARCHITECTURE for any `<N> (rules|skills|templates|...)` mention that
+  isn't backed by a registered claim, so a new number can't enter those docs unchecked.
+  Building this surfaced and fixed four real bugs, not just doc drift: (1) the "888
+  templates / 100% coverage" claim was true by count but not by set — `EVAL_UNAVAILABLE_
+  THREAT_INTEL` (a live rule) had no template, and `DEP_UNPINNED_VERSION` (a template) had
+  no live rule; both fixed in `remediation-map.ts`. (2) 3 of 91 skill manifest entries
+  (`aws/gcp/azure-penetration-tester`) had a stale `sha256` that no longer matched their
+  SKILL.md content — a real integrity-check failure waiting to happen on the remote-fetch
+  skill-loading path; regenerated. (3) `orchestration.verify_skill_coverage`'s tool
+  description and README both said "24" or "§0-§24" sections; the enforced set is actually
+  28 (24 numbered + 4 universal) — `SKILL_MD_SECTIONS` is now exported so this can never
+  silently drift again. (4) A README diagram's alt text said "38 checks"; the live `CHECKS`
+  registry has 40. The "90% fixing is a deterministic property of the engine" claim in
+  WIKI.md and ARCHITECTURE.md, and README's unconditional "audit trail cannot be silently
+  rewritten," were rewritten to what's true (SCOPED) rather than left overstated — see the
+  registry's `rewrite.reason` on each for the full explanation.
 
 ### Added: one-shot `security.fortify` — natural-language "lock down X" dispatch
 

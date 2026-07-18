@@ -2784,7 +2784,7 @@ tool(
 
 tool(
   "orchestration.verify_skill_coverage",
-  "Verify that all 24 SKILL.md sections have been covered by at least one agent in this run. Returns uncovered sections and a coverage percentage.",
+  "Verify that all 28 SKILL.md sections (24 numbered §1-§24 plus the 4 universal sections §EDGE-CASE-MATRIX/§TEMPORAL-THREATS/§DETECTION-GAP/§ZERO-MISS-MANDATE) have been covered by at least one agent in this run. Returns uncovered sections and a coverage percentage.",
   VerifySkillCoverageSchema.shape as unknown as Record<string, z.ZodTypeAny>,
   safeTool(async (args: unknown, _extra: unknown) => {
     const parsed = VerifySkillCoverageSchema.parse(args);

@@ -95,7 +95,7 @@ const MAX_NPM_BYTES      = 64  * 1024;  // 64 KB
 // All SKILL.md sections that must be covered per run.
 // §EDGE-CASE-MATRIX, §TEMPORAL-THREATS, §DETECTION-GAP, §ZERO-MISS-MANDATE are the
 // four universal sections added to every skill; coverage verification tracks them too.
-const SKILL_MD_SECTIONS = [
+export const SKILL_MD_SECTIONS = [
   "§1", "§2", "§3", "§4", "§5", "§6", "§7", "§8",
   "§9", "§10", "§11", "§12", "§13", "§14", "§15",
   "§16", "§17", "§18", "§19", "§20", "§21", "§22",

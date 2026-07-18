@@ -364,7 +364,7 @@
         "CloudTrail blind spots",
         "cost-based DoS via Lambda amplification"
       ],
-      "sha256": "4e15e33dc153ea308ff99dee2f29bf3c3684b7b6df88fc5da704e493afa8230b"
+      "sha256": "1207578e501f9040d3486465d7841bb837fda83fc6378a9024aa405f6ab09acd"
     },
     "gcp-penetration-tester": {
       "version": "1.0.0",
@@ -389,7 +389,7 @@
         "BigQuery data exfiltration via authorized view",
         "GCP cost-based DoS"
       ],
-      "sha256": "c038d0a12ba3b801707d2875bd84a856832cab86e29a177b1f69178c256a8be0"
+      "sha256": "9a2876d3024fdbc3e68dfcbd564703e8972b42490e9323d87ee6b6c49e58cbff"
     },
     "azure-penetration-tester": {
       "version": "1.0.0",
@@ -415,7 +415,7 @@
         "Power Automate overprivileged connectors",
         "Teams webhook C2 channel"
       ],
-      "sha256": "d848537d904f40805830a7ae3b96e651ce1f8a3d3ed6702b1a5039dd39bf41fe"
+      "sha256": "e735cca72449b1c2e086c97e636dd02b6af43b86a674ce9e1e3f2beb650ae2e8"
     },
     "k8s-container-escaper": {
       "version": "1.0.0",
