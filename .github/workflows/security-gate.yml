@@ -32,6 +32,13 @@ jobs:
       - name: Install deps
         run: npm ci
 
+      # Needed before Test and the policy gate below: the sbom check (and its
+      # rule-corpus SBOM_MISSING/SBOM_STALE cases) fail-opens to a silent skip
+      # when syft isn't on PATH, so without this the SBOM control is never
+      # actually exercised in CI.
+      - name: Install Syft
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610  # anchore/sbom-action@v0.24.0
+
       - name: Lint
         run: npm run lint
 
