@@ -18,3 +18,16 @@ paths = [
   '''src/gate/remediation-map\.ts''',
   '''src/gate/remediation-parts/.*\.ts''',
 ]
+
+[[allowlists]]
+description = "Gate self-scan baselines embed evidence snippets from the tool's own insecure fixtures (teaching examples, not real credentials)"
+paths = [
+  '''\.mcp/baselines/.*\.json''',
+]
+
+[[allowlists]]
+description = "Rule-corpus TP fixtures and claims-verifier probes embed synthetic secrets to test detection rules (teaching examples, not real credentials)"
+paths = [
+  '''src/tests/corpus/.*\.ts''',
+  '''scripts/verify-claims\.mjs''',
+]
