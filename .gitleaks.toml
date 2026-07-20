@@ -12,22 +12,24 @@ title = "security-mcp gitleaks config"
 [extend]
 useDefault = true
 
-[[allowlists]]
-description = "Placeholder example secrets in the remediation-template registries (teaching examples, not real credentials)"
+# The singular [allowlist] table, not [[allowlists]]: gitleaks/gitleaks-action is
+# pinned to gitleaks 8.24.3, whose global (non-per-rule) config struct only has an
+# `Allowlist` field (singular) — `[[allowlists]]` (plural, array-of-tables) isn't a
+# recognized global key until 8.25.0 ("define multiple global allowlists" #1777),
+# so any [[allowlists]] block here is silently dropped by Viper on that version and
+# never suppresses anything. All path exclusions below are teaching/test examples,
+# never real credentials:
+#   - remediation-map.ts / remediation-parts/*.ts: fix-template registries pairing
+#     a deliberately-insecure "before" example with the secure fix.
+#   - .mcp/baselines/*.json: gate self-scan baselines embedding evidence snippets
+#     from the tool's own insecure fixtures.
+#   - tests/corpus/*.ts / verify-claims.mjs: rule-corpus TP fixtures and the
+#     claims-verifier probe, which embed synthetic secrets to test detection rules.
+[allowlist]
 paths = [
   '''src/gate/remediation-map\.ts''',
   '''src/gate/remediation-parts/.*\.ts''',
-]
-
-[[allowlists]]
-description = "Gate self-scan baselines embed evidence snippets from the tool's own insecure fixtures (teaching examples, not real credentials)"
-paths = [
   '''\.mcp/baselines/.*\.json''',
-]
-
-[[allowlists]]
-description = "Rule-corpus TP fixtures and claims-verifier probes embed synthetic secrets to test detection rules (teaching examples, not real credentials)"
-paths = [
   '''src/tests/corpus/.*\.ts''',
   '''scripts/verify-claims\.mjs''',
 ]
