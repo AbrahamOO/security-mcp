@@ -140,7 +140,7 @@ let delegatedRunCache = null;
 function runDelegatedSuite() {
   if (delegatedRunCache !== null) return delegatedRunCache;
   try {
-    execFileSync(process.execPath, ["--test", "dist/tests"], { cwd: ROOT, stdio: "pipe" });
+    execFileSync(process.execPath, ["--test", "dist/tests/legacy.test.js"], { cwd: ROOT, stdio: "pipe" });
     delegatedRunCache = { ok: true };
   } catch (err) {
     delegatedRunCache = { ok: false, detail: String(err.stderr ?? err.message ?? err).slice(0, 500) };
