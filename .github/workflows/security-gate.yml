@@ -66,6 +66,12 @@ jobs:
           format: "sarif"
           output: "trivy-results.sarif"
           severity: "CRITICAL,HIGH"
+          # Trivy's built-in secret scanner is a separate engine from gitleaks and
+          # doesn't read .gitleaks.toml. scripts/verify-claims.mjs embeds a synthetic
+          # OpenSSH private key literal as a claims-verifier test probe (see
+          # self-scan-rule-corpus in .github/security-exceptions-ci.json for the same
+          # false-positive class) — skip it here too.
+          skip-files: "scripts/verify-claims.mjs"
 
       - name: Upload Trivy SARIF
         uses: github/codeql-action/upload-sarif@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a  # codeql-action@v4.36.3
