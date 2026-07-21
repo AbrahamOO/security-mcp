@@ -32,11 +32,21 @@ jobs:
       - name: Install deps
         run: npm ci
 
+      # Needed before Test and the policy gate below: the sbom check (and its
+      # rule-corpus SBOM_MISSING/SBOM_STALE cases) fail-opens to a silent skip
+      # when syft isn't on PATH, so without this the SBOM control is never
+      # actually exercised in CI.
+      - name: Install Syft
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610  # anchore/sbom-action@v0.24.0
+
       - name: Lint
         run: npm run lint
 
       - name: Test
         run: npm test
+
+      - name: Verify claims
+        run: npm run verify:claims
 
       # 1) Secret scanning
       - name: Gitleaks
@@ -49,12 +59,19 @@ jobs:
       # 2) Dependency scanning (filesystem) — results uploaded as SARIF to GitHub Security tab
       - name: Trivy FS scan
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # aquasecurity/trivy-action@v0.36.0
+        if: always()
         with:
           scan-type: "fs"
           ignore-unfixed: true
           format: "sarif"
           output: "trivy-results.sarif"
           severity: "CRITICAL,HIGH"
+          # Trivy's built-in secret scanner is a separate engine from gitleaks and
+          # doesn't read .gitleaks.toml. scripts/verify-claims.mjs embeds a synthetic
+          # OpenSSH private key literal as a claims-verifier test probe (see
+          # self-scan-rule-corpus in .github/security-exceptions-ci.json for the same
+          # false-positive class) — skip it here too.
+          skip-files: "scripts/verify-claims.mjs"
 
       - name: Upload Trivy SARIF
         uses: github/codeql-action/upload-sarif@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a  # codeql-action@v4.36.3

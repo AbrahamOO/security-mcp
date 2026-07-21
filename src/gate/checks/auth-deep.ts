@@ -1482,7 +1482,20 @@ export async function checkAuthDeep(_opts: { changedFiles: string[] }): Promise<
       ...logRetentionFindings,
     ];
   } catch (err) {
+    // EVALUABILITY: an internal error here (a bug in any one of ~40 sub-checks run
+    // via Promise.all) currently discards every other sub-check's result too —
+    // returning [] would report a full auth-hardening pass when the truth is that
+    // this entire check never ran. Surface the gap instead of silently losing it.
     console.warn("[checkAuthDeep] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));
-    return [];
+    return [{
+      id: "EVAL_UNAVAILABLE_AUTH_DEEP",
+      title: "Deep auth/session/JWT/OAuth checks could not complete — auth-hardening status is UNKNOWN, not clean",
+      severity: "HIGH",
+      evidence: [sanitizeErrorMessage(err instanceof Error ? err.message : String(err))],
+      requiredActions: [
+        "Check the gate logs for the underlying error and file a bug if it reproduces.",
+        "Do not treat this run as evidence that JWT, session, OAuth, or SAML handling is free of the issues this module checks for."
+      ]
+    }];
   }
 }

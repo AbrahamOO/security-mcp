@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { tmpdir } from "node:os";
+import { getWorkspaceRoot } from "../../repo/workspace.js";
 import { z } from "zod";
 import { Finding, FindingSeverity, sanitizeErrorMessage } from "../result.js";
 import { SurfaceScope } from "../catalog.js";
@@ -42,8 +43,8 @@ async function loadScannerConfig(): Promise<ScannerConfig> {
   const overridePath = process.env["SECURITY_GATE_SCANNERS"];
   if (overridePath) {
     // CWE-22: resolve to absolute path and ensure it stays within cwd
-    const resolved = resolve(process.cwd(), overridePath);
-    if (!resolved.startsWith(process.cwd() + "/") && resolved !== process.cwd()) {
+    const resolved = resolve(getWorkspaceRoot(), overridePath);
+    if (!resolved.startsWith(getWorkspaceRoot() + "/") && resolved !== getWorkspaceRoot()) {
       throw new Error(`SECURITY_GATE_SCANNERS path '${overridePath}' escapes the project directory`);
     }
     const raw = await readFile(resolved, "utf-8");
@@ -51,7 +52,7 @@ async function loadScannerConfig(): Promise<ScannerConfig> {
   }
 
   try {
-    const raw = await readFile(join(process.cwd(), ".mcp", "scanners", "security-tools.json"), "utf-8");
+    const raw = await readFile(join(getWorkspaceRoot(), ".mcp", "scanners", "security-tools.json"), "utf-8");
     return ScannerConfigSchema.parse(JSON.parse(raw));
   } catch {
     const raw = await readFile(join(PKG_ROOT, "defaults", "security-tools.json"), "utf-8");
@@ -105,13 +106,91 @@ async function runScannerToFile(
   await execFileAsync(command, args, {
     timeout: timeoutMs,
     maxBuffer: 50 * 1024 * 1024, // 50MB
-    cwd: process.cwd()
+    cwd: getWorkspaceRoot()
   });
 }
 
 async function readJsonFile(path: string): Promise<unknown> {
   const raw = await readFile(path, "utf-8");
   return JSON.parse(raw);
+}
+
+/**
+ * EVALUABILITY: an installed scanner whose run doesn't yield a readable report
+ * (timeout, crash, permission error, malformed output) must not report the same
+ * empty result a genuinely clean scan would — that silently converts "the tool
+ * failed" into "nothing found." Scanner-readiness (`SCANNER_TOOLCHAIN_INCOMPLETE`)
+ * only covers a scanner being absent, not one that ran and produced no usable
+ * output, and `runScanners`'s `Promise.allSettled`/`SCANNER_EXECUTION_ERROR` net
+ * only catches a rejected promise — these callers resolve with `[]` instead, so
+ * that net never fires either.
+ *
+ * One function per tool (not a single tool-parameterized helper) so each finding's
+ * `id` is a plain inline string literal, matching every other finding in this
+ * codebase — and, unlike a template-literal id built from a runtime `tool` string,
+ * visible to the static id/remediation-coverage scan in
+ * scripts/claim-probes.mjs's ruleIds(), which greps check-module source for
+ * an inline `id` string, and cannot resolve a dynamically-interpolated id.
+ */
+function evalUnavailableGitleaksOutput(): Finding {
+  return {
+    id: "EVAL_UNAVAILABLE_SCANNER_GITLEAKS",
+    title: "gitleaks ran but produced no readable output — its findings are UNKNOWN, not clean",
+    severity: "HIGH",
+    evidence: ["gitleaks exited without writing a parseable JSON report (timeout, crash, or permission error)."],
+    requiredActions: [
+      "Re-run gitleaks manually to see its actual output and diagnose the failure.",
+      "Do not treat this run as evidence that gitleaks found nothing."
+    ]
+  };
+}
+function evalUnavailableSemgrepOutput(): Finding {
+  return {
+    id: "EVAL_UNAVAILABLE_SCANNER_SEMGREP",
+    title: "semgrep ran but produced no readable output — its findings are UNKNOWN, not clean",
+    severity: "HIGH",
+    evidence: ["semgrep exited without writing a parseable JSON report (timeout, crash, or permission error)."],
+    requiredActions: [
+      "Re-run semgrep manually to see its actual output and diagnose the failure.",
+      "Do not treat this run as evidence that semgrep found nothing."
+    ]
+  };
+}
+function evalUnavailableTrivyOutput(): Finding {
+  return {
+    id: "EVAL_UNAVAILABLE_SCANNER_TRIVY",
+    title: "trivy ran but produced no readable output — its findings are UNKNOWN, not clean",
+    severity: "HIGH",
+    evidence: ["trivy exited without writing a parseable JSON report (timeout, crash, or permission error)."],
+    requiredActions: [
+      "Re-run trivy manually to see its actual output and diagnose the failure.",
+      "Do not treat this run as evidence that trivy found nothing."
+    ]
+  };
+}
+function evalUnavailableCheckovOutput(): Finding {
+  return {
+    id: "EVAL_UNAVAILABLE_SCANNER_CHECKOV",
+    title: "checkov ran but produced no readable output — its findings are UNKNOWN, not clean",
+    severity: "HIGH",
+    evidence: ["checkov exited without writing a parseable JSON report (timeout, crash, or permission error)."],
+    requiredActions: [
+      "Re-run checkov manually to see its actual output and diagnose the failure.",
+      "Do not treat this run as evidence that checkov found nothing."
+    ]
+  };
+}
+function evalUnavailableOsvScannerOutput(): Finding {
+  return {
+    id: "EVAL_UNAVAILABLE_SCANNER_OSV_SCANNER",
+    title: "osv-scanner ran but produced no readable output — its findings are UNKNOWN, not clean",
+    severity: "HIGH",
+    evidence: ["osv-scanner exited without writing a parseable JSON report (timeout, crash, or permission error)."],
+    requiredActions: [
+      "Re-run osv-scanner manually to see its actual output and diagnose the failure.",
+      "Do not treat this run as evidence that osv-scanner found nothing."
+    ]
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -137,7 +216,7 @@ async function runGitleaks(
       [
         "detect",
         "--source",
-        process.cwd(),
+        getWorkspaceRoot(),
         "--report-format",
         "json",
         "--report-path",
@@ -156,7 +235,7 @@ async function runGitleaks(
   try {
     data = await readJsonFile(outFile);
   } catch {
-    return [];
+    return [evalUnavailableGitleaksOutput()];
   }
 
   if (!Array.isArray(data)) return [];
@@ -242,7 +321,7 @@ async function runSemgrep(timeoutMs: number, changedFiles: string[]): Promise<Fi
   try {
     data = await readJsonFile(outFile);
   } catch {
-    return [];
+    return [evalUnavailableSemgrepOutput()];
   }
 
   const parsed = data as SemgrepResult;
@@ -318,7 +397,7 @@ async function runTrivy(timeoutMs: number): Promise<Finding[]> {
   try {
     data = await readJsonFile(outFile);
   } catch {
-    return [];
+    return [evalUnavailableTrivyOutput()];
   }
 
   const parsed = data as TrivyResult;
@@ -395,7 +474,7 @@ async function runCheckov(timeoutMs: number): Promise<Finding[]> {
   try {
     data = await readJsonFile(outFile);
   } catch {
-    return [];
+    return [evalUnavailableCheckovOutput()];
   }
 
   // Checkov can return array or object
@@ -457,7 +536,7 @@ async function runOsvScanner(timeoutMs: number): Promise<Finding[]> {
   try {
     data = await readJsonFile(outFile);
   } catch {
-    return [];
+    return [evalUnavailableOsvScannerOutput()];
   }
 
   const parsed = data as OsvOutput;

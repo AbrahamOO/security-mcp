@@ -323,13 +323,90 @@ const BASE_REMEDIATION_MAP: Record<string, RemediationTemplate> = {
   },
 
   // ---------------------------------------------------------------------------
-  // Dependency hygiene (replacement for the removed DEP_FLOATING_VERSION orphan)
-  // ---------------------------------------------------------------------------
-  "DEP_UNPINNED_VERSION": {
-    pattern: "\"express\": \"^4.0.0\" // floating range, no lockfile enforcement",
-    fix: "\"express\": \"4.19.2\" // exact pin + committed lockfile\n// enforce with `npm ci` in CI",
-    explanation: "Floating version ranges let unexpected transitive updates (including malicious ones) resolve on each install. Pin exact versions, commit the lockfile, and install with `npm ci` so builds are reproducible.",
-    references: ["CWE-829", "SLSA L1", "NIST 800-218 PS-3"]
+  // Coverage-gap signal: the CISA KEV/EPSS lookup itself could not run, so exploit
+  // status is unknown rather than clean. Not a code-pattern fix like the rest of this
+  // map — the "fix" is restoring evaluability, not editing source.
+  "EVAL_UNAVAILABLE_THREAT_INTEL": {
+    pattern: "# npm audit found CVEs, but the CISA KEV / EPSS lookup failed (network error, rate limit, unreachable endpoint) — exploit status unknown, not confirmed clean",
+    fix: "# Re-run the gate with network access so CISA KEV and EPSS can be queried\n# Or, if intentionally offline: SECURITY_OFFLINE=1 (skips the check rather than reporting clean)",
+    explanation: "A failed threat-intel lookup is not the same as \"no actively-exploited CVEs\" — treating a network failure as a clean result would silently hide known-exploited or high-EPSS dependencies. Re-run with connectivity, or explicitly opt out with SECURITY_OFFLINE=1 so the gap is recorded rather than hidden.",
+    references: ["CWE-1188", "NIST 800-218 RV-1"]
+  },
+  // The remaining EVAL_UNAVAILABLE_* templates below follow the same convention:
+  // none are code-pattern fixes, since the underlying "problem" is a check that
+  // could not run, not a vulnerability in the target repo. The "fix" is restoring
+  // whatever resource (network, binary, target reachability) the check depends on.
+  "EVAL_UNAVAILABLE_NPM_AUDIT": {
+    pattern: "# `npm audit --json` produced no output or unparseable output — dependency CVE/exploit status is unknown, not confirmed clean",
+    fix: "# Ensure npm is installed and on PATH, then run `npm audit --json` manually to confirm it completes",
+    explanation: "An audit that never ran is not the same as a clean audit. Restore npm availability (or network access, since npm audit queries the registry) and re-run before trusting a clean dependency-CVE result.",
+    references: ["CWE-1188", "NIST 800-218 RV-1"]
+  },
+  "EVAL_UNAVAILABLE_CLOUD_CONTROLS": {
+    pattern: "# defaults/cloud-controls/{aws,gcp,azure}.json could not be read — IaC misconfiguration status is unknown for the affected provider(s), not confirmed clean",
+    fix: "# Reinstall the security-mcp package (npm install) and confirm the missing defaults/cloud-controls/*.json file(s) are present",
+    explanation: "The FSBP/CIS cloud-control ruleset ships as bundled JSON files. If one is missing or unreadable (a stale or partial install), the entire provider's rule set is unavailable and must not be silently treated as \"zero violations.\"",
+    references: ["CWE-1188", "NIST 800-218 RV-1"]
+  },
+  "EVAL_UNAVAILABLE_NUCLEI_DAST": {
+    pattern: "# SECURITY_STAGING_URL was set (DAST requested) but nuclei is missing, or the scan against the live target failed to return output",
+    fix: "# Install nuclei (https://github.com/projectdiscovery/nuclei) and/or verify the target is reachable, then re-run",
+    explanation: "DAST was explicitly requested via SECURITY_STAGING_URL. A missing binary or a failed live scan means the check the operator asked for did not run — that is not evidence the target is free of the misconfigurations DAST checks for.",
+    references: ["CWE-1188", "NIST 800-218 RV-1"]
+  },
+  "EVAL_UNAVAILABLE_SCANNER_GITLEAKS": {
+    pattern: "# gitleaks ran but produced no readable JSON report (timeout, crash, or permission error) — secret-scan result is unknown, not confirmed clean",
+    fix: "# Re-run gitleaks manually against the same source to see its actual output and diagnose the failure",
+    explanation: "A scanner that fails to produce a report is not the same as a scanner that found nothing. Diagnose and fix the underlying failure (timeout, permissions, disk space) before trusting a clean result.",
+    references: ["CWE-1188", "NIST 800-218 RV-1"]
+  },
+  "EVAL_UNAVAILABLE_SCANNER_SEMGREP": {
+    pattern: "# semgrep ran but produced no readable JSON report (timeout, crash, or permission error) — SAST result is unknown, not confirmed clean",
+    fix: "# Re-run semgrep manually against the same source to see its actual output and diagnose the failure",
+    explanation: "A scanner that fails to produce a report is not the same as a scanner that found nothing. Diagnose and fix the underlying failure (timeout, permissions, disk space) before trusting a clean result.",
+    references: ["CWE-1188", "NIST 800-218 RV-1"]
+  },
+  "EVAL_UNAVAILABLE_SCANNER_TRIVY": {
+    pattern: "# trivy ran but produced no readable JSON report (timeout, crash, or permission error) — container/dependency CVE result is unknown, not confirmed clean",
+    fix: "# Re-run trivy manually against the same target to see its actual output and diagnose the failure",
+    explanation: "A scanner that fails to produce a report is not the same as a scanner that found nothing. Diagnose and fix the underlying failure (timeout, permissions, disk space) before trusting a clean result.",
+    references: ["CWE-1188", "NIST 800-218 RV-1"]
+  },
+  "EVAL_UNAVAILABLE_SCANNER_CHECKOV": {
+    pattern: "# checkov ran but produced no readable JSON report (timeout, crash, or permission error) — IaC misconfiguration result is unknown, not confirmed clean",
+    fix: "# Re-run checkov manually against the same source to see its actual output and diagnose the failure",
+    explanation: "A scanner that fails to produce a report is not the same as a scanner that found nothing. Diagnose and fix the underlying failure (timeout, permissions, disk space) before trusting a clean result.",
+    references: ["CWE-1188", "NIST 800-218 RV-1"]
+  },
+  "EVAL_UNAVAILABLE_SCANNER_OSV_SCANNER": {
+    pattern: "# osv-scanner ran but produced no readable JSON report (timeout, crash, or permission error) — dependency vulnerability result is unknown, not confirmed clean",
+    fix: "# Re-run osv-scanner manually against the same source to see its actual output and diagnose the failure",
+    explanation: "A scanner that fails to produce a report is not the same as a scanner that found nothing. Diagnose and fix the underlying failure (timeout, permissions, disk space) before trusting a clean result.",
+    references: ["CWE-1188", "NIST 800-218 RV-1"]
+  },
+  "EVAL_UNAVAILABLE_RUNTIME_HEADERS": {
+    pattern: "# The configured runtime target did not answer the HTTP header probe (timeout or connection error) — header-hardening status is unknown, not confirmed clean",
+    fix: "# Verify the target is reachable from the environment running the gate, then re-run",
+    explanation: "A target that never answered is not the same as a target with no missing headers. Fix connectivity to the target before trusting a clean header-hardening result.",
+    references: ["CWE-1188", "NIST 800-218 RV-1"]
+  },
+  "EVAL_UNAVAILABLE_RUNTIME_TLS": {
+    pattern: "# The TLS handshake against the configured runtime target timed out or errored — TLS/certificate posture is unknown, not confirmed clean",
+    fix: "# Verify the target is reachable and accepting TLS connections from the environment running the gate, then re-run",
+    explanation: "A TLS probe that never completed is not the same as a target with no weak TLS version, weak cipher, or certificate problem. Fix connectivity before trusting a clean TLS result.",
+    references: ["CWE-1188", "NIST 800-218 RV-1"]
+  },
+  "EVAL_UNAVAILABLE_AUTH_DEEP": {
+    pattern: "# An internal error aborted the auth-deep check before any of its ~40 sub-checks (JWT, session, OAuth, SAML, timing) could report — status is unknown, not confirmed clean",
+    fix: "# Check the gate logs for the underlying error; file a bug if it reproduces",
+    explanation: "One failing sub-check currently discards every other sub-check's result in this module. A crash here is not the same as a clean auth-hardening pass.",
+    references: ["CWE-1188", "NIST 800-218 RV-1"]
+  },
+  "EVAL_UNAVAILABLE_BUSINESS_LOGIC": {
+    pattern: "# An internal error aborted the business-logic check before any of its ~37 sub-checks (refund, inventory, race conditions, payments) could report — status is unknown, not confirmed clean",
+    fix: "# Check the gate logs for the underlying error; file a bug if it reproduces",
+    explanation: "One failing sub-check currently discards every other sub-check's result in this module. A crash here is not the same as a clean business-logic pass.",
+    references: ["CWE-1188", "NIST 800-218 RV-1"]
   },
 
   // ---------------------------------------------------------------------------

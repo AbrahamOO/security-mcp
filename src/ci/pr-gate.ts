@@ -1,6 +1,11 @@
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { runPrGate, type GateMode } from "../gate/policy.js";
+// Importing CONFIG is what makes the SECURITY_STRICT=1 startup check run for the
+// two HMAC keys — it throws synchronously at module-load time if strict mode is
+// set but either key is missing. Must stay as one of the first imports so a
+// misconfigured strict CI run never gets as far as evaluating a target repo.
+import { CONFIG } from "../config.js";
 
 // Allow safe git revision operators (~ and ^) plus ref/path characters. CWE-88.
 const SAFE_REF_RE = /^[a-zA-Z0-9_./~^-]+$/;
@@ -36,6 +41,9 @@ function safeEnvTargets(envVar: string): string[] | undefined {
  * Exits the process: code 2 when the gate fails, 0 when it passes.
  */
 export async function runGateFromEnv(): Promise<void> {
+  if (CONFIG.strict) {
+    console.error("[security-mcp] SECURITY_STRICT=1: strict mode active (both HMAC keys required, offline).");
+  }
   const baseRef = safeEnvRef("SECURITY_GATE_BASE_REF", "origin/main");
   const headRef = safeEnvRef("SECURITY_GATE_HEAD_REF", "HEAD");
   const policyPath = process.env.SECURITY_GATE_POLICY || ".mcp/policies/security-policy.json";

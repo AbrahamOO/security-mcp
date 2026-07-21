@@ -272,49 +272,96 @@ type ScannerReadiness = Awaited<ReturnType<typeof checkScannerReadiness>>;
 type Surfaces = ReturnType<typeof detectSurfaces>;
 
 // Names aligned with check array order in runAllChecks — used for GATE_CHECK_CRASHED findings
-const CHECK_NAMES = [
-  "required-artifacts",
-  "secrets",
-  "dependencies",
-  "scanner-readiness",
-  "evidence-coverage",
-  "web-nextjs",
-  "api",
-  "infra",
-  "mobile-ios",
-  "mobile-android",
-  "ai",
-  "graphql",
-  "kubernetes",
-  "database",
-  "crypto",
-  "dlp",
-  "sbom",
-  "playbook",
-  "ai-redteam",
-  "runtime",
-  "ci-pipeline",
-  "nuclei",
-  "injection-deep",
-  "auth-deep",
-  "supply-chain-deep",
-  "business-logic",
-  "docker",
-  "scanners-run",
-  "agentic-instructions",
-  "ai-governance",
-  "iac",
-  "gitops",
-  "data-platform",
-  "docker-deep",
-  "cloud-controls",
-  // 1.5.0 emerging-threat modules — order must stay aligned with the settled[]
-  // array in runAllChecks so GATE_CHECK_CRASHED reports the correct module name.
-  "emerging-web",
-  "emerging-cloud",
-  "emerging-supply-ai",
-  "vibe-coding",
-  "web-hardening"
+/**
+ * Everything a check needs to decide whether it applies and to run.
+ * `stagingUrl` is only set when SECURITY_STAGING_URL is configured — the two
+ * live-target checks (runtime, nuclei) gate on it.
+ */
+export type CheckCtx = {
+  policy: Policy;
+  changedFiles: string[];
+  targets: string[];
+  surfaces: Surfaces;
+  scannerReadiness: ScannerReadiness;
+  evidenceCoverage: { findings: Finding[] };
+  stagingUrl?: string | undefined;
+};
+
+/**
+ * One registered check. `when` is the surface/config gate (absent = always-on);
+ * `run` produces the findings.
+ */
+export type CheckDef = {
+  name: string;
+  when?: (c: CheckCtx) => boolean;
+  run: (c: CheckCtx) => Promise<Finding[]>;
+};
+
+const isApiOrWeb = (c: CheckCtx): boolean => c.surfaces.api || c.surfaces.web;
+
+/**
+ * The check registry — the single source of truth for what the gate runs.
+ *
+ * Each entry co-locates a check's name, its applicability gate, and its
+ * invocation. This replaces a parallel `CHECK_NAMES` array that had to stay
+ * positionally aligned with a separate `Promise.allSettled([...])` literal:
+ * inserting a check into one and not the other silently misattributed
+ * GATE_CHECK_CRASHED to the wrong module. That misalignment is now impossible
+ * to express.
+ *
+ * `scanner-readiness` and `evidence-coverage` are precomputed feeds rather than
+ * check modules — they surface findings computed earlier in runPrGate.
+ */
+export const CHECKS: readonly CheckDef[] = [
+  { name: "required-artifacts", run: (c) => checkRequiredArtifacts({ policy: c.policy, changedFiles: c.changedFiles }) },
+  { name: "secrets",            run: (c) => checkSecrets({ changedFiles: c.changedFiles }) },
+  { name: "dependencies",       run: (c) => checkDependencies({ changedFiles: c.changedFiles }) },
+  { name: "scanner-readiness",  run: (c) => Promise.resolve(c.scannerReadiness.findings) },
+  { name: "evidence-coverage",  run: (c) => Promise.resolve(c.evidenceCoverage.findings) },
+  { name: "web-nextjs",         when: (c) => c.surfaces.web,           run: (c) => checkWebNextjs({ changedFiles: c.changedFiles }) },
+  { name: "api",                when: (c) => c.surfaces.api,           run: (c) => checkApi({ changedFiles: c.changedFiles }) },
+  { name: "infra",              when: (c) => c.surfaces.infra,         run: (c) => checkInfra({ changedFiles: c.changedFiles }) },
+  { name: "mobile-ios",         when: (c) => c.surfaces.mobileIos,     run: (c) => checkMobileIos({ changedFiles: c.changedFiles }) },
+  { name: "mobile-android",     when: (c) => c.surfaces.mobileAndroid, run: (c) => checkMobileAndroid({ changedFiles: c.changedFiles }) },
+  { name: "ai",                 when: (c) => c.surfaces.ai,            run: (c) => checkAi({ changedFiles: c.changedFiles }) },
+  { name: "graphql",            run: (c) => checkGraphQL({ changedFiles: c.changedFiles }) },
+  { name: "kubernetes",         run: (c) => checkKubernetes({ changedFiles: c.changedFiles }) },
+  { name: "database",           run: (c) => checkDatabase({ changedFiles: c.changedFiles }) },
+  { name: "crypto",             run: (c) => checkCrypto({ changedFiles: c.changedFiles }) },
+  { name: "dlp",                run: (c) => checkDlp({ changedFiles: c.changedFiles }) },
+  { name: "sbom",               run: (c) => runSbomChecks({ changedFiles: c.changedFiles, targets: c.targets }) },
+  { name: "playbook",           run: (c) => runPlaybookChecks({ changedFiles: c.changedFiles, surfaces: c.surfaces }) },
+  { name: "ai-redteam",         when: (c) => c.surfaces.ai,            run: (c) => runAiRedteamChecks({ changedFiles: c.changedFiles }) },
+  { name: "runtime",            when: (c) => Boolean(c.stagingUrl),    run: (c) => runRuntimeChecks({ targets: c.targets, changedFiles: c.changedFiles }) },
+  { name: "ci-pipeline",        run: (c) => runCiPipelineChecks({ changedFiles: c.changedFiles }) },
+  { name: "nuclei",             when: (c) => Boolean(c.stagingUrl),    run: (c) => runNucleiChecks({ changedFiles: c.changedFiles }) },
+  { name: "injection-deep",     when: isApiOrWeb,                      run: (c) => checkInjectionDeep({ changedFiles: c.changedFiles }) },
+  { name: "auth-deep",          when: isApiOrWeb,                      run: (c) => checkAuthDeep({ changedFiles: c.changedFiles }) },
+  { name: "supply-chain-deep",  run: (c) => checkSupplyChainDeep({ changedFiles: c.changedFiles }) },
+  { name: "business-logic",     run: (c) => checkBusinessLogic({ changedFiles: c.changedFiles }) },
+  { name: "docker",             run: (c) => runDockerChecks({ changedFiles: c.changedFiles }) },
+  { name: "scanners-run",       run: (c) => runScanners({ surfaces: c.surfaces, changedFiles: c.changedFiles }) },
+  { name: "agentic-instructions", when: (c) => c.surfaces.agentic,     run: (c) => checkAgenticInstructions({ changedFiles: c.changedFiles }) },
+  { name: "ai-governance",      when: (c) => c.surfaces.ai,            run: (c) => checkAiGovernance({ changedFiles: c.changedFiles }) },
+  { name: "iac",                run: (c) => checkIac({ changedFiles: c.changedFiles }) },
+  { name: "gitops",             run: (c) => checkGitOps({ changedFiles: c.changedFiles }) },
+  { name: "data-platform",      run: (c) => checkDataPlatform({ changedFiles: c.changedFiles }) },
+  { name: "docker-deep",        run: (c) => checkDockerDeep({ changedFiles: c.changedFiles }) },
+  { name: "cloud-controls",     run: (c) => checkCloudControls({ changedFiles: c.changedFiles }) },
+  // 1.5.0 emerging-threat modules. Surface-gated to match the engine's cost model:
+  // emerging-web runs on web/api changes, emerging-cloud on infra changes, and
+  // emerging-supply-ai always runs (supply-chain + invisible-unicode/model-file
+  // risks apply to every repo).
+  { name: "emerging-web",       when: isApiOrWeb,                      run: (c) => checkEmergingWeb({ changedFiles: c.changedFiles }) },
+  { name: "emerging-cloud",     when: (c) => c.surfaces.infra,         run: (c) => checkEmergingCloud({ changedFiles: c.changedFiles }) },
+  { name: "emerging-supply-ai", run: (c) => checkEmergingSupplyAi({ changedFiles: c.changedFiles }) },
+  // Always-on: vibe-coded apps often don't match a specific surface but still
+  // ship client-side secrets, RLS-off datastores, and unauthenticated APIs.
+  { name: "vibe-coding",        run: (c) => checkVibeCoding({ changedFiles: c.changedFiles }) },
+  // Always-on: web-hardening blindspots (security headers, open redirect,
+  // hardcoded session secrets, email header injection, unauthenticated Server
+  // Actions, sensitive-field exposure) apply regardless of detected surface.
+  { name: "web-hardening",      run: (c) => checkWebHardening({ changedFiles: c.changedFiles }) }
 ] as const;
 
 /** Run every applicable security check in parallel and collect findings. */
@@ -326,61 +373,11 @@ async function runAllChecks(opts: {
   scannerReadiness: ScannerReadiness;
   evidenceCoverage: { findings: Finding[] };
 }): Promise<Finding[]> {
-  const { policy, changedFiles, targets, surfaces, scannerReadiness, evidenceCoverage } = opts;
-  const stagingUrl = process.env["SECURITY_STAGING_URL"];
-  const isApiOrWeb = surfaces.api || surfaces.web;
+  const ctx: CheckCtx = { ...opts, stagingUrl: process.env["SECURITY_STAGING_URL"] };
 
-  const settled = await Promise.allSettled([
-    checkRequiredArtifacts({ policy, changedFiles }),
-    checkSecrets({ changedFiles }),
-    checkDependencies({ changedFiles }),
-    Promise.resolve(scannerReadiness.findings),
-    Promise.resolve(evidenceCoverage.findings),
-    surfaces.web          ? checkWebNextjs({ changedFiles })                : Promise.resolve([]),
-    surfaces.api          ? checkApi({ changedFiles })                      : Promise.resolve([]),
-    surfaces.infra        ? checkInfra({ changedFiles })                    : Promise.resolve([]),
-    surfaces.mobileIos    ? checkMobileIos({ changedFiles })                : Promise.resolve([]),
-    surfaces.mobileAndroid ? checkMobileAndroid({ changedFiles })           : Promise.resolve([]),
-    surfaces.ai           ? checkAi({ changedFiles })                       : Promise.resolve([]),
-    checkGraphQL({ changedFiles }),
-    checkKubernetes({ changedFiles }),
-    checkDatabase({ changedFiles }),
-    checkCrypto({ changedFiles }),
-    checkDlp({ changedFiles }),
-    runSbomChecks({ changedFiles, targets }),
-    runPlaybookChecks({ changedFiles, surfaces }),
-    surfaces.ai  ? runAiRedteamChecks({ changedFiles })                     : Promise.resolve([]),
-    stagingUrl   ? runRuntimeChecks({ targets, changedFiles })              : Promise.resolve([]),
-    runCiPipelineChecks({ changedFiles }),
-    stagingUrl   ? runNucleiChecks({ changedFiles })                        : Promise.resolve([]),
-    isApiOrWeb   ? checkInjectionDeep({ changedFiles })                     : Promise.resolve([]),
-    isApiOrWeb   ? checkAuthDeep({ changedFiles })                          : Promise.resolve([]),
-    checkSupplyChainDeep({ changedFiles }),
-    checkBusinessLogic({ changedFiles }),
-    runDockerChecks({ changedFiles }),
-    runScanners({ surfaces, changedFiles }),
-    surfaces.agentic ? checkAgenticInstructions({ changedFiles }) : Promise.resolve([]),
-    surfaces.ai       ? checkAiGovernance({ changedFiles })        : Promise.resolve([]),
-    checkIac({ changedFiles }),
-    checkGitOps({ changedFiles }),
-    checkDataPlatform({ changedFiles }),
-    checkDockerDeep({ changedFiles }),
-    checkCloudControls({ changedFiles }),
-    // 1.5.0 emerging-threat modules. Surface-gated to match the engine's cost model:
-    // emerging-web runs on web/api changes, emerging-cloud on infra changes, and
-    // emerging-supply-ai always runs (supply-chain + invisible-unicode/model-file
-    // risks apply to every repo). Order aligns with CHECK_NAMES above.
-    isApiOrWeb   ? checkEmergingWeb({ changedFiles })                       : Promise.resolve([]),
-    surfaces.infra ? checkEmergingCloud({ changedFiles })                   : Promise.resolve([]),
-    checkEmergingSupplyAi({ changedFiles }),
-    // Always-on: vibe-coded apps often don't match a specific surface but still
-    // ship client-side secrets, RLS-off datastores, and unauthenticated APIs.
-    checkVibeCoding({ changedFiles }),
-    // Always-on: web-hardening blindspots (security headers, open redirect,
-    // hardcoded session secrets, email header injection, unauthenticated Server
-    // Actions, sensitive-field exposure) apply regardless of detected surface.
-    checkWebHardening({ changedFiles })
-  ]);
+  const settled = await Promise.allSettled(
+    CHECKS.map((def) => (def.when && !def.when(ctx) ? Promise.resolve([]) : def.run(ctx)))
+  );
 
   const findings: Finding[] = [];
   // Fix 5: crashed check modules generate HIGH findings instead of silent console.warn
@@ -389,7 +386,7 @@ async function runAllChecks(opts: {
     if (r.status === "fulfilled") {
       findings.push(...r.value);
     } else {
-      const checkName = CHECK_NAMES[i] ?? `check-${i}`;
+      const checkName = CHECKS[i]?.name ?? `check-${i}`;
       // CWE-200: sanitize error message before embedding in gate findings —
       // raw Error.message can contain absolute filesystem paths that reveal
       // internal directory structure to callers of the gate result.

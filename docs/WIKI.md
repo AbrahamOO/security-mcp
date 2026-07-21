@@ -1,6 +1,6 @@
 # Wiki
 
-Last updated: 2026-07-07
+Last updated: 2026-07-17
 
 A practical reference for running security-mcp, understanding how the gate decides
 PASS/FAIL, the full list of rule IDs added in 1.5.0, 1.6.0, and 1.6.1, how capability
@@ -200,6 +200,36 @@ It exits non-zero on any un-excepted HIGH or CRITICAL finding, which is what act
 blocks a merge; the interactive skills and CI enforce identically because they call the
 same `runAllChecks` logic underneath.
 
+## Client support matrix
+
+security-mcp runs in any MCP-capable editor. The server is stdio; the agent roster is
+delivered over the MCP protocol (prompts + resources), so the guided experience is not
+Claude-only.
+
+| Client | MCP config | Key / format |
+| --- | --- | --- |
+| Claude Code | `~/.claude/settings.json` | `mcpServers` (JSON) |
+| Cursor | `~/.cursor/mcp.json` or `.cursor/mcp.json` | `mcpServers` (JSON) |
+| VS Code / GitHub Copilot | `.vscode/mcp.json` | `servers` (JSON) |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` | `mcpServers` (JSON) |
+| Codex | `~/.codex/config.toml` or `.codex/config.toml` | `[mcp_servers.security-mcp]` (TOML) |
+| Replit | Integrations UI (remote MCP) | hosted endpoint — no local stdio config |
+
+`npx -y security-mcp@latest install` writes the correct config for every detected local
+client; `doctor` verifies it. The installer also drops a per-client instruction file
+(`.cursor/rules`, `.github/copilot-instructions.md`, `.windsurf/rules`, `AGENTS.md`) that
+tells each host how to drive the agents.
+
+### Portable agent delivery
+
+The two entry prompts (`senior-security-engineer`, `ciso-orchestrator`) are MCP prompts,
+so they appear as slash commands / prompt pickers in every client. Every specialist
+persona is reachable two ways: the `skill://<name>` MCP resource (browse `skill://catalog`
+for the roster) and the `orchestration.ensure_skill` tool, which returns the full SKILL.md
+on demand. A host with parallel subagents runs the roster concurrently; a host without one
+runs the agents sequentially, each to full completion — `orchestration.verify_skill_coverage`
+gates run completion either way, so no agent is skipped and no persona is abbreviated.
+
 ## How the gate decides PASS/FAIL
 
 1. The policy file (default `.mcp/policies/security-policy.json`) sets
@@ -335,14 +365,20 @@ writing the returned template's fix directly into the working tree, then re-runn
 check to confirm the finding cleared. As of 1.6.1, `REMEDIATION_MAP` is composed from six
 domain partials under `src/gate/remediation-parts/` — `cloud.ts` (256 templates), `ai.ts`
 (69), `data.ts` (172), `web.ts` (203), `misc.ts` (112), and `web-hardening-remediations.ts`
-(6) — for **888 fix templates covering 100% (887/887) of detection IDs**, up from just 71
+(6), plus the evaluability-gap templates in the base map — for **900 fix templates covering 100% (900/900) of detection IDs**, up from just 71
 templates (roughly 8% of finding IDs) before this release. Each template pairs a realistic
 vulnerable pattern with a concrete secure fix in the correct language, a plain-language
 explanation, and standards references (CWE plus OWASP Top 10 / API Security Top 10 / LLM
 Top 10 / MASVS, and NIST / CIS / PCI DSS / FIPS or the relevant provider's docs). This is
-what makes the "90% fixing, 10% advisory" operating mandate a deterministic property of the
-gate engine, verifiable by calling `security.generate_remediations`, rather than something
-that depends on the live agent's judgment call in the moment.
+what makes the "90% fixing, 10% advisory" operating mandate achievable in practice: every
+detection ID has a concrete template to work from via `security.generate_remediations`,
+rather than the agent having to invent a fix from scratch. Applying the template and
+verifying the fix is still the calling agent's job — the re-verification step re-runs the
+same detection rule that originally fired, which confirms the flagged pattern no longer
+matches but cannot independently prove the underlying vulnerability is resolved rather than
+merely evaded. The one path where this is fully deterministic end-to-end is Terraform:
+`security-mcp autoharden` applies the fix, re-detects, and reverts automatically if the
+finding doesn't clear, with no agent judgment call in the loop.
 
 ## Capability enforcement
 
@@ -427,9 +463,32 @@ Every check module, including the three added in 1.5.0, follows the same contrac
    conventions already in use: CRITICAL for a confirmed, exploitable condition; HIGH for
    a serious but conditional or unresolved-version case; MEDIUM for advisory or
    unresolvable-version cases; LOW for hardening gaps that are not exploitable alone.
-5. **Fail safe.** Wrap your detection logic in try/catch. Log failures with
-   `sanitizeErrorMessage`, never throw, and return an empty array on any internal error.
-   A check that cannot run should produce no finding for its rule, not a crashed gate.
+5. **Fail safe — but distinguish "one file" from "the whole check."** Wrap your
+   detection logic in try/catch and log failures with `sanitizeErrorMessage`. The
+   right response to a caught error depends on its scope:
+   - **One input among many** (a single file that's malformed, binary, or too large;
+     a glob that matches zero files because the pattern genuinely doesn't apply):
+     return an empty array or `continue` past that one file. This is the common
+     case, and README:191's "the absence of a result is itself a result" and this
+     guide's older wording ("a check that cannot run should produce no finding for
+     its rule, not a crashed gate") both apply correctly — a check that legitimately
+     has nothing to check should report nothing, silently.
+   - **The check's entire evidence source** (a network/API call the whole check
+     depends on fails, a required external binary is missing, an external service
+     is unreachable): do **not** return `[]`. That silently converts "I could not
+     determine this" into "clean," which is worse than a crash, because a crash at
+     least produces a visible `GATE_CHECK_CRASHED` finding. Emit an explicit
+     `EVAL_UNAVAILABLE_<NAME>` finding instead (HIGH severity, mirroring
+     `GATE_CHECK_CRASHED`'s intent) — see `checkCveExploitation` in
+     `src/gate/checks/dependencies.ts` for the canonical example, and give it a
+     remediation template in `src/gate/remediation-map.ts` like every other
+     finding id (the "fix" describes restoring the resource, not a code diff).
+     If the failure is an intentional, operator-chosen skip (`SECURITY_OFFLINE=1`),
+     that is not this case either — check for it explicitly and return `[]` with no
+     finding, the same as "not applicable."
+   The dividing line: if this specific failure happens, does the user lose ALL of
+   this check's signal for the entire run with no indication anything went wrong?
+   If yes, it needs an `EVAL_UNAVAILABLE_<NAME>` finding, not silence.
 6. **Wire it in.** This is done in `src/gate/policy.ts`, not inside your module:
    - Add your function call to the check-promise array inside `runAllChecks`, gated on
      whichever `surfaces.*` flag (or `isApiOrWeb`) matches where your check should run, or
@@ -441,7 +500,8 @@ Every check module, including the three added in 1.5.0, follows the same contrac
    `explanation`, and `references`. A finding with no remediation template is still valid,
    but it erodes the product's fixing-vs-advisory ratio, so treat this as a required step,
    not an optional one.
-8. **Verify.** Run `npm run build` (tsc) and `npm test` (`src/tests/run.ts`) before
+8. **Verify.** Run `npm run build` (tsc) and `npm test` (`node --test` over
+   `dist/tests/legacy.test.js` plus every `src/tests/corpus/*.corpus.ts` case) before
    considering the module complete.
 
 ## Environment variables relevant to 1.5.0
@@ -466,6 +526,24 @@ environment-variable configuration, as of 1.5.0.
 
 ## Change History
 
+- 2026-07-17 — Rewrote the "Fail safe" check-authoring rule (item 5) to distinguish
+  a per-file skip (legitimately silent) from the whole check's evidence source
+  being unavailable (must emit `EVAL_UNAVAILABLE_<NAME>`, not `[]`) — the old
+  unconditional "return an empty array on any internal error" wording was itself
+  the reason this bug class kept getting introduced by new check authors following
+  the guide as written. Reconciles with README's "the absence of a result is
+  itself a result" (which was about crashes and remains accurate).
+- 2026-07-17 — Remediation-template count updated from 888 to 900: added 12
+  `EVAL_UNAVAILABLE_*` findings (Track E, the fail-open/evaluability sweep across all
+  check modules) and a matching template for each, keeping "100% detection-ID
+  coverage" exact.
+- 2026-07-17 — Corrected the "90% fixing" claim: applying and verifying a remediation
+  template is still the calling agent's job, not something the engine enforces
+  deterministically (Terraform via `autoharden` is the one exception). Updated the
+  remediation-template coverage ratio from 887/887 to 888/888 to match the live rule
+  count, and fixed a real 1-rule coverage gap it surfaced (`EVAL_UNAVAILABLE_THREAT_INTEL`
+  had no template) as part of adding the claims registry (Track A).
+- 2026-07-14 — Added the "Client support matrix" and "Portable agent delivery" sections: per-client MCP config paths/keys (VS Code `servers`, Windsurf `~/.codeium/windsurf/mcp_config.json`, Codex TOML, Replit remote-only) and how agents are delivered over MCP prompts/resources so every client runs the full roster.
 - 2026-07-07 — Added the version note (internal milestones 1.4.0–1.6.1 ship publicly in
   1.3.5) and the "pre-release checklist" section documenting the checklist's sync with
   the detection engine (246 items across 21 sections).

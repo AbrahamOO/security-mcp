@@ -3,6 +3,7 @@ import { scopedFg as fg } from "../scan-scope.js";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { readFileSafe } from "../../repo/fs.js";
+import { getWorkspaceRoot } from "../../repo/workspace.js";
 
 // ════════════════════════════════════════════════════════════════════════════
 // Bad-actor "Skills" / agentic-instruction threat detection.
@@ -337,11 +338,11 @@ function scanNewInstructionThreats(file: string, text: string, lines: string[], 
 async function scanSymlinkEscape(file: string, acc: Acc): Promise<void> {
   try {
     const { lstat, realpath } = await import("node:fs/promises");
-    const abs = path.resolve(process.cwd(), file);
+    const abs = path.resolve(getWorkspaceRoot(), file);
     const st = await lstat(abs);
     if (!st.isSymbolicLink()) return;
     const target = await realpath(abs);
-    const root = process.cwd();
+    const root = getWorkspaceRoot();
     const rootPrefix = root.endsWith(path.sep) ? root : root + path.sep;
     if (target !== root && !target.startsWith(rootPrefix)) {
       acc.symlinkEscape.push(`${file} -> ${target}`);
@@ -388,7 +389,7 @@ function isMaliciousLine(line: string): boolean {
 
 // Resolve a workspace-relative path and reject anything that escapes cwd (CWE-22).
 function safeResolve(relPath: string): string | null {
-  const root = process.cwd();
+  const root = getWorkspaceRoot();
   const rootPrefix = root.endsWith(path.sep) ? root : root + path.sep;
   const p = path.resolve(root, relPath);
   if (p !== root && !p.startsWith(rootPrefix)) return null;

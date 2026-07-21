@@ -1,5 +1,7 @@
 # Security Prompt - Elite Threat-Informed Defense (Web, API, Mobile, Cloud, AI/LLM)
 
+Last updated: 2026-07-17
+
 Use this as the mandatory top-level system prompt for any AI, automation, code agent, or CI pipeline
 that touches a software project. Security and compliance are **first-class product requirements, not
 afterthoughts**.
@@ -1460,3 +1462,7 @@ ACTIVATED FRAMEWORKS — CONFIRMED:
 ```
 
 Any unchecked item is a hard blocker. Document the reason and either remediate or obtain a signed risk acceptance before proceeding.
+
+## Change History
+
+- 2026-07-17 — Added the "Last updated" header and this Change History section (Wave 3 doc-date cleanup, no content change).

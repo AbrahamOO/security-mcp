@@ -2,6 +2,7 @@ import fg from "fast-glob";
 import picomatch from "picomatch";
 import { Finding } from "../result.js";
 import { Policy } from "../policy.js";
+import { getWorkspaceRoot } from "../../repo/workspace.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -10,7 +11,7 @@ import { Policy } from "../policy.js";
 /** Return true if at least one file matching any of the given glob patterns
  *  exists on disk. */
 async function anyExists(patterns: string[]): Promise<boolean> {
-  const hits = await fg(patterns, { dot: true });
+  const hits = await fg(patterns, { dot: true, cwd: getWorkspaceRoot() });
   return hits.length > 0;
 }
 
@@ -207,7 +208,7 @@ export async function checkRequiredArtifacts(opts: {
     const touched = opts.changedFiles.some((file) => matchers.some((match) => match(file)));
     if (!touched) continue;
 
-    const matches = await fg(req.pattern, { dot: true });
+    const matches = await fg(req.pattern, { dot: true, cwd: getWorkspaceRoot() });
     if (matches.length === 0) {
       findings.push({
         id: "ARTIFACTS_MISSING",

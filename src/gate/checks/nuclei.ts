@@ -71,9 +71,22 @@ export async function runNucleiChecks(_opts: { changedFiles: string[] }): Promis
 		return [];
 	}
 
+	// EVALUABILITY: DAST was explicitly requested (SECURITY_STAGING_URL is set), so a
+	// missing binary means the live scan the operator asked for did NOT run — this is
+	// not the same as "installed a scanner, found no issues." The scanner-readiness
+	// check does not cover nuclei (it isn't in defaults/security-tools.json), so there
+	// is no other signal that would surface this.
 	if (!(await isNucleiAvailable())) {
-		// Silent skip — nuclei is optional. Scanner readiness check will flag missing tooling.
-		return [];
+		return [{
+			id: "EVAL_UNAVAILABLE_NUCLEI_DAST",
+			title: "DAST requested (SECURITY_STAGING_URL set) but the nuclei binary is missing — live scan did not run, result is UNKNOWN, not clean",
+			severity: "HIGH",
+			evidence: [`SECURITY_STAGING_URL=${targetUrl} was set, but the \`nuclei\` binary was not found on PATH.`],
+			requiredActions: [
+				"Install nuclei (https://github.com/projectdiscovery/nuclei) in the environment running the gate.",
+				"Do not treat this run as evidence that the target is free of the misconfigurations DAST checks for."
+			]
+		}];
 	}
 
 	const findings: Finding[] = [];
@@ -82,6 +95,7 @@ export async function runNucleiChecks(_opts: { changedFiles: string[] }): Promis
 		const templateArgs = NUCLEI_TEMPLATES.flatMap((t) => ["-t", t]);
 
 		let stdout = "";
+		let scanFailed = false;
 		try {
 			const result = await execFileAsync(
 				"nuclei",
@@ -103,11 +117,26 @@ export async function runNucleiChecks(_opts: { changedFiles: string[] }): Promis
 			);
 			stdout = result.stdout;
 		} catch (execErr) {
-			// nuclei exits non-zero when findings exist — that's expected
+			// nuclei exits non-zero both when findings exist AND on a real failure
+			// (target unreachable mid-scan, timeout, connection reset) — those two
+			// cases are only distinguishable by whether any output was produced.
 			const err = execErr as { stdout?: string; code?: number };
 			stdout = err.stdout ?? "";
+			scanFailed = !stdout.trim();
 		}
 
+		if (scanFailed) {
+			return [{
+				id: "EVAL_UNAVAILABLE_NUCLEI_DAST",
+				title: "Nuclei scan against the live target failed to return output — DAST result is UNKNOWN, not clean",
+				severity: "HIGH",
+				evidence: [`nuclei exited abnormally against ${targetUrl} with no scan output (target unreachable, timeout, or connection reset).`],
+				requiredActions: [
+					"Verify the target is reachable from the environment running the gate and re-run.",
+					"Do not treat this run as evidence that the target is free of the misconfigurations DAST checks for."
+				]
+			}];
+		}
 		if (!stdout.trim()) return [];
 
 		// nuclei -json outputs newline-delimited JSON (one object per line)

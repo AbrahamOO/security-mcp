@@ -1,6 +1,8 @@
 import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { scopedFg as fg } from "../scan-scope.js";
 import { readFileSafe } from "../../repo/fs.js";
+import { getWorkspaceRoot } from "../../repo/workspace.js";
 import { applyEnsures } from "./hcl.js";
 import { detectTerraform, Violation } from "./detect.js";
 import { CloudRule, loadCloudRules } from "./types.js";
@@ -125,7 +127,10 @@ export async function autoHardenTree(opts?: { write?: boolean }): Promise<Harden
     }
     if (text !== original) {
       report.filesChanged.push(file);
-      if (write) await writeFile(file, text, "utf-8");
+      // `file` is workspace-relative (fg resolves against getWorkspaceRoot()), so the
+      // write must be re-anchored to the same root. Resolving it against process.cwd()
+      // would read from the workspace but write to the process directory.
+      if (write) await writeFile(join(getWorkspaceRoot(), file), text, "utf-8");
     }
   }
   return report;

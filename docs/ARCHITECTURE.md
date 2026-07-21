@@ -1,6 +1,6 @@
 # Architecture
 
-Last updated: 2026-07-07
+Last updated: 2026-07-17
 
 > **Version note:** 1.4.0, 1.5.0, 1.6.0, and 1.6.1 referenced throughout this document
 > are internal milestones that were never published to npm. All of them ship publicly in
@@ -36,7 +36,7 @@ flowchart TD
     CI["CI runner<br/>src/ci/pr-gate.ts"] --> GATE
     MCP --> GATE["Gate engine<br/>runAllChecks — src/gate/policy.ts"]
     GATE --> CC["Cloud-controls engine<br/>src/gate/cloud-controls/ (1,002 IaC rules)"]
-    GATE --> RM["Remediation map<br/>src/gate/remediation-map.ts (888 templates)"]
+    GATE --> RM["Remediation map<br/>src/gate/remediation-map.ts (900 templates)"]
     GATE --> VERDICT{{"PASS / FAIL"}}
 ```
 
@@ -162,9 +162,20 @@ Detection is one of three patterns, sometimes combined:
   than it delivers.
 
 Because there is no semantic understanding of the code, every check module is written to
-fail safe: wrapped in try/catch, logging via `sanitizeErrorMessage` rather than throwing,
-and returning an empty array rather than crashing the gate on any internal error. A check
-that cannot run produces no finding for that rule, not a false one.
+fail safe: wrapped in try/catch, logging via `sanitizeErrorMessage` rather than throwing.
+What "fail safe" returns depends on scope, though — a caught error affecting one input
+file among many (malformed content, a glob matching nothing because the pattern doesn't
+apply) legitimately returns an empty array; that file is skipped, every other file is
+still checked, and a check with genuinely nothing to check should report nothing. But a
+caught error that takes out the check's *entire* evidence source — a network/API call the
+whole check depends on failing, a required external binary missing — must not silently
+return `[]` too: that reports "clean" when the truth is "unknown," which is worse than
+crashing (a crash at least produces a visible `GATE_CHECK_CRASHED` finding). Those cases
+emit a dedicated `EVAL_UNAVAILABLE_<NAME>` finding instead — see
+`checkCveExploitation` in `src/gate/checks/dependencies.ts` for the canonical example.
+`SECURITY_OFFLINE=1` is a third case: an intentional, operator-chosen skip, checked for
+explicitly and also returning `[]` with no finding — not a false clean, since nothing was
+silently lost, the operator asked for this.
 
 ## Where the 1.5.0 checks fit
 
@@ -315,6 +326,19 @@ flowchart TD
     DECIDE -- clean --> RPASS(["PASS"])
 ```
 
+### Portable agent delivery (all clients)
+
+The agent roster is delivered over the MCP protocol, not a Claude-only skills directory,
+so every MCP host runs the full roster. `src/mcp/server.ts` registers the user-invocable
+agents (`senior-security-engineer`, `ciso-orchestrator`, `agentic-instruction-auditor`) as
+MCP prompts, and exposes every persona as an MCP resource (`skill://catalog` and the
+`skill://{name}` template). `orchestration.ensure_skill` returns the full bundled SKILL.md
+in its result (`content`), and only materializes into `~/.claude/skills` when that layout
+exists — other hosts consume the persona from the returned content or the resource. A host
+with a subagent tool spawns the roster in parallel; a host without one adopts each persona
+sequentially, each to completion, and the same thoroughness checks (SKILL.md coverage floor,
+capability enforcement) gate the run, so completeness is host-independent.
+
 `/ciso-orchestrator` spawns a tree of agents (nine specialist leads and their sub-agents)
 that run in phases: discovery leads and sub-agents in parallel, then adversarial and
 compliance agents that consume the discovery phase's threat model, then a synthesis phase.
@@ -416,7 +440,7 @@ introduced by the three emerging-* modules. The orphaned `DEP_FLOATING_VERSION` 
 which had no corresponding finding ID anywhere in the check engine, was removed and
 replaced with `DEP_UNPINNED_VERSION`.
 
-**1.6.1 completes the 90%-fix mandate deterministically.** Before 1.6.1, only 71 of
+**1.6.1 completes the remediation-template coverage the 90%-fix mandate depends on.** Before 1.6.1, only 71 of
 roughly 882 finding IDs (about 8%) had a concrete remediation template. `remediation-map.ts`
 now composes `REMEDIATION_MAP` from six domain partials under
 `src/gate/remediation-parts/`: `cloud.ts` (256 templates: Kubernetes, IaC, Docker, ArgoCD,
@@ -425,12 +449,16 @@ crypto, JWT, SAML, OAuth, passwords, database, Snowflake, Databricks, supply-cha
 hygiene), `web.ts` (203: web, API, business logic, GraphQL, Android, iOS, DLP, CI),
 `misc.ts` (112: injection, deserialization, SSRF, TLS, tokens, mobile storage, XSS), and
 `web-hardening-remediations.ts` (6, one per new `WEB_` rule from the 1.6.1 `web-hardening`
-module). The result is 888 fix templates covering 100% (887 of 887) of detection IDs, up
-from roughly 8%. This is what keeps the product's stated operating mandate, roughly 90% of
-findings resolved with a concrete fix and 10% left as advisory guidance, actually true, and
-turns it into a property the engine itself can verify rather than something the live agent
-merely tends toward: a rule with no remediation template would silently erode that ratio,
-and as of 1.6.1 there are none left.
+module), plus the evaluability-gap templates in the base map. The result is 900 fix templates covering 100% (900 of 900) of detection IDs, up
+from roughly 8% — every finding the gate can raise now has a concrete template to work
+from, so the "90% fixing, 10% advisory" mandate is no longer bottlenecked by missing
+templates. Applying a template is still the calling agent's responsibility: nothing in the
+engine itself writes the fix, and the re-verification step re-runs the same detection rule
+that originally fired, which confirms the flagged pattern is gone but cannot independently
+prove the vulnerability is resolved rather than merely evaded. `security-mcp autoharden` is
+the one path where this is fully deterministic — for Terraform, it applies the fix,
+re-detects, and reverts automatically if the finding doesn't clear, with no agent judgment
+call in the loop.
 
 ## Summary of the request lifecycle
 
@@ -444,6 +472,22 @@ produce the final verdict that either blocks a merge or clears it.
 
 ## Change History
 
+- 2026-07-17 — Rewrote the "fail safe" paragraph to distinguish a per-file skip
+  (legitimately silent) from the whole check's evidence source being unavailable
+  (must emit `EVAL_UNAVAILABLE_<NAME>`, not `[]`) — reconciles with README's "the
+  absence of a result is itself a result" (about crashes, which remains accurate)
+  and matches the corresponding rewrite in WIKI.md's check-authoring guide.
+- 2026-07-17 — Remediation-template count updated from 888 to 900: added 12
+  `EVAL_UNAVAILABLE_*` findings (Track E, the fail-open/evaluability sweep across all
+  check modules) and a matching template for each, keeping "100% detection-ID
+  coverage" exact.
+- 2026-07-17 — Corrected the "90% fixing" claim: applying and verifying a remediation
+  template is still the calling agent's job, not something the engine enforces
+  deterministically (Terraform via `autoharden` is the one exception). Updated the
+  remediation-template coverage ratio from 887/887 to 888/888 to match the live rule
+  count, and fixed a real 1-rule coverage gap it surfaced (`EVAL_UNAVAILABLE_THREAT_INTEL`
+  had no template) as part of adding the claims registry (Track A).
+- 2026-07-14 — Added the "Portable agent delivery (all clients)" subsection: agents are served over MCP prompts + `skill://` resources and `ensure_skill` returns the full persona body, so every MCP host runs the complete roster (parallel or sequential) under the same thoroughness gate.
 - 2026-07-07 — Added mermaid architecture diagrams (one engine / two callers overview,
   gate-engine pipeline, orchestration + attestation flow) and the version note that
   internal milestones 1.4.0–1.6.1 ship publicly in 1.3.5.

@@ -7,11 +7,15 @@ import { mkdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import fg from "fast-glob";
 import { Finding } from "../result.js";
+import { getWorkspaceRoot } from "../../repo/workspace.js";
+import { readFileSafe } from "../../repo/fs.js";
 
 const execFileAsync = promisify(execFile);
-const SBOM_DIR = join(process.cwd(), ".mcp", "sbom");
-const ATTESTATION_DIR = join(process.cwd(), ".mcp", "attestations");
-const SBOM_PATH = join(SBOM_DIR, "latest.json");
+// Resolved per-call (not at module load) so the workspace root is honored even
+// when it is set via withWorkspace() after this module is imported.
+const sbomDir = (): string => join(getWorkspaceRoot(), ".mcp", "sbom");
+const attestationDir = (): string => join(getWorkspaceRoot(), ".mcp", "attestations");
+const sbomPath = (): string => join(sbomDir(), "latest.json");
 const SBOM_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 async function ensureDir(dir: string): Promise<void> {
@@ -31,7 +35,7 @@ async function commandExists(cmd: string): Promise<boolean> {
 
 async function getSbomAge(): Promise<number | null> {
   try {
-    const s = await stat(SBOM_PATH);
+    const s = await stat(sbomPath());
     return Date.now() - s.mtimeMs;
   } catch {
     return null;
@@ -49,7 +53,7 @@ interface CycloneDxSbom {
 
 async function readSbom(): Promise<CycloneDxSbom | null> {
   try {
-    const raw = await readFile(SBOM_PATH, "utf-8");
+    const raw = await readFile(sbomPath(), "utf-8");
     return JSON.parse(raw) as CycloneDxSbom;
   } catch {
     return null;
@@ -59,13 +63,17 @@ async function readSbom(): Promise<CycloneDxSbom | null> {
 async function getPackageJsonDeps(): Promise<string[]> {
   const manifests = await fg(["package.json", "**/package.json"], {
     dot: true,
+    cwd: getWorkspaceRoot(),
     ignore: ["**/node_modules/**", "**/dist/**"]
   });
 
   const deps: string[] = [];
   for (const manifest of manifests.slice(0, 5)) {
     try {
-      const raw = await readFile(manifest, "utf-8");
+      // `manifest` is workspace-relative (fg's cwd is getWorkspaceRoot()), so it must
+      // resolve through readFileSafe rather than a bare readFile — otherwise it
+      // silently reads against process.cwd() instead of the active workspace.
+      const raw = await readFileSafe(manifest);
       const pkg = JSON.parse(raw) as Record<string, unknown>;
       const allDeps = {
         ...((pkg["dependencies"] as Record<string, string> | undefined) ?? {}),
@@ -80,7 +88,7 @@ async function getPackageJsonDeps(): Promise<string[]> {
 async function hasAttestation(): Promise<boolean> {
   try {
     const files = await fg(["**/*.sig", "**/*.bundle", "**/*.att"], {
-      cwd: ATTESTATION_DIR,
+      cwd: attestationDir(),
       dot: true
     });
     return files.length > 0;
@@ -98,8 +106,8 @@ export async function runSbomChecks(_opts: {
 }): Promise<Finding[]> {
   const findings: Finding[] = [];
 
-  await ensureDir(SBOM_DIR);
-  await ensureDir(ATTESTATION_DIR);
+  await ensureDir(sbomDir());
+  await ensureDir(attestationDir());
 
   const syftAvailable = await commandExists("syft");
   const cosignAvailable = await commandExists("cosign");
@@ -112,8 +120,8 @@ export async function runSbomChecks(_opts: {
     try {
       await execFileAsync(
         "syft",
-        [".", `-o`, `cyclonedx-json=${SBOM_PATH}`],
-        { cwd: process.cwd(), timeout: 120_000, maxBuffer: 50 * 1024 * 1024 }
+        [".", `-o`, `cyclonedx-json=${sbomPath()}`],
+        { cwd: getWorkspaceRoot(), timeout: 120_000, maxBuffer: 50 * 1024 * 1024 }
       );
     } catch (err) {
       findings.push({
@@ -138,7 +146,7 @@ export async function runSbomChecks(_opts: {
         id: "SBOM_MISSING",
         title: "No SBOM found. Syft is available — run it to generate one.",
         severity: "HIGH",
-        evidence: [`Expected at: ${SBOM_PATH}`],
+        evidence: [`Expected at: ${sbomPath()}`],
         requiredActions: [
           "Run: syft . -o cyclonedx-json=.mcp/sbom/latest.json",
           "Or set SECURITY_AUTO_SBOM=true to auto-generate on each gate run."
@@ -152,7 +160,7 @@ export async function runSbomChecks(_opts: {
         id: "SBOM_STALE",
         title: "SBOM is stale (older than 24 hours)",
         severity: "MEDIUM",
-        evidence: [`SBOM age: ${Math.round(currentSbomAge / 3600000)}h`, `Path: ${SBOM_PATH}`],
+        evidence: [`SBOM age: ${Math.round(currentSbomAge / 3600000)}h`, `Path: ${sbomPath()}`],
         requiredActions: [
           "Regenerate the SBOM: syft . -o cyclonedx-json=.mcp/sbom/latest.json",
           "Or set SECURITY_AUTO_SBOM=true to auto-regenerate."
@@ -170,7 +178,7 @@ export async function runSbomChecks(_opts: {
           id: "SBOM_UNSIGNED",
           title: "SBOM exists but no cosign attestation found",
           severity: "MEDIUM",
-          evidence: [`Attestation dir: ${ATTESTATION_DIR}`],
+          evidence: [`Attestation dir: ${attestationDir()}`],
           requiredActions: [
             "Sign the SBOM with cosign: cosign attest --predicate .mcp/sbom/latest.json ...",
             "Store attestation in .mcp/attestations/"
@@ -206,7 +214,7 @@ export async function runSbomChecks(_opts: {
   // SLSA provenance check
   try {
     const provenanceFiles = await fg(["**/*.intoto.jsonl", "**/provenance.json", "**/*.provenance"], {
-      cwd: ATTESTATION_DIR,
+      cwd: attestationDir(),
       dot: true
     });
     if (provenanceFiles.length === 0) {
@@ -214,7 +222,7 @@ export async function runSbomChecks(_opts: {
         id: "PROVENANCE_MISSING",
         title: "No SLSA provenance attestation found",
         severity: "HIGH",
-        evidence: [`Attestation dir: ${ATTESTATION_DIR}`],
+        evidence: [`Attestation dir: ${attestationDir()}`],
         requiredActions: [
           "Generate SLSA provenance during CI/CD build.",
           "Use slsa-github-generator or equivalent to produce .intoto.jsonl attestations.",

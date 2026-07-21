@@ -21,14 +21,22 @@
  * failure must not break tool execution.
  */
 
-import { appendFileSync, mkdirSync, renameSync, statSync } from "node:fs";
+import { appendFileSync, mkdirSync, renameSync, statSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { getSessionId, isAuthRequired } from "./auth.js";
+import { getWorkspaceRoot } from "../repo/workspace.js";
 
-const AUDIT_LOG_PATH =
-  process.env.SECURITY_TOOL_AUDIT_LOG ?? join(".mcp", "audit", "tool-calls.jsonl");
+// Resolved per-call, not at module load: SECURITY_TOOL_AUDIT_LOG wins if set,
+// otherwise the path is anchored to the active workspace root. Resolving a bare
+// relative path once at import time (the previous behavior) silently wrote the
+// audit log under whatever process.cwd() happened to be at startup.
+function auditLogPath(): string {
+  return process.env.SECURITY_TOOL_AUDIT_LOG ?? join(getWorkspaceRoot(), ".mcp", "audit", "tool-calls.jsonl");
+}
 const MAX_STRING_LEN = 512;
 const MAX_ARRAY_LEN = 100;
+// How many rotated audit segments (.1 .. .N) to retain before the oldest is dropped.
+const AUDIT_RETAIN = 5;
 const MAX_DEPTH = 6;
 const MAX_OUTPUT_PREVIEW = 512;
 const MAX_AGENT_ID_LEN = 256;
@@ -144,12 +152,22 @@ function safeStringify(entry: ToolCallAuditEntry): string {
 
 /** Append one audit record. Swallows all errors — never breaks tool execution. */
 function recordToolCall(entry: ToolCallAuditEntry): void {
+  const logPath = auditLogPath();
   try {
-    mkdirSync(dirname(AUDIT_LOG_PATH), { recursive: true, mode: 0o700 });
-    // CWE-400: single-rotation size guard so a tight tool-call loop cannot exhaust disk.
+    mkdirSync(dirname(logPath), { recursive: true, mode: 0o700 });
+    // CWE-400: size-guarded rotation so a tight tool-call loop cannot exhaust disk.
+    // Retain AUDIT_RETAIN rotated segments (.1 .. .N) instead of overwriting .1 on
+    // every rotation — the previous single-rotation clobbered .1 each time, so any
+    // burst larger than 2×MAX_AUDIT_BYTES silently destroyed audit evidence. Only
+    // the oldest segment (.N) is dropped once the ring is full.
     try {
-      if (statSync(AUDIT_LOG_PATH).size > MAX_AUDIT_BYTES) {
-        renameSync(AUDIT_LOG_PATH, `${AUDIT_LOG_PATH}.1`);
+      if (statSync(logPath).size > MAX_AUDIT_BYTES) {
+        for (let i = AUDIT_RETAIN - 1; i >= 1; i--) {
+          const from = `${logPath}.${i}`;
+          const to = `${logPath}.${i + 1}`;
+          try { if (existsSync(from)) renameSync(from, to); } catch { /* skip this segment */ }
+        }
+        renameSync(logPath, `${logPath}.1`);
       }
     } catch {
       /* file absent or not rotatable — ignore */
@@ -166,7 +184,7 @@ function recordToolCall(entry: ToolCallAuditEntry): void {
         note: "serialize-failed"
       });
     }
-    appendFileSync(AUDIT_LOG_PATH, line + "\n", { encoding: "utf-8", mode: 0o600 });
+    appendFileSync(logPath, line + "\n", { encoding: "utf-8", mode: 0o600 });
   } catch {
     /* audit sink unavailable — do not interrupt the tool call */
   }

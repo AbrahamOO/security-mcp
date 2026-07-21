@@ -850,8 +850,12 @@ async function checkWalletNonAtomicDecrement(): Promise<Finding | null> {
 
 async function checkRefundWithoutPurchase(): Promise<Finding | null> {
   // Refund issued without first verifying the original order was paid/captured.
+  // The (?<!function\s) lookbehind excludes function declarations named "refund"
+  // (e.g. `async function refund(orderId, order)`) — without it, the declaration
+  // line itself false-fires as an unguarded call site, even when the real call
+  // inside the function body is correctly guarded on a different line.
   const hits = await codeSearch(
-    String.raw`(?:refund|createRefund|issueRefund|processRefund|stripe\.refunds\.create)\s*\(`
+    String.raw`(?<!function\s)(?:refund|createRefund|issueRefund|processRefund|stripe\.refunds\.create)\s*\(`
   );
   const safeRe = /status\s*===?\s*['"](?:paid|captured|succeeded|completed)['"]|isPaid|paidAt|verifyPayment|paymentStatus|charge(?:Id)?\s*[,)]|original.*paid|hasPaid/i;
   const unsafe = hits.filter((h) => !safeRe.test(h.preview));
@@ -1138,7 +1142,19 @@ export async function checkBusinessLogic(_opts: { changedFiles: string[] }): Pro
       ...raceResults,
     ];
   } catch (err) {
+    // EVALUABILITY: an internal error here (a bug in any one of ~37 sub-checks)
+    // currently discards every other sub-check's result too — returning [] would
+    // report a full business-logic pass when the truth is this check never ran.
     console.warn("[checkBusinessLogic] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));
-    return [];
+    return [{
+      id: "EVAL_UNAVAILABLE_BUSINESS_LOGIC",
+      title: "Business-logic checks could not complete — refund/inventory/race-condition status is UNKNOWN, not clean",
+      severity: "HIGH",
+      evidence: [sanitizeErrorMessage(err instanceof Error ? err.message : String(err))],
+      requiredActions: [
+        "Check the gate logs for the underlying error and file a bug if it reproduces.",
+        "Do not treat this run as evidence that refund, inventory, payment, or race-condition logic is free of the issues this module checks for."
+      ]
+    }];
   }
 }

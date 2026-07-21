@@ -8,6 +8,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { join } from "node:path";
 import { GateResult, Finding } from "./result.js";
+import { getWorkspaceRoot } from "../repo/workspace.js";
 
 // ---------------------------------------------------------------------------
 // HMAC integrity helpers — TM-013 fix
@@ -46,7 +47,7 @@ function verifyBaselineHmac(json: string, stored: string, key: string): boolean 
 }
 
 const execFileAsync = promisify(execFile);
-const BASELINE_DIR = join(process.cwd(), ".mcp", "baselines");
+const baselineDir = (): string => join(getWorkspaceRoot(), ".mcp", "baselines");
 
 async function ensureDir(dir: string): Promise<void> {
   try {
@@ -80,7 +81,7 @@ export type BaselineDiff = {
 export async function getCommitHash(): Promise<string> {
   try {
     const { stdout } = await execFileAsync("git", ["rev-parse", "HEAD"], {
-      cwd: process.cwd(),
+      cwd: getWorkspaceRoot(),
       timeout: 5000
     });
     return stdout.trim() || "unknown";
@@ -104,7 +105,7 @@ export async function saveBaseline(
   result: GateResult,
   commitHash: string
 ): Promise<void> {
-  await ensureDir(BASELINE_DIR);
+  await ensureDir(baselineDir());
 
   const payload = { runId, commitHash, savedAt: new Date().toISOString(), result };
   const json = JSON.stringify(payload, null, 2);
@@ -117,8 +118,8 @@ export async function saveBaseline(
 
   // Write to temp file then rename (atomic)
   const safehash = commitHash.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64);
-  const targetPath = join(BASELINE_DIR, `${safehash}.json`);
-  const latestPath = join(BASELINE_DIR, "latest.json");
+  const targetPath = join(baselineDir(), `${safehash}.json`);
+  const latestPath = join(baselineDir(), "latest.json");
   const tmpPath = `${targetPath}.${randomBytes(8).toString("hex")}.tmp`;
 
   try {
@@ -161,14 +162,14 @@ interface BaselineEnvelope {
  * rejected — the gate will run without a baseline rather than trust forged data.
  */
 export async function loadBaseline(commitHash?: string): Promise<GateResult | null> {
-  await ensureDir(BASELINE_DIR);
+  await ensureDir(baselineDir());
 
   let filePath: string;
   if (commitHash) {
     const safehash = commitHash.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64);
-    filePath = join(BASELINE_DIR, `${safehash}.json`);
+    filePath = join(baselineDir(), `${safehash}.json`);
   } else {
-    filePath = join(BASELINE_DIR, "latest.json");
+    filePath = join(baselineDir(), "latest.json");
   }
 
   try {

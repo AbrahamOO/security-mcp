@@ -1,5 +1,6 @@
 import { readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
+import { getWorkspaceRoot } from "./workspace.js";
 
 // Upper bound on the size of any single file the gate will read into memory.
 // A malicious target repo can otherwise ship multi-GB files (or one huge
@@ -7,10 +8,6 @@ import path from "node:path";
 // secret-scanner's global-regex passes. 10 MB comfortably covers real source,
 // lockfiles, and minified bundles while bounding blast radius. CWE-400 / CWE-789.
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
-
-function getWorkspaceRoot(): string {
-	return process.cwd();
-}
 
 function getWorkspacePrefix(root: string): string {
 	return root.endsWith(path.sep) ? root : root + path.sep;

@@ -21,7 +21,7 @@ import {
   writeFile,
   readdir
 } from "node:fs/promises";
-import { existsSync, readFileSync, writeFileSync, renameSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, renameSync, mkdirSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -30,6 +30,7 @@ import { updateReviewStep } from "../review/store.js";
 import { getChain, verifyChain, computeFindingsHash } from "./audit-chain.js";
 import { enforceCapabilityFloor } from "./capability-enforcer.js";
 import { sanitizeErrorMessage } from "../gate/result.js";
+import { getWorkspaceRoot } from "../repo/workspace.js";
 import type {
   AgentName,
   AgentRunManifest,
@@ -94,7 +95,7 @@ const MAX_NPM_BYTES      = 64  * 1024;  // 64 KB
 // All SKILL.md sections that must be covered per run.
 // §EDGE-CASE-MATRIX, §TEMPORAL-THREATS, §DETECTION-GAP, §ZERO-MISS-MANDATE are the
 // four universal sections added to every skill; coverage verification tracks them too.
-const SKILL_MD_SECTIONS = [
+export const SKILL_MD_SECTIONS = [
   "§1", "§2", "§3", "§4", "§5", "§6", "§7", "§8",
   "§9", "§10", "§11", "§12", "§13", "§14", "§15",
   "§16", "§17", "§18", "§19", "§20", "§21", "§22",
@@ -191,7 +192,7 @@ function sanitizeStringArray(arr: string[] | undefined): string[] {
  * through unchanged. cloudProvider is re-narrowed to its literal union after
  * sanitization. Unknown extra string arrays (e.g. aptGroups) are also sanitized.
  */
-function sanitizeStackContext(ctx: StackContext): StackContext {
+export function sanitizeStackContext(ctx: StackContext): StackContext {
   const cloudProvider = sanitizeStringArray(ctx.cloudProvider as unknown as string[])
     .map((c) => (["aws", "gcp", "azure"].includes(c) ? c : "unknown")) as StackContext["cloudProvider"];
 
@@ -226,7 +227,7 @@ function agentRunDir(agentRunId: string): string {
   if (!SAFE_AGENT_RUN_ID_RE.test(agentRunId)) {
     throw new Error(`Invalid agentRunId "${agentRunId}"`);
   }
-  return join(process.cwd(), AGENT_RUNS_DIR, agentRunId);
+  return join(getWorkspaceRoot(), AGENT_RUNS_DIR, agentRunId);
 }
 
 function manifestPath(agentRunId: string): string {
@@ -261,7 +262,7 @@ function defaultAgentRecord(): AgentRecord {
  * relevant technology is actually detected — this avoids spawning and loading
  * skill files for surfaces that don't exist in the project.
  */
-function buildInitialAgents(stackContext: StackContext): Record<AgentName, AgentRecord> {
+export function buildInitialAgentNames(stackContext: StackContext): AgentName[] {
   const hasAWS   = stackContext.cloudProvider.includes("aws");
   const hasGCP   = stackContext.cloudProvider.includes("gcp");
   const hasAzure = stackContext.cloudProvider.includes("azure");
@@ -318,8 +319,13 @@ function buildInitialAgents(stackContext: StackContext): Record<AgentName, Agent
     );
   }
 
+  return names;
+}
+
+function buildInitialAgents(stackContext: StackContext, names?: AgentName[]): Record<AgentName, AgentRecord> {
+  const list = names ?? buildInitialAgentNames(stackContext);
   const record = {} as Record<AgentName, AgentRecord>;
-  for (const name of names) {
+  for (const name of list) {
     record[name] = defaultAgentRecord();
   }
   return record;
@@ -379,14 +385,18 @@ export const CreateAgentRunSchema = z.object({
     hasPayments: z.boolean().default(false),
     packageManagers: z.array(z.string()).default([]),
     ciPlatform: z.array(z.string()).default([])
-  }).describe("Tech stack context derived from project scan.")
+  }).describe("Tech stack context derived from project scan."),
+  agentNames: z.array(z.string()).optional().describe(
+    "Optional pre-filtered specialist roster (security.fortify uses this for scoped runs). " +
+    "Omit for the full auto-selected roster."
+  )
 });
 
 export async function createAgentRun(args: z.infer<typeof CreateAgentRunSchema>): Promise<{
   agentRunId: string;
   manifestPath: string;
 }> {
-  const { runId, scope, internetPermitted, stackContext } = args;
+  const { runId, scope, internetPermitted, stackContext, agentNames } = args;
   // Use 16 bytes of CSPRNG entropy (not Date.now()) so the ID cannot be
   // predicted or brute-forced even when runId is known.
   const agentRunId = createHash("sha256")
@@ -402,6 +412,12 @@ export async function createAgentRun(args: z.infer<typeof CreateAgentRunSchema>)
   // and BEFORE it reaches any spawned-agent prompt.
   const safeStackContext = sanitizeStackContext(stackContext as StackContext);
 
+  // A caller-supplied roster (security.fortify's scoped runs) is intersected against
+  // the real agent universe so an invalid or out-of-band name can never poison the
+  // manifest — only names buildInitialAgentNames would itself produce are honored.
+  const validAgentNames = new Set(buildInitialAgentNames(safeStackContext));
+  const filteredAgentNames = agentNames?.filter((n): n is AgentName => validAgentNames.has(n as AgentName));
+
   const manifest: AgentRunManifest = {
     agentRunId,
     runId,
@@ -411,7 +427,7 @@ export async function createAgentRun(args: z.infer<typeof CreateAgentRunSchema>)
     internetPermitted,
     stackContext: safeStackContext,
     scope,
-    agents: buildInitialAgents(safeStackContext)
+    agents: buildInitialAgents(safeStackContext, filteredAgentNames && filteredAgentNames.length > 0 ? filteredAgentNames : undefined)
   };
 
   await writeManifest(manifest);
@@ -952,6 +968,46 @@ function sanitizeSkillContent(content: string, skillName: string): string {
   return clean.join("\n");
 }
 
+/**
+ * Read a bundled SKILL.md verbatim from the installed package (the trust root).
+ * Returns null when the skill is not bundled.
+ *
+ * No sanitization is applied here: bundled skills ship inside the package the
+ * consumer already trusts, and stripping lines (e.g. the orchestrator's legitimate
+ * `orchestration.ensure_skill` references) would corrupt the agent persona. Content
+ * sanitization is reserved for the untrusted network-download path in ensureSkill.
+ * Callers (MCP skill:// resources, agent prompts, ensureSkill) rely on the full,
+ * unaltered persona so every agent runs at full capability on every client.
+ */
+export function readBundledSkillBody(skillName: string): string | null {
+  // CWE-22: validate skillName before using it in a file path
+  if (!SAFE_SKILL_NAME_RE.test(skillName)) {
+    throw new Error(`Invalid skill name "${skillName}"`);
+  }
+  const bundledPath = join(BUNDLED_SKILLS_DIR, skillName, "SKILL.md");
+  if (!existsSync(bundledPath)) return null;
+  return readFileSync(bundledPath, "utf-8");
+}
+
+/**
+ * List every bundled agent/skill name (directories under the package `skills/` dir
+ * that contain a SKILL.md). Used to expose the full agent catalog over MCP so any
+ * host can discover and load the roster.
+ */
+export function listBundledSkills(): string[] {
+  try {
+    return readdirSync(BUNDLED_SKILLS_DIR)
+      .filter(
+        (name) =>
+          SAFE_SKILL_NAME_RE.test(name) &&
+          existsSync(join(BUNDLED_SKILLS_DIR, name, "SKILL.md"))
+      )
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
 export const EnsureSkillSchema = z.object({
   skillName: z.string().describe("Name of the skill to ensure is installed (e.g. 'threat-modeler')."),
   version: z.string().optional().describe("Required version; re-downloads if installed version differs.")
@@ -960,7 +1016,8 @@ export const EnsureSkillSchema = z.object({
 export async function ensureSkill(args: z.infer<typeof EnsureSkillSchema>): Promise<{
   downloaded: boolean;
   version: string;
-  path: string;
+  path?: string;
+  content: string;
 }> {
   const { skillName, version: requiredVersion } = args;
 
@@ -981,23 +1038,31 @@ export async function ensureSkill(args: z.infer<typeof EnsureSkillSchema>): Prom
     (!requiredVersion || installed.version === requiredVersion);
 
   if (alreadyCurrent) {
-    return { downloaded: false, version: installed.version, path: skillPath };
+    // Prefer the verbatim bundled persona; fall back to the on-disk copy.
+    const body = readBundledSkillBody(skillName) ?? readFileSync(skillPath, "utf-8");
+    return { downloaded: false, version: installed.version, path: skillPath, content: body };
   }
 
   // TRUST ROOT: prefer the skill bundled inside the installed package over the network.
   // No download, no manifest, no TOFU — the consumer already trusts the installed package.
-  const bundledPath = join(BUNDLED_SKILLS_DIR, skillName, "SKILL.md");
-  if (existsSync(bundledPath)) {
-    const sanitized = sanitizeSkillContent(readFileSync(bundledPath, "utf-8"), skillName);
-    mkdirSync(dirname(skillPath), { recursive: true, mode: 0o700 });
-    const tmp = `${skillPath}.tmp.${process.pid}`;
-    writeFileSync(tmp, sanitized, { encoding: "utf-8", mode: 0o600 });
-    renameSync(tmp, skillPath);
+  // The full body is always returned so any MCP host (Claude Code, Cursor, VS Code,
+  // Windsurf, Codex) can adopt the persona directly. The ~/.claude/skills materialization
+  // is Claude-Code ergonomics only, so it runs solely when that layout exists.
+  const bundledBody = readBundledSkillBody(skillName);
+  if (bundledBody !== null) {
     const bundledVersion = requiredVersion ?? "bundled";
-    versions[skillName] = { version: bundledVersion, installedAt: new Date().toISOString(), path: skillPath };
-    mkdirSync(dirname(SKILL_VERSIONS_PATH), { recursive: true, mode: 0o700 });
-    writeFileSync(SKILL_VERSIONS_PATH, JSON.stringify(versions, null, 2) + "\n", { encoding: "utf-8", mode: 0o600 });
-    return { downloaded: false, version: bundledVersion, path: skillPath };
+    let writtenPath: string | undefined;
+    if (existsSync(join(homedir(), ".claude"))) {
+      mkdirSync(dirname(skillPath), { recursive: true, mode: 0o700 });
+      const tmp = `${skillPath}.tmp.${process.pid}`;
+      writeFileSync(tmp, bundledBody, { encoding: "utf-8", mode: 0o600 });
+      renameSync(tmp, skillPath);
+      versions[skillName] = { version: bundledVersion, installedAt: new Date().toISOString(), path: skillPath };
+      mkdirSync(dirname(SKILL_VERSIONS_PATH), { recursive: true, mode: 0o700 });
+      writeFileSync(SKILL_VERSIONS_PATH, JSON.stringify(versions, null, 2) + "\n", { encoding: "utf-8", mode: 0o600 });
+      writtenPath = skillPath;
+    }
+    return { downloaded: false, version: bundledVersion, path: writtenPath, content: bundledBody };
   }
 
   // Fallback (skill not bundled): fetch from the manifest with mandatory integrity check.
@@ -1057,7 +1122,7 @@ export async function ensureSkill(args: z.infer<typeof EnsureSkillSchema>): Prom
   mkdirSync(dirname(SKILL_VERSIONS_PATH), { recursive: true, mode: 0o700 });
   writeFileSync(SKILL_VERSIONS_PATH, JSON.stringify(versions, null, 2) + "\n", { encoding: "utf-8", mode: 0o600 });
 
-  return { downloaded: true, version: entry.version, path: skillPath };
+  return { downloaded: true, version: entry.version, path: skillPath, content: sanitized };
 }
 
 // 5. read_agent_memory

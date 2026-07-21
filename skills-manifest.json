@@ -1,12 +1,12 @@
 {
-  "version": "1.6.0",
-  "updatedAt": "2026-06-16",
+  "version": "1.6.1",
+  "updatedAt": "2026-07-16",
   "baseUrl": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills",
   "skills": {
     "ciso-orchestrator": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/ciso-orchestrator/SKILL.md",
-      "description": "Master coordinator. Spins up all 39 specialist agents across Phase 1 and Phase 2. User-invocable via /ciso-orchestrator.",
+      "description": "Master coordinator. Spins up all 39 specialist agents across Phase 1 and Phase 2. User-invocable via /ciso-orchestrator. For a scoped \"lock down X\" ask, calls security.fortify first for the pre-scoped roster.",
       "userInvocable": true,
       "phase": 0,
       "subAgents": [
@@ -32,7 +32,7 @@
         "industry vertical APT matching",
         "ghost agent escalation"
       ],
-      "sha256": "2b813e2776b52cd528bee38d572bce54bf7d729cef61ed7d096812024e11ac61"
+      "sha256": "b8b0b8c33f29a96691b81477d216905b7fa5755207c29628b13d6201862cc0d6"
     },
     "threat-modeler": {
       "version": "1.0.0",
@@ -364,7 +364,7 @@
         "CloudTrail blind spots",
         "cost-based DoS via Lambda amplification"
       ],
-      "sha256": "4e15e33dc153ea308ff99dee2f29bf3c3684b7b6df88fc5da704e493afa8230b"
+      "sha256": "1207578e501f9040d3486465d7841bb837fda83fc6378a9024aa405f6ab09acd"
     },
     "gcp-penetration-tester": {
       "version": "1.0.0",
@@ -389,7 +389,7 @@
         "BigQuery data exfiltration via authorized view",
         "GCP cost-based DoS"
       ],
-      "sha256": "c038d0a12ba3b801707d2875bd84a856832cab86e29a177b1f69178c256a8be0"
+      "sha256": "9a2876d3024fdbc3e68dfcbd564703e8972b42490e9323d87ee6b6c49e58cbff"
     },
     "azure-penetration-tester": {
       "version": "1.0.0",
@@ -415,7 +415,7 @@
         "Power Automate overprivileged connectors",
         "Teams webhook C2 channel"
       ],
-      "sha256": "d848537d904f40805830a7ae3b96e651ce1f8a3d3ed6702b1a5039dd39bf41fe"
+      "sha256": "e735cca72449b1c2e086c97e636dd02b6af43b86a674ce9e1e3f2beb650ae2e8"
     },
     "k8s-container-escaper": {
       "version": "1.0.0",
@@ -1093,7 +1093,7 @@
     "senior-security-engineer": {
       "version": "1.0.0",
       "url": "https://raw.githubusercontent.com/AbrahamOO/security-mcp/main/skills/senior-security-engineer/SKILL.md",
-      "description": "Active fortification engineer. 90% fixing, 10% advisory. Hardens code, APIs, mobile, cloud, and AI/LLMs. Delegates to ciso-orchestrator for full parallel review.",
+      "description": "Active fortification engineer. 90% fixing, 10% advisory. Hardens code, APIs, mobile, cloud, and AI/LLMs. Delegates to ciso-orchestrator for full parallel review. Calls security.fortify first on plain \"fortify\"/\"lock down X\" requests.",
       "userInvocable": true,
       "phase": 0,
       "subAgents": [
@@ -1111,7 +1111,7 @@
         "post-quantum readiness",
         "AI-assisted adversary simulation"
       ],
-      "sha256": "454e7491d88d5792e6f41629b20a5625082f7c569cf4e916bd8e13aeaaf18d55"
+      "sha256": "311b8064e6a049c8eb292c130733cdddb070e7fbf9f23be0cb204aba606a968e"
     },
     "linddun-privacy-analyst": {
       "version": "1.0.0",

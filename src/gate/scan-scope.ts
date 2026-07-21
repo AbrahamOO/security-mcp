@@ -1,4 +1,5 @@
 import fg from "fast-glob";
+import { getWorkspaceRoot } from "../repo/workspace.js";
 
 /**
  * Centralised scan-scoping for every gate check.
@@ -66,10 +67,20 @@ export function scanIgnoreGlobs(callerIgnore: readonly string[] = []): string[] 
  * that the global and project-configured ignore globs are always merged into the
  * caller's options. Check modules import this as `fg`, so existing `fg(...)`
  * call sites are unchanged.
+ *
+ * `cwd` defaults to the current workspace root rather than fast-glob's own
+ * `process.cwd()` default. Without this, file DISCOVERY would resolve against the
+ * process directory while file READS (readFileSafe) resolve against the
+ * workspace root — so under `withWorkspace()` a check would glob one tree and read
+ * from another. A caller that passes an explicit `cwd` still wins.
  */
 export function scopedFg(
   patterns: string | string[],
   options: fg.Options = {}
 ): Promise<string[]> {
-  return fg(patterns, { ...options, ignore: scanIgnoreGlobs(options.ignore ?? []) });
+  return fg(patterns, {
+    ...options,
+    cwd: options.cwd ?? getWorkspaceRoot(),
+    ignore: scanIgnoreGlobs(options.ignore ?? [])
+  });
 }

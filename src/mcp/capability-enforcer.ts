@@ -63,12 +63,13 @@ import {
   type CapabilityTier
 } from "./model-router.js";
 import { verifySkillCoverage } from "./orchestration.js";
+import { getWorkspaceRoot } from "../repo/workspace.js";
 
 // ---------------------------------------------------------------------------
 // Constants — kept in lock-step with orchestration.ts
 // ---------------------------------------------------------------------------
 
-// Same on-disk layout orchestration.ts uses. We resolve relative to process.cwd()
+// Same on-disk layout orchestration.ts uses. We resolve relative to getWorkspaceRoot()
 // exactly like orchestration.agentRunDir so both modules read the same run state.
 const AGENT_RUNS_DIR = join(".mcp", "agent-runs");
 
@@ -292,7 +293,7 @@ function agentRunDir(agentRunId: string): string {
   if (!SAFE_AGENT_RUN_ID_RE.test(agentRunId)) {
     throw new Error(`Invalid agentRunId "${agentRunId}"`);
   }
-  return join(process.cwd(), AGENT_RUNS_DIR, agentRunId);
+  return join(getWorkspaceRoot(), AGENT_RUNS_DIR, agentRunId);
 }
 
 function manifestPath(agentRunId: string): string {

@@ -1,13 +1,14 @@
 import { Finding, sanitizeErrorMessage } from "../result.js";
+import { CONFIG } from "../../config.js";
 import { scopedFg as fg } from "../scan-scope.js";
 import { readFileSafe } from "../../repo/fs.js";
+import { getWorkspaceRoot } from "../../repo/workspace.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { readFile } from "node:fs/promises";
 import { checkActiveExploitation } from "../threat-intel.js";
 import { join } from "node:path";
 
-const THREAT_INTEL_CACHE_DIR = join(process.cwd(), ".mcp", "threat-intel");
+const threatIntelCacheDir = (): string => join(getWorkspaceRoot(), ".mcp", "threat-intel");
 
 const execFileAsync = promisify(execFile);
 
@@ -78,7 +79,7 @@ async function checkDependencyConfusion(): Promise<Finding[]> {
 	try {
 		let pkgRaw: string;
 		try {
-			pkgRaw = await readFile("package.json", "utf8");
+			pkgRaw = await readFileSafe("package.json");
 		} catch {
 			return [];
 		}
@@ -96,7 +97,7 @@ async function checkDependencyConfusion(): Promise<Finding[]> {
 		// Read .npmrc for private registry scope routing
 		let npmrcContent = "";
 		try {
-			npmrcContent = await readFile(".npmrc", "utf8");
+			npmrcContent = await readFileSafe(".npmrc");
 		} catch {
 			// .npmrc absent
 		}
@@ -242,7 +243,7 @@ async function checkNpmProvenance(): Promise<{ findings: Finding[] }> {
 
 		// 2. OpenSSF Scorecard — check all prod deps and CI-executed dev deps, up to 20 total
 		try {
-			const pkgRaw = await readFile("package.json", "utf8");
+			const pkgRaw = await readFileSafe("package.json");
 			const pkg = JSON.parse(pkgRaw) as {
 				dependencies?: Record<string, string>;
 				devDependencies?: Record<string, string>;
@@ -279,7 +280,7 @@ async function checkNpmProvenance(): Promise<{ findings: Finding[] }> {
 
 			// CWE-200: allow operators of private repos to disable all third-party
 			// network egress (scorecard/EPSS/registry lookups) with SECURITY_OFFLINE.
-			const offline = process.env["SECURITY_OFFLINE"] === "1" || process.env["SECURITY_OFFLINE"] === "true";
+			const offline = CONFIG.offline;
 
 			for (const dep of (offline ? [] : depsToCheck)) {
 				const score = await fetchScorecardScore(dep);
@@ -340,7 +341,6 @@ export async function checkDependencies(_: { changedFiles: string[] }): Promise<
 				"Pin versions and enable dependency scanning in CI."
 			]
 		});
-		return findings;
 	}
 
 	// Basic check: ensure package.json exists and is valid JSON
@@ -459,6 +459,11 @@ function buildThreatIntelFindings(intel: Awaited<ReturnType<typeof checkActiveEx
 }
 
 async function checkCveExploitation(): Promise<Finding[]> {
+	// SECURITY_OFFLINE is an intentional opt-out of network egress (npm audit calls
+	// the npm registry) — that must map to "not applicable", not to the same
+	// EVAL_UNAVAILABLE_NPM_AUDIT finding an unexpected failure would produce.
+	const offline = CONFIG.offline;
+	if (offline) return [];
 	try {
 		let stdout: string;
 		try {
@@ -472,20 +477,69 @@ async function checkCveExploitation(): Promise<Finding[]> {
 			stdout = (err as { stdout?: string })?.stdout ?? "";
 		}
 
-		if (!stdout) return [];
+		// EVALUABILITY: empty stdout means `npm audit` produced no output at all — the
+		// binary is missing, the command timed out, or it crashed before writing JSON.
+		// That's "the dependency audit could not run", not "zero vulnerabilities" (a
+		// clean audit still writes `{"vulnerabilities":{}}`), so it must not silently
+		// fall through to the same [] a genuinely-clean run would return.
+		if (!stdout) {
+			return [{
+				id: "EVAL_UNAVAILABLE_NPM_AUDIT",
+				title: "Dependency vulnerability audit could not run — CVE/exploit status is UNKNOWN, not clean",
+				severity: "HIGH",
+				evidence: ["`npm audit --json` produced no output (npm missing, timed out, or crashed before writing a report)."],
+				requiredActions: [
+					"Ensure npm is installed and on PATH in the environment running the gate.",
+					"Run `npm audit --json` manually to confirm it completes and produces valid output.",
+					"Do not treat this run as evidence that dependencies are free of known vulnerabilities."
+				]
+			}];
+		}
 
 		let audit: { vulnerabilities?: Record<string, NpmAuditVuln> };
 		try {
 			audit = JSON.parse(stdout) as { vulnerabilities?: Record<string, NpmAuditVuln> };
 		} catch {
-			return [];
+			return [{
+				id: "EVAL_UNAVAILABLE_NPM_AUDIT",
+				title: "Dependency vulnerability audit produced unparseable output — CVE/exploit status is UNKNOWN, not clean",
+				severity: "HIGH",
+				evidence: ["`npm audit --json` returned output that failed to parse as JSON."],
+				requiredActions: [
+					"Run `npm audit --json` manually to see the raw output and diagnose the parse failure.",
+					"Do not treat this run as evidence that dependencies are free of known vulnerabilities."
+				]
+			}];
 		}
 
 		const cveIds = extractCveIds(audit);
 		if (cveIds.length === 0) return [];
 
-		const intel = await checkActiveExploitation(cveIds, THREAT_INTEL_CACHE_DIR);
-		if (intel.failed) return [];
+		const intel = await checkActiveExploitation(cveIds, threatIntelCacheDir());
+		if (intel.failed) {
+			// EVALUABILITY (do NOT fail open): the dependency audit found CVEs, but the
+			// live exploit-intelligence lookup (CISA KEV / EPSS) could not complete —
+			// network failure, rate limit, or an unreachable endpoint. Returning [] here
+			// would report "no actively-exploited CVEs" when the truth is "unknown",
+			// silently converting a coverage gap into a clean result. Emit an explicit
+			// unavailability finding instead. (SECURITY_OFFLINE=1 does NOT reach this
+			// branch — checkActiveExploitation returns failed:false when offline, which
+			// is the correct "not applicable, by operator choice" path.)
+			return [{
+				id: "EVAL_UNAVAILABLE_THREAT_INTEL",
+				title: "Active-exploitation check could not complete — CVE exploit status is UNKNOWN, not clean",
+				severity: "HIGH",
+				evidence: [
+					`${cveIds.length} CVE(s) from the dependency audit were not checked against CISA KEV / EPSS.`,
+					"The threat-intel lookup failed (network error, rate limit, or unreachable endpoint)."
+				],
+				requiredActions: [
+					"Re-run the gate with network access so CISA KEV and EPSS can be queried, or",
+					"Set SECURITY_OFFLINE=1 to intentionally skip live threat intel (findings will not claim exploit status either way).",
+					"Do not treat this run as evidence that the audited CVEs are not actively exploited."
+				]
+			}];
+		}
 
 		return buildThreatIntelFindings(intel);
 	} catch (err) {
@@ -618,7 +672,7 @@ async function checkTransitiveDependencies(): Promise<Finding[]> {
 
 		// ── npm package-lock.json ──────────────────────────────────────────────
 		try {
-			const lockRaw = await readFile("package-lock.json", "utf8");
+			const lockRaw = await readFileSafe("package-lock.json");
 			let lock: { packages?: Record<string, LockfilePackage> };
 			try {
 				lock = JSON.parse(lockRaw) as { packages?: Record<string, LockfilePackage> };
@@ -637,7 +691,7 @@ async function checkTransitiveDependencies(): Promise<Finding[]> {
 		// ── yarn.lock ──────────────────────────────────────────────────────────
 		if (!lockfileFound) {
 			try {
-				const yarnRaw = await readFile("yarn.lock", "utf8");
+				const yarnRaw = await readFileSafe("yarn.lock");
 				const result = scanYarnLockForMaliciousScripts(yarnRaw);
 				scriptPkgs = result.scriptPkgs;
 				maliciousScriptPkgs = result.maliciousScriptPkgs;
@@ -651,7 +705,7 @@ async function checkTransitiveDependencies(): Promise<Finding[]> {
 		// ── pnpm-lock.yaml ─────────────────────────────────────────────────────
 		if (!lockfileFound) {
 			try {
-				const pnpmRaw = await readFile("pnpm-lock.yaml", "utf8");
+				const pnpmRaw = await readFileSafe("pnpm-lock.yaml");
 				const result = scanPnpmLockForMaliciousScripts(pnpmRaw);
 				scriptPkgs = result.scriptPkgs;
 				maliciousScriptPkgs = result.maliciousScriptPkgs;
@@ -719,7 +773,7 @@ async function checkTransitiveDependencies(): Promise<Finding[]> {
 async function checkIgnoreScripts(): Promise<Finding[]> {
 	let npmrcContent = "";
 	try {
-		npmrcContent = await readFile(".npmrc", "utf8");
+		npmrcContent = await readFileSafe(".npmrc");
 	} catch {
 		// .npmrc absent — treat as missing
 	}
@@ -823,7 +877,7 @@ async function checkTyposquatting(): Promise<Finding[]> {
 	try {
 		let pkgRaw: string;
 		try {
-			pkgRaw = await readFile("package.json", "utf8");
+			pkgRaw = await readFileSafe("package.json");
 		} catch {
 			return [];
 		}

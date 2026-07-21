@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { getWorkspaceRoot } from "../repo/workspace.js";
 
 // ---------------------------------------------------------------------------
 // Checklist types
@@ -74,11 +75,11 @@ async function ensureDir(dirPath: string): Promise<void> {
 }
 
 function reviewPath(runId: string): string {
-  return path.join(process.cwd(), REVIEW_DIR, `${runId}.json`);
+  return path.join(getWorkspaceRoot(), REVIEW_DIR, `${runId}.json`);
 }
 
 function reportPath(runId: string): string {
-  return path.join(process.cwd(), REPORT_DIR, `${runId}.attestation.json`);
+  return path.join(getWorkspaceRoot(), REPORT_DIR, `${runId}.attestation.json`);
 }
 
 async function writeJson(filePath: string, value: unknown): Promise<void> {
@@ -87,7 +88,7 @@ async function writeJson(filePath: string, value: unknown): Promise<void> {
 }
 
 function checklistPath(runId: string): string {
-  return path.join(process.cwd(), REVIEW_DIR, `${runId}-checklist.json`);
+  return path.join(getWorkspaceRoot(), REVIEW_DIR, `${runId}-checklist.json`);
 }
 
 async function readChecklistRaw(runId: string): Promise<ChecklistState | null> {

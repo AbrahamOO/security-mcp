@@ -3,6 +3,241 @@
 All notable changes to `security-mcp` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.6] - 2026-07-14
+
+### Hardening: truth-and-integrity pass (enterprise-grade foundation, phase 1)
+
+A ground-truth audit of the product's own claims found several places where the engine
+overstated what it verifies. This pass makes the code match the claims, or narrows the
+claims to match the code — nothing is left asserted-but-unproven.
+
+- **Compliance reports no longer default to "satisfied".** `security.generate_compliance_report`
+  previously marked every control satisfied whenever no adverse finding matched — so a call
+  with *no gate run at all* returned a fully "compliant" report (SOC 2: 9/9 satisfied from
+  zero evidence). A control is now `satisfied` only when a gate run completed the control's
+  required workflow steps with no adverse finding; absent a run every control is `unverified`.
+  Reports carry an explicit "partial mapping, not an audit" caveat. GDPR and HIPAA are
+  retracted from the offered frameworks (1–2 mapped controls could not represent them
+  honestly); SOC 2, PCI DSS 4.0, NIST 800-53, and ISO 27001 remain as partial control
+  mappings. Regression-tested.
+- **Threat-intel unavailability is no longer reported as "clean".** When the dependency
+  audit found CVEs but the live CISA KEV / EPSS lookup failed (network error, rate limit,
+  unreachable endpoint), the check silently returned no findings — turning "exploit status
+  unknown" into "no actively-exploited CVEs". It now emits a HIGH `EVAL_UNAVAILABLE_THREAT_INTEL`
+  coverage-gap finding. `SECURITY_OFFLINE=1` is unaffected (intentional skip, not a failure).
+- **`safeTool` error responses no longer leak filesystem paths (CWE-209).** The MCP error
+  wrapper returned the raw `err.message` — which for IO failures contains absolute paths —
+  despite a comment claiming it was sanitized. It now runs `sanitizeErrorMessage` for real.
+- **Attestation-chain downgrade hardened.** `verifyChain` classified a chain as signed via
+  `.some(hasHmac)`; it now requires `.every(hasHmac)` and fails closed when a key is
+  configured but any link is unsigned, so signatures cannot be stripped to reach the
+  hash-only pass path.
+- **Audit-log rotation retains history.** The single-rotation guard overwrote `.1` on every
+  rotation, silently destroying older audit segments; it now keeps `.1`–`.5`. The log path
+  is also resolved per-call against the workspace root instead of once at module load.
+- **Failed auth no longer kills the process.** Three failed attempts triggered
+  `process.exit(1)`, a self-inflicted DoS on the stdio session; it is now an
+  exponential-backoff lockout (1s→30s) that a legitimate operator recovers from.
+- **Internals:** workspace root is resolved through an `AsyncLocalStorage` seam
+  (`src/repo/workspace.ts`) instead of `process.cwd()` across 40+ sites, so the gate can
+  scan a target directory without `process.chdir` — which also fixes tests polluting the
+  repo's own `.mcp/baselines/latest.json` on every run. The parallel `CHECK_NAMES` array was
+  replaced by a single `CHECKS` registry co-locating each check's name, gate, and runner, so
+  a crash can no longer be misattributed to the wrong module. `GateResult.scope.surfaces`
+  now declares the `agentic` surface it already carried.
+- **First-ever measured false-positive rate.** A new per-rule test corpus
+  (`src/tests/corpus/`, one file per check module, 507 true-positive/true-negative cases
+  across all 35 modules) is now part of the test suite and reports `tpRate`/`fpRate` to
+  `.mcp/reports/rule-quality.json` on every run. Triaging the first real run (which started
+  at 40 failures) found and fixed real detection-engine defects, not just corpus mistakes:
+  - `searchRepo`'s file-discovery glob was `**/*.*`, which silently excludes every
+    extensionless file — `Dockerfile`, `Makefile`, `Jenkinsfile`, etc. Every Docker-deep rule
+    gated on `isDockerfile()` was unreachable on a conventionally-named `Dockerfile`. Fixed to
+    `**/*`.
+  - `checkDependencies` emitted `LOCKFILE_MISSING` and returned immediately, skipping
+    typosquat, dependency-confusion, suspicious-version, CVE, maintainer-risk,
+    git-protocol-pinning, local-path-override, and scorecard checks entirely whenever a
+    lockfile was absent — a realistic, common state, not an edge case. It now keeps running
+    the rest of the checks.
+  - `ai-redteam.ts`'s `isBinaryFile()` read files via a bare relative path instead of one
+    resolved against the workspace root — a second, independent instance of the Wave 0
+    `process.chdir()` regression that the original sweep missed. Every file was silently
+    treated as binary and skipped.
+  - `supply-chain-deep.ts`'s postinstall-network-request regex required the network keyword
+    to be the literal last token before the closing quote, so it missed the single most
+    common attack shape (`"curl ... | bash"`) entirely.
+  - `graphql.ts`'s GraphQL-error-leak check matched the bare substring `stacktrace` inside
+    the property name `includeStacktraceInErrorResponses`, so it fired even when that flag
+    was correctly set to `false` — the recommended remediation triggered its own violation.
+  - `secrets.ts`'s container-registry-password rule used an unbounded `\s+` after
+    `--password-stdin` (the safe form), letting the match span a newline and swallow the
+    next line's leading token as a fake password value.
+  - `business-logic.ts`'s refund-without-purchase-check rule matched `refund(` with no
+    guard against function *declarations* — `async function refund(orderId, order)` itself
+    false-fired as an unguarded call site, independent of how the real call inside the
+    function body was written.
+  - `ai.ts`'s PII-in-prompt rule had no bound between the template-literal match and the
+    nearby prompt-key reference, so it could span the entire rest of a file — matching a
+    `messages` variable near the top against an unrelated PII substring inside a completely
+    different, later function (e.g. a masking helper) with no real data flow between them.
+  All 507 cases pass after these fixes: `tpRate=1.00`, `fpRate=0.00`. A follow-up adversarial
+  review of the negative samples across a 15-module, ~210-case sample found no gamed or
+  cosmetic negatives — each implements the rule's own documented remediation.
+- **CI self-scan exceptions file shrunk from 16 entries / 452 ids to 13 entries / 282 ids.**
+  A full non-diff-scoped self-scan (every git-tracked, non-ignored file, matching CI's own
+  invocation exactly) found that two entries — `self-scan-fixtures-and-cloud-controls` (208
+  ids) and `self-scan-agentic-instruction-and-ai-governance` (14 ids) — were entirely
+  redundant: their stated justification (`fixtures/`, `skills/*/SKILL.md`) is now handled
+  outright by CI's `SECURITY_GATE_IGNORE`, which excludes those paths from scanning
+  regardless of the exceptions file. Both were deleted. A third, `self-scan-v15-v16-fixtures-
+  and-teaching-skills`, was likewise deleted after confirming its 11 still-live ids no longer
+  reproduce for the reason stated (the same ignore-list) but do reproduce via the new Wave 2
+  corpus fixtures — moved to `self-scan-rule-corpus` with corrected justification rather than
+  left under an inaccurate one. Five smaller entries had their genuinely stale ids (confirmed
+  gone from a raw, unsuppressed full scan) removed in place. Net result: same self-scan
+  outcome (`PASS`, 7 non-blocking MEDIUM findings, identical before and after), with no
+  finding_id kept for a reason that no longer holds.
+- **Claims registry (`claims/registry.json` + `node scripts/verify-claims.mjs --strict`,
+  wired into CI).** Every quantitative or guarantee-style claim security-mcp's own docs make
+  about itself now has a probe or test that proves or disproves it, run on every push. 25
+  claims registered: 15 QUANTITY (headline numbers — 1,002 cloud rules, 888 remediation
+  templates, 91 skills, 40 check modules, 39 named agents, etc. — each checked against a live
+  probe that reads the actual built artifact, never a cached value), 2 COVERAGE (set-equality
+  checks, not just count-equality), 2 GUARANTEE (one adversarial: an unsigned policy with
+  `severity_block:[]` plus a known CRITICAL finding must still FAIL; one delegated to the
+  existing e2e compliance-truth test), and 3 SCOPED (claims rewritten to what's actually true,
+  with the walk-back recorded in the registry). A `--strict` unregistered-number scan also
+  checks README/WIKI/ARCHITECTURE for any `<N> (rules|skills|templates|...)` mention that
+  isn't backed by a registered claim, so a new number can't enter those docs unchecked.
+  Building this surfaced and fixed four real bugs, not just doc drift: (1) the "888
+  templates / 100% coverage" claim was true by count but not by set — `EVAL_UNAVAILABLE_
+  THREAT_INTEL` (a live rule) had no template, and `DEP_UNPINNED_VERSION` (a template) had
+  no live rule; both fixed in `remediation-map.ts`. (2) 3 of 91 skill manifest entries
+  (`aws/gcp/azure-penetration-tester`) had a stale `sha256` that no longer matched their
+  SKILL.md content — a real integrity-check failure waiting to happen on the remote-fetch
+  skill-loading path; regenerated. (3) `orchestration.verify_skill_coverage`'s tool
+  description and README both said "24" or "§0-§24" sections; the enforced set is actually
+  28 (24 numbered + 4 universal) — `SKILL_MD_SECTIONS` is now exported so this can never
+  silently drift again. (4) A README diagram's alt text said "38 checks"; the live `CHECKS`
+  registry has 40. The "90% fixing is a deterministic property of the engine" claim in
+  WIKI.md and ARCHITECTURE.md, and README's unconditional "audit trail cannot be silently
+  rewritten," were rewritten to what's true (SCOPED) rather than left overstated — see the
+  registry's `rewrite.reason` on each for the full explanation.
+- **Fail-open sweep (Track E): 12 more evaluability gaps found and fixed.** A full audit
+  of all 34 check modules for the "catch → return `[]`" pattern (three parallel reviews,
+  ~300 catch sites examined) found 12 additional sites — beyond the
+  `EVAL_UNAVAILABLE_THREAT_INTEL` fix already shipped — where a whole check's evidence
+  source becoming unavailable silently produced a "clean" result instead of surfacing the
+  gap: `checkCveExploitation`'s `npm audit` call (dependencies.ts, also newly threaded
+  through `SECURITY_OFFLINE`), the bundled cloud-controls ruleset failing to load
+  (cloud-controls.ts, now partial-degrades per-provider instead of losing everything),
+  all 5 external scanners' unreadable-output paths (scanners.ts: gitleaks, semgrep,
+  trivy, checkov, osv-scanner), nuclei DAST's missing-binary and failed-scan paths
+  (nuclei.ts — the module's own "scanner readiness will flag this" comment was false,
+  since nuclei was never in the default scanner config), a configured live target's
+  header/TLS probes failing (runtime.ts), and the two sites the original audit had
+  already named (`auth-deep.ts`, `business-logic.ts` — an internal error in any one of
+  ~40 or ~37 sub-checks was discarding every other sub-check's result too). Each gets a
+  new `EVAL_UNAVAILABLE_<NAME>` finding (HIGH) and a matching remediation template — the
+  remediation-template count moves from 888 to 900, keeping "100% detection-ID coverage"
+  exactly true rather than approximately true. Also rewrote the check-authoring "fail
+  safe" guidance in WIKI.md and ARCHITECTURE.md, which previously told new check authors
+  to unconditionally "return an empty array on any internal error" with no carve-out —
+  that wording is itself why this bug class kept getting introduced. Added a new
+  adversarial GUARANTEE test (`node scripts/verify-claims.mjs --strict`): forcing `npm
+  audit` to fail (empty PATH) must produce `EVAL_UNAVAILABLE_NPM_AUDIT`, not a silently
+  clean gate PASS.
+- **New `SECURITY_STRICT=1` mode (Track C).** Every permissive default
+  (no MCP auth secret required, unsigned policy/audit chains allowed, live
+  third-party network egress permitted) is intentional for frictionless local use
+  — but there was previously no single switch to lock all of them down at once, and
+  no guarantee that a "strict" run wasn't quietly falling back to a weaker default
+  when a key was missing. `src/config.ts` computes a frozen `CONFIG` once at import
+  time: `SECURITY_STRICT=1` requires `SECURITY_POLICY_HMAC_KEY` and
+  `SECURITY_AUDIT_HMAC_KEY` for both the CLI gate and the MCP server, additionally
+  requires `SECURITY_MCP_SHARED_SECRET` for the MCP server (a CI gate run has no
+  session to authenticate a caller against, so that requirement is server-specific),
+  and forces `SECURITY_OFFLINE` on regardless of its own setting. If a required key
+  is absent, the process throws at startup and refuses to run rather than silently
+  proceeding with a weaker default. The three `SECURITY_OFFLINE` call sites
+  (threat-intel KEV/EPSS, dependency scorecard, npm audit) now read `CONFIG.offline`
+  instead of the raw environment variable directly, so the strict-mode override
+  actually reaches them. Verified with a new adversarial GUARANTEE test that spawns
+  a real child process with `SECURITY_STRICT=1` and no keys set and asserts it fails
+  at import time with the expected error — plus manual verification of the MCP
+  server's additional shared-secret requirement.
+- **Migrated the test suite to `node:test` (Track B).** `src/tests/run.ts`'s
+  hand-rolled `main()` — 13 async test functions each manually `await`-chained,
+  with `process.exit(1)` on the first thrown assertion — is now
+  `src/tests/legacy.test.ts`: the same 13 functions, unchanged, each registered
+  via `await test(name, fn)` in the identical order the old `main()` called them
+  in (several share fixture state through `cleanupFixtureReviewArtifacts()`
+  before/after, so the explicit sequential `await` preserves that ordering
+  guarantee rather than assuming `node:test`'s default scheduling would happen to
+  match). `npm test` is now `node --test --experimental-test-coverage
+  dist/tests` — zero new dependencies, and `--experimental-test-coverage` adds a
+  per-file coverage report the hand-rolled runner never had. All 13 tests
+  (507-case rule corpus included) verified passing after the migration, in the
+  same 13/13 shape as before. `scripts/verify-claims.mjs`'s delegated-GUARANTEE
+  path and every doc/exception-file reference to the old `src/tests/run.ts` /
+  `dist/tests/run.js` path updated to match.
+
+### Added: one-shot `security.fortify` — natural-language "lock down X" dispatch
+
+Plain requests like "fortify my codebase" or "lock down the forms on my website for
+highest security" previously had no single tool to call — the calling model had to already
+know to chain `start_review(auto_apply)` → `generate_remediations` → apply → re-verify,
+with no way to narrow either the file scope or the specialist team to a named surface.
+
+- New MCP tool `security.fortify` (`src/mcp/server.ts`) and matching `fortify` MCP prompt:
+  a single call that always auto-applies (no `remediationMode` question, no confirmation
+  gate), resolves a free-text `target` to concrete files via the existing repo-search
+  engine, and pre-selects the specialist agent team.
+- New module `src/mcp/fortify.ts`: agent selection is not a fixed feature-name table (users
+  name arbitrary surfaces — forms, a payment flow, an admin panel). Instead it's two axes —
+  a generic core app-security team (`threat-modeler`, `attack-navigator`,
+  `appsec-code-auditor`, `injection-specialist`, `auth-session-hacker`,
+  `business-logic-attacker`, `logic-race-fuzzer`, `serialization-memory-attacker`,
+  `privacy-flow-analyst`) dispatched for any named surface, plus domain-specific additions
+  gated on genuine technology signals (cloud, crypto, supply-chain, AI/LLM, mobile) rather
+  than on the feature's name.
+- `src/mcp/orchestration.ts`: `buildInitialAgents` split into an exported
+  `buildInitialAgentNames(stackContext)` plus a thin wrapper, so `orchestration.create_agent_run`
+  can accept an optional pre-filtered `agentNames` list (intersected against the real agent
+  universe before use) without changing behavior for existing callers that omit it.
+- Trigger wording added across `skills/senior-security-engineer/SKILL.md`,
+  `skills/ciso-orchestrator/SKILL.md`, `skills-manifest.json`, `README.md`, and
+  `client-templates/*` so plain "fortify"/"lock down X"/"harden to production grade"
+  requests reliably route to `security.fortify` on every MCP host, not just Claude Code.
+
+### Changed: `security.start_review` defaults to `auto_apply`
+
+Omitting `remediationMode` on `security.start_review` previously returned a
+`required_user_decision` question and did nothing until answered. It now defaults to
+`auto_apply` — fixes are written immediately as findings are discovered, matching the
+"90% fixing, 10% advisory" operating mandate this project already states elsewhere.
+`detection_only` remains fully supported as an explicit opt-out for a report-only run;
+`security.run_pr_gate`'s "should specialist agents apply the fixes?" prompt is unchanged
+and now only fires for callers who explicitly chose `detection_only`.
+
+**Migration:** pass `remediationMode: "detection_only"` explicitly if you relied on the old
+ask-first default to get a report without any file changes.
+
+### Fixed: stale/unpinned security-mcp installs silently degrading the CISO orchestrator
+
+`npx security-mcp` without a pinned version can resolve to a stale global install or npx
+cache entry, launching an old server missing the `orchestration.*` control plane tools.
+The ciso-orchestrator skill previously degraded silently to a deterministic-only run
+instead of surfacing this.
+
+- `security-mcp doctor` now detects a global install older than the running version
+  (flags `npm rm -g security-mcp`) and unpinned `npx security-mcp` launch entries across
+  Claude Code, Cursor, VS Code, and Windsurf configs (flags re-running the installer).
+- `ciso-orchestrator` SKILL.md adds a mandatory Step 0 control-plane preflight: it checks
+  for the `orchestration.*` tools under any host-namespaced form before starting, and
+  halts with exact remediation instead of silently falling back if they are genuinely
+  absent.
+
 ## [1.3.5] - 2026-07-07
 
 First version published to npm since 1.3.4. The versions documented below as 1.4.0,

@@ -275,6 +275,21 @@ export async function runRuntimeChecks(opts: {
           }
         }
       }
+    } else {
+      // EVALUABILITY: a configured target that doesn't answer the header probe
+      // (timeout or connection error) is not the same as "sent no interesting
+      // headers" — silently skipping the block would report full header hardening
+      // for a target that was actually unreachable.
+      findings.push({
+        id: "EVAL_UNAVAILABLE_RUNTIME_HEADERS",
+        title: `Header probe against ${targetUrl} did not complete — header posture is UNKNOWN, not clean`,
+        severity: "HIGH",
+        evidence: [`URL: ${targetUrl}`, "The HEAD request timed out or failed before any headers were received."],
+        requiredActions: [
+          "Verify the target is reachable from the environment running the gate and re-run.",
+          "Do not treat this run as evidence that required security headers are present."
+        ]
+      });
     }
 
     // --- TLS checks ---
@@ -362,6 +377,25 @@ export async function runRuntimeChecks(opts: {
             });
           }
         }
+      } else {
+        // EVALUABILITY: a TLS handshake that times out or errors against a
+        // configured target is not "no TLS problems" — it means the probe never
+        // completed, so weak-version/weak-cipher/cert-expiry status is unknown.
+        findings.push({
+          id: "EVAL_UNAVAILABLE_RUNTIME_TLS",
+          title: `TLS probe against ${parsedUrl.hostname} did not complete — TLS/certificate posture is UNKNOWN, not clean`,
+          severity: "HIGH",
+          evidence: [
+            `Host: ${parsedUrl.hostname}`,
+            tlsResult?.error
+              ? `TLS handshake error: ${tlsResult.error}`
+              : "The TLS handshake timed out before completing."
+          ],
+          requiredActions: [
+            "Verify the target is reachable and accepting TLS connections from the environment running the gate, then re-run.",
+            "Do not treat this run as evidence that TLS version, cipher suite, or certificate validity are acceptable."
+          ]
+        });
       }
     }
   }

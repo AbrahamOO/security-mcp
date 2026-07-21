@@ -1,6 +1,7 @@
 import { Finding } from "../result.js";
 import { scopedFg as fg, scanIgnoreGlobs } from "../scan-scope.js";
 import { readFileSafe } from "../../repo/fs.js";
+import { getWorkspaceRoot } from "../../repo/workspace.js";
 import picomatch from "picomatch";
 import { execFile } from "child_process";
 import { promisify } from "util";
@@ -199,8 +200,12 @@ const CLASSIFIED_SECRETS: ClassifiedSecret[] = [
     severity: "CRITICAL",
     sla: "24h",
     // .docker/config.json "auth" base64 blob, or `docker login -p <pw>`.
+    // The --password(-stdin) alternative bounds its separator to [ \t]+ (not \s+)
+    // so it can't span a newline and pick up the next line's leading token as a
+    // fake password value — a real cross-line false positive on `--password-stdin`
+    // (the safe, recommended form) followed by an unrelated command on the next line.
     regex:
-      /"auths"\s*:\s*\{[\s\S]{0,200}?"auth"\s*:\s*"[A-Za-z0-9+/]{16,}={0,2}"|docker\s+login\b[^\n]*\s-p\s+["']?[^\s"']{6,}|--password(?:-stdin)?\s+["']?[^\s"']{6,}/,
+      /"auths"\s*:\s*\{[\s\S]{0,200}?"auth"\s*:\s*"[A-Za-z0-9+/]{16,}={0,2}"|docker\s+login\b[^\n]*\s-p\s+["']?[^\s"']{6,}|--password(?:-stdin)?[ \t]+["']?[^\s"']{6,}/,
     ignore: PLACEHOLDER_RE,
     requiredActions: [
       "Remove the registry credential from source (and from any committed .docker/config.json) and rotate the registry password / access token immediately.",
@@ -337,7 +342,7 @@ export async function checkSecrets(_: { changedFiles: string[] }): Promise<Findi
   // ------------------------------------------------------------------
   // Fix 8: Warn when dist/ exists but is excluded from scanning
   // ------------------------------------------------------------------
-  const distExists = existsSync("dist") || existsSync("./dist");
+  const distExists = existsSync(path.join(getWorkspaceRoot(), "dist"));
   if (distExists) {
     findings.push({
       id: "SECRET_DIST_NOT_SCANNED",
