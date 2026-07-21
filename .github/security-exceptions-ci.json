@@ -10,6 +10,7 @@
         "IR_PLAYBOOK_MISSING",
         "ARTIFACTS_NO_PENTEST_SIGNOFF",
         "ARTIFACTS_COMPLIANCE_GAP",
+        "ARTIFACTS_NO_THREAT_MODEL",
         "CI_NO_PERMISSIONS"
       ],
       "control_ids": [
@@ -236,9 +237,23 @@
       "expires_on": "2027-06-15"
     },
     {
+      "id": "self-scan-unsigned-exceptions-file",
+      "finding_ids": [
+        "EXCEPTIONS_UNSIGNED_SUPPRESSION"
+      ],
+      "control_ids": [],
+      "justification": "This finding reports that .github/security-exceptions-ci.json itself (the file these exceptions live in) has no verified hmacSha256 because SECURITY_GATE_HMAC_KEY/SECURITY_POLICY_HMAC_KEY is not provisioned in CI. This is expected for the repo's own self-scan: its unsigned suppressions are still trusted only because loadPolicy auto-detects this exact path as the CI self-scan file (isCiFile), the one case an unsigned exceptions file is allowed to suppress HIGH/CRITICAL — see the other self-scan-* entries in this file, all approved the same way. Provisioning a real signing key for a CLI tool's own CI self-scan (as opposed to a user project's production gate, where SECURITY_POLICY_HMAC_KEY is the documented, expected control) would not make these particular suppressions any more trustworthy; it would just move the trust anchor to a CI secret with the same blast radius as the file it signs. Suppressed only in the repo-local self-scan; downstream user projects are not affected — their exceptions files are still held to the unsigned-cannot-suppress-HIGH/CRITICAL rule unless they are the project's own isCiFile.",
+      "ticket": "self-scan/unsigned-exceptions-file",
+      "owner": "security-mcp-team",
+      "approver": "ciso-review-board",
+      "approval_role": "SecurityLead",
+      "expires_on": "2027-06-15"
+    },
+    {
       "id": "self-scan-rule-corpus",
       "finding_ids": [
         "ACCOUNT_ENUMERATION",
+        "ACCOUNT_LOCKOUT_MISSING",
         "ADMIN_ROUTE_NO_AUTHZ",
         "AI_A2A_CREDENTIAL_FORWARDING",
         "API_KEY_IN_URL",
@@ -327,7 +342,9 @@
         "EXIT_WITH_DESTRUCTION",
         "FILESYSTEM_TOCTOU",
         "FLUX_HELM_REPO_HTTP",
+        "FLUX_IMAGE_AUTOMATION_PUSH_PROTECTED_BRANCH",
         "FLUX_IMAGE_AUTOUPDATE_FLOATING_TAG",
+        "FLUX_NO_DEPENDS_ON_ORDERING",
         "FLUX_SERVICEACCOUNT_IMPERSONATION",
         "FLUX_SOURCE_UNVERIFIED",
         "GRAPHQL_RESOLVER_INJECTION",
@@ -415,7 +432,9 @@
         "SECRET_ATLASSIAN_API_TOKEN",
         "SECRET_CLIENT_EXPOSED_API_KEY",
         "SECRET_CLOUDFLARE_API_TOKEN",
+        "SECRET_CONCATENATION_SUSPICIOUS",
         "SECRET_CONTAINER_REGISTRY_PASSWORD",
+        "SECRET_FIREBASE_WEB_CONFIG",
         "SECRET_KEY_IN_COMMENT",
         "SECRET_OPENSSH_PRIVATE_KEY",
         "SECRET_WEBHOOK_SIGNING_SECRET",
@@ -456,6 +475,7 @@
         "WEB_MISSING_SRI",
         "WEB_PATH_TRAVERSAL",
         "WEB_POSTMESSAGE_WILDCARD",
+        "WEB_SENSITIVE_FIELD_IN_RESPONSE",
         "WEB_UNSAFE_URI_SCHEME",
         "XXE_ENTITY_PARSING",
         "YAML_UNSAFE_LOAD"
