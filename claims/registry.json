@@ -352,7 +352,8 @@
       "verbatim": "a control is marked satisfied only when a gate run completed its required steps with no adverse finding, never by default",
       "delegatesTo": {
         "file": "dist/tests/legacy.test.js",
-        "testFunction": "runComplianceTruthTests"
+        "testFunction": "runComplianceTruthTests",
+        "testName": "compliance report truth (no satisfied-by-default)"
       },
       "owner": "security-mcp-team",
       "note": "Already covered by the existing e2e test suite (added in the Wave 1 hardening pass): security.generate_compliance_report with no gate run must return 0 satisfied / all unverified, carry the not-an-audit caveat, and reject GDPR. Delegated rather than reimplemented \u2014 verify-claims.mjs runs `node --test dist/tests/legacy.test.js` once and this claim passes iff that run's exit code is 0."
@@ -401,6 +402,84 @@
         "reason": "The original claim was unconditional. In the default (unsigned) configuration, the hash chain alone provides no forgery resistance to an attacker with filesystem write access to .mcp/agent-runs/ \u2014 they can simply recompute every hash over their edited content. Only the HMAC-signed case (SECURITY_AUDIT_HMAC_KEY configured) actually delivers tamper-evidence against that threat model, matching the residual-risk note already present elsewhere in the docs. Rewritten 2026-07-17 to scope the claim to the case where it holds."
       },
       "owner": "security-mcp-team"
+    },
+    {
+      "id": "guarantee-agent-executor-attestation-roundtrip",
+      "type": "GUARANTEE",
+      "status": "TRUE",
+      "source": {
+        "file": "src/agent-exec/executor.ts"
+      },
+      "verbatim": "the executor writes the findings file itself and self-attests the exact array it serialises",
+      "delegatesTo": {
+        "file": "dist/tests/legacy.test.js",
+        "testFunction": "runAttestationRoundtripTests",
+        "testName": "attestation roundtrip (payload hash covers the whole envelope)"
+      },
+      "owner": "security-mcp-team",
+      "note": "mergeAgentFindings in enforced mode recomputes computeFindingsHash(JSON.parse(file).findings) and compares it to the attested hash. Attesting the exact array before serialising makes those hashes equal by construction. Verified live end-to-end against claude, codex, and copilot: merge returned mode=enforced with the agent attested and zero rejections in all three cases."
+    },
+    {
+      "id": "guarantee-completion-gate-blocks-pending",
+      "type": "GUARANTEE",
+      "status": "TRUE",
+      "source": {
+        "file": "src/mcp/orchestration.ts"
+      },
+      "verbatim": "A run with unexecuted agents is not a completed review",
+      "delegatesTo": {
+        "file": "dist/tests/legacy.test.js",
+        "testFunction": "runCompletionGateTests",
+        "testName": "completion gate (assert throws, merge FAILs, names unexecuted agents)"
+      },
+      "owner": "security-mcp-team",
+      "note": "Three layers: orchestration.assert_run_complete throws while any agent is pending or running; mergeAgentFindings forces gateStatus FAIL and records nonTerminalAgents; security.attest_review refuses to sign when that list is non-empty. Only SECURITY_ATTEST_ALLOW_INCOMPLETE=1 bypasses, and it stamps the artifact as forced."
+    },
+    {
+      "id": "guarantee-child-credential-isolation",
+      "type": "GUARANTEE",
+      "status": "TRUE",
+      "source": {
+        "file": "src/agent-exec/executor.ts"
+      },
+      "verbatim": "each adapter declares exactly which credential vars its children may receive",
+      "delegatesTo": {
+        "file": "dist/tests/legacy.test.js",
+        "testFunction": "runChildEnvTests",
+        "testName": "child env (per-adapter credential passthrough, secrets stripped)"
+      },
+      "owner": "security-mcp-team",
+      "note": "Child env is built with extendEnv:false from a base allowlist plus a per-adapter credential passthrough. A Claude child receives no GitHub token; a Copilot child receives no Anthropic key; no child receives SECURITY_* HMAC/attestation keys, webhook/ticketing credentials, or AWS_*. A blanket strip would have broken Copilot, whose headless auth precedence is COPILOT_GITHUB_TOKEN > GH_TOKEN > GITHUB_TOKEN."
+    },
+    {
+      "id": "guarantee-subagent-tools-never-granted",
+      "type": "GUARANTEE",
+      "status": "TRUE",
+      "source": {
+        "file": "src/agent-exec/executor.ts"
+      },
+      "verbatim": "Sub-agent spawning is never grantable",
+      "delegatesTo": {
+        "file": "dist/tests/legacy.test.js",
+        "testFunction": "runToolResolutionTests",
+        "testName": "tool resolution (least privilege, sub-agent tools never grantable)"
+      },
+      "owner": "security-mcp-team",
+      "note": "resolveTools always places each adapter's sub-agent tools in the denied set regardless of remediation mode: Task/Agent for Claude, task/read_agent/list_agents/write_agent for Copilot (names verified by asking the CLI to enumerate its tools). This is one of four recursion-guard layers alongside the env depth marker, per-adapter isolation flags, and the server-side child tool profile."
+    },
+    {
+      "id": "scoped-executor-adapter-verification",
+      "type": "SCOPED",
+      "status": "SCOPED",
+      "source": {
+        "file": "docs/LIMITATIONS.md"
+      },
+      "verbatim": "security-mcp drives whatever local LLM CLI you have",
+      "rewrite": {
+        "newVerbatim": "Three CLI adapters are verified; the rest are guesses."
+      },
+      "owner": "security-mcp-team",
+      "note": "Only claude 2.1.92, codex 0.146.0-alpha.3.1, and copilot 1.0.75 were driven end to end against real code with their flags confirmed. Every other adapter ships as best-effort config carrying a populated _unverified[] field that orchestration.executor_status reports verbatim at runtime."
     }
   ]
 }
