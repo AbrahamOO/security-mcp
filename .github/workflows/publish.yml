@@ -107,7 +107,39 @@ jobs:
           fi
           npm whoami
 
+      # Build the exact tarball that will be published, so the attestation below and the
+      # publish below cover the same bytes. `npm publish <tarball>` republishes this file
+      # rather than re-packing, which is what makes the attestation meaningful.
+      - name: Pack tarball
+        id: pack
+        run: echo "tarball=$(npm pack --silent)" >> "$GITHUB_OUTPUT"
+
+      # Supply-chain attestation for a package published from a PRIVATE source repo.
+      #
+      # `npm publish --provenance` is not usable here: npm rejects it with
+      # "Unsupported GitHub Actions source repository visibility: private" (HTTP 422), because
+      # npm provenance requires a public source repo so anyone can verify the build against it.
+      # The package is public; the repository is not.
+      #
+      # GitHub Artifact Attestations give the same underlying guarantee without that
+      # constraint: a Sigstore-signed SLSA build provenance statement binding this exact
+      # tarball digest to this workflow, this commit, and this runner, recorded in a
+      # transparency log. It works for private repositories. Anyone with repo access verifies
+      # with:
+      #
+      #   gh attestation verify security-mcp-<version>.tgz --repo AbrahamOO/security-mcp
+      #
+      # This is an alternative to npm provenance, not a removal of attestation. If the repo is
+      # ever made public, add --provenance back to the publish step to also surface the
+      # "Provenance" badge on npmjs.com; the two are complementary.
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a  # actions/attest-build-provenance@v3
+        with:
+          subject-path: ${{ steps.pack.outputs.tarball }}
+
       - name: Publish
-        run: npm publish --access public --provenance
+        # Publishes the attested tarball itself. --access public is what makes the package
+        # public even though the source repository is private.
+        run: npm publish "${{ steps.pack.outputs.tarball }}" --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
