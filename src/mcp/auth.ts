@@ -79,20 +79,23 @@ export function isAuthenticated(): boolean {
 }
 
 /**
- * Explicitly log out the current session. Resets authentication state,
- * timestamp, and attempt counter so the next tool call may re-authenticate
- * without being immediately locked out by a prior failed-attempt count.
+ * Explicitly log out the current session.
  *
- * Resetting _attempts on logout is safe: the lockout is per-session (process
- * lifetime). An attacker who already authenticated and then logged out has
- * already passed the auth gate; preventing a legitimate re-auth after logout
- * constitutes a self-inflicted denial of service (CWE-613-adjacent).
+ * The lockout counters are cleared ONLY for a session that was actually
+ * authenticated. That caller already passed the auth gate, so keeping a stale
+ * failed-attempt count against them would be a self-inflicted denial of service
+ * (CWE-613-adjacent). An UNauthenticated caller must not clear them: security.logout
+ * is reachable without authenticating and is in CHILD_SAFE_TOOLS, so resetting
+ * unconditionally let an attacker interleave logout with guesses and defeat the
+ * exponential backoff entirely (CWE-307).
  */
 export function logout(): void {
+  if (_authenticated) {
+    _attempts = 0;
+    _lockedUntil = 0;
+  }
   _authenticated = false;
   _authenticatedAt = null;
-  _attempts = 0;
-  _lockedUntil = 0;
 }
 
 /**

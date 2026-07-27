@@ -18,16 +18,27 @@
 
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
+import { getWorkspaceRoot } from "../repo/workspace.js";
 import type { AgentFinding } from "../types/agent-run.js";
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const AGENT_RUNS_DIR = join(".mcp", "agent-runs");
+/**
+ * Anchor the chain to the WORKSPACE root, not process.cwd().
+ *
+ * This module previously used a bare relative `join(".mcp","agent-runs")`, unlike
+ * review/store.ts and gate/evidence.ts which both resolve via getWorkspaceRoot(). The
+ * chain therefore landed wherever the server process happened to be started, which
+ * could be a different directory than the one mergeAgentFindings reads — silently
+ * producing an "unattested" verdict for correctly attested agents.
+ */
+function agentRunsDir(): string {
+  return join(getWorkspaceRoot(), ".mcp", "agent-runs");
+}
 const GENESIS_PARENT_HASH = "0".repeat(64);
 
 // CWE-22: agentRunId used as a path component — must be the 32-char hex digest
@@ -70,7 +81,13 @@ export type AttestationRecord = {
   agentRunId: string;
   agentName: string;
   completedAt: string;
-  findingsHash: string;      // SHA-256 of the serialized findings array
+  findingsHash: string;      // SHA-256 of the canonical findings array (legacy scope)
+  /**
+   * SHA-256 of the FULL attestable envelope (agentName, findings, skillMdSectionsCovered,
+   * summary, capability, naEvidence). Optional only so chains written before this field
+   * existed still parse; new attestations always set it, and the merge requires it.
+   */
+  payloadHash?: string;
   parentHash: string;        // chain hash of the previous link (or genesis zeros)
   chainHash: string;         // SHA-256(agentRunId + agentName + completedAt + findingsHash + parentHash)
   hmacSha256?: string;       // HMAC-SHA256 of the chain payload, present when signed
@@ -111,8 +128,31 @@ function hmacSha256(key: Buffer, data: string): string {
   return createHmac("sha256", key).update(data, "utf-8").digest("hex");
 }
 
+/**
+ * Deterministic JSON: object keys sorted recursively, arrays left in order.
+ *
+ * `JSON.stringify` preserves insertion order, so two objects with identical content but
+ * different key order produce different bytes and therefore different hashes. That is not
+ * theoretical here: zod emits declared shape keys before passthrough keys, so a findings
+ * file written in natural order hashed differently after `AttestAgentSchema.parse()` than it
+ * did on disk. The merge then rejected honestly-attested agents for "hash-mismatch" and
+ * silently discarded their real findings, including CRITICALs.
+ *
+ * A signature is only meaningful over a canonical encoding of what it covers.
+ */
+function canonicalize(value: unknown): string {
+  return JSON.stringify(value, (_key, v) => {
+    if (v && typeof v === "object" && !Array.isArray(v)) {
+      const entries = Object.entries(v as Record<string, unknown>);
+      entries.sort(([a], [b]) => a.localeCompare(b));
+      return Object.fromEntries(entries);
+    }
+    return v;
+  });
+}
+
 function hashFindings(findings: AgentFinding[]): string {
-  return sha256(JSON.stringify(findings));
+  return sha256(canonicalize(findings));
 }
 
 /**
@@ -125,14 +165,59 @@ export function computeFindingsHash(findings: AgentFinding[]): string {
   return hashFindings(findings);
 }
 
+/**
+ * The full attestable payload of an agent's findings file.
+ *
+ * `findingsHash` covers `findings[]` ONLY. Everything else an agent asserts about its own
+ * work sat outside the signature, so after attesting honestly an agent's file could be
+ * edited to claim full SKILL.md section coverage and a clean summary, and the chain still
+ * verified. Measured: coverage rewritten from 4% to 100%, gate FAIL to PASS, chain valid,
+ * no secret required. That defeats the mitigation LIMITATIONS.md promises for a signed chain.
+ *
+ * This covers every field the merge and the thoroughness checks actually consume.
+ */
+export type AttestablePayload = {
+  agentName: string;
+  findings: AgentFinding[];
+  skillMdSectionsCovered?: unknown;
+  summary?: unknown;
+  capability?: unknown;
+  naEvidence?: unknown;
+};
+
+/**
+ * Hash the whole attestable envelope, not just the findings array. Fields that are absent
+ * are omitted rather than encoded as undefined, so adding a field later does not
+ * retroactively change the hash of a file that never had it.
+ */
+export function computePayloadHash(payload: AttestablePayload): string {
+  const canonical: Record<string, unknown> = {
+    agentName: payload.agentName,
+    findings: payload.findings
+  };
+  if (payload.skillMdSectionsCovered !== undefined) canonical["skillMdSectionsCovered"] = payload.skillMdSectionsCovered;
+  if (payload.summary !== undefined) canonical["summary"] = payload.summary;
+  if (payload.capability !== undefined) canonical["capability"] = payload.capability;
+  if (payload.naEvidence !== undefined) canonical["naEvidence"] = payload.naEvidence;
+  return sha256(canonicalize(canonical));
+}
+
 function buildChainPayload(record: Omit<AttestationRecord, "chainHash" | "hmacSha256">): string {
-  return [
+  // payloadHash must be INSIDE the chain payload, otherwise it is an unsigned field in a
+  // signed record and an attacker could simply rewrite it to match their edited file.
+  //
+  // It is appended only when present. Links written before this field existed (and the
+  // genesis link, which has no payload) keep their original byte layout, so pre-existing
+  // chains still verify rather than all reporting as broken.
+  const base = [
     record.agentRunId,
     record.agentName,
     record.completedAt,
     record.findingsHash,
     record.parentHash
-  ].join("|");
+  ];
+  if (record.payloadHash !== undefined) base.push(record.payloadHash);
+  return base.join("|");
 }
 
 function computeChainHash(record: Omit<AttestationRecord, "chainHash" | "hmacSha256">): { chainHash: string; hmacSha256?: string } {
@@ -150,7 +235,10 @@ function computeChainHash(record: Omit<AttestationRecord, "chainHash" | "hmacSha
 // ---------------------------------------------------------------------------
 
 async function atomicWrite(targetPath: string, data: string): Promise<void> {
-  const tmpPath = join(tmpdir(), `audit-chain-${Date.now()}-${randomBytes(8).toString("hex")}.tmp`);
+  // The temp file MUST live beside the target, not in os.tmpdir(): rename() is only
+  // atomic within a filesystem and throws EXDEV across one, which is exactly what
+  // happens when the workspace sits on an external or encrypted volume.
+  const tmpPath = `${targetPath}.tmp-${randomBytes(8).toString("hex")}`;
   try {
     await writeFile(tmpPath, data, { encoding: "utf-8", mode: 0o600 });
     await rename(tmpPath, targetPath); // atomic on same filesystem
@@ -165,12 +253,12 @@ async function atomicWrite(targetPath: string, data: string): Promise<void> {
 // ---------------------------------------------------------------------------
 
 async function ensureRunDir(agentRunId: string): Promise<void> {
-  const dir = join(AGENT_RUNS_DIR, agentRunId);
+  const dir = join(agentRunsDir(), agentRunId);
   await mkdir(dir, { mode: 0o700, recursive: true });
 }
 
 function chainPath(agentRunId: string): string {
-  return join(AGENT_RUNS_DIR, agentRunId, "attestation-chain.json");
+  return join(agentRunsDir(), agentRunId, "attestation-chain.json");
 }
 
 async function loadChain(agentRunId: string): Promise<AttestationChain> {
@@ -237,6 +325,11 @@ export async function attestAgent(params: {
   agentRunId: string;
   agentName: string;
   findings: AgentFinding[];
+  /** Everything else the findings file asserts. Covered by payloadHash. */
+  skillMdSectionsCovered?: unknown;
+  summary?: unknown;
+  capability?: unknown;
+  naEvidence?: unknown;
 }): Promise<AttestationRecord> {
   const chain = await loadChain(params.agentRunId);
   if (chain.links.length === 0) {
@@ -254,6 +347,14 @@ export async function attestAgent(params: {
     agentName: params.agentName,
     completedAt,
     findingsHash: hashFindings(params.findings),
+    payloadHash: computePayloadHash({
+      agentName: params.agentName,
+      findings: params.findings,
+      skillMdSectionsCovered: params.skillMdSectionsCovered,
+      summary: params.summary,
+      capability: params.capability,
+      naEvidence: params.naEvidence
+    }),
     parentHash: parent.chainHash,
     findingCount: params.findings.length,
     criticalCount: params.findings.filter((f) => f.severity === "CRITICAL").length,
@@ -453,7 +554,19 @@ export const AttestAgentParams = {
     severity: z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]),
     remediated: z.boolean(),
     requiredActions: z.array(z.string())
-  }).passthrough()).describe("Agent findings to attest. Must match AgentFinding shape.")
+  }).passthrough()).describe("Agent findings to attest. Must match AgentFinding shape."),
+  // These are attested too, via payloadHash. An agent that asserts section coverage, a
+  // summary, a capability record, or an N/A rationale must sign those assertions, otherwise
+  // they can be rewritten after the fact without breaking the chain. Pass the SAME values
+  // that go into the findings file.
+  skillMdSectionsCovered: z.array(z.string()).optional()
+    .describe("SKILL.md sections this agent covered. Attested via payloadHash."),
+  summary: z.string().max(4000).optional()
+    .describe("Agent summary. Attested via payloadHash."),
+  capability: z.record(z.unknown()).optional()
+    .describe("Capability record (model, tier, tools). Attested via payloadHash."),
+  naEvidence: z.record(z.unknown()).optional()
+    .describe("Evidence backing a completed_na verdict. Attested via payloadHash.")
 };
 export const AttestAgentSchema = z.object(AttestAgentParams);
 

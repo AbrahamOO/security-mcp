@@ -48,6 +48,14 @@ jobs:
       - name: Verify claims
         run: npm run verify:claims
 
+      # Documentation drift. Bindings live in docs/doc-map.json. Two rules: every anchor
+      # must be present in every bound doc, and a change set that touches bound source must
+      # also touch the bound docs. fetch-depth: 0 above is what makes the range resolvable.
+      # This is the half of the doc gate that survives a fresh clone; the PreToolUse hook
+      # (scripts/doc-drift-hook.sh) only protects a machine that has wired it up.
+      - name: Doc drift
+        run: npm run docs:check -- --range origin/main..HEAD
+
       # 1) Secret scanning
       - name: Gitleaks
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e  # gitleaks/gitleaks-action@v3.0.0
@@ -108,11 +116,23 @@ jobs:
           SECURITY_GATE_CONTROL_CATALOG: "defaults/control-catalog.json"
           # Intentionally NOT setting SECURITY_GATE_EXCEPTIONS: an explicit override is
           # treated as a user project exceptions file. Leaving it unset lets the gate
-          # auto-load .github/security-exceptions-ci.json as the trusted CI self-scan file
-          # (isCiFile), which is the only file permitted to suppress HIGH/CRITICAL self-scan
-          # false positives unsigned. It holds the ciso-approved, expiring justifications for
-          # the tool's own N/A controls (no app runtime), SBOM/provenance at the npm-publish
-          # layer, and remaining detection-pattern examples.
+          # auto-load .github/security-exceptions-ci.json, which holds the ciso-approved,
+          # expiring justifications for the tool's own N/A controls (no app runtime),
+          # SBOM/provenance at the npm-publish layer, and detection-pattern examples.
+          #
+          # That file sits INSIDE the repository under scan, so its name is not a trust
+          # signal: trusting it by filename meant any pull request could add one and suppress
+          # every blocking finding (measured: 51 findings, 48 blocking, down to 0).
+          #
+          # It may suppress HIGH/CRITICAL ONLY when this key verifies its signature. Signing
+          # requires the secret, which a fork PR never sees, so a signature is an
+          # authenticated act of risk acceptance rather than a configuration flag. Unsigned,
+          # the file can hide LOW/MEDIUM noise and nothing more: HIGH and CRITICAL stay
+          # active and the gate blocks on them.
+          #
+          # Sign with `security-mcp sign-exceptions` and commit the result. Editing the file
+          # invalidates the signature, so re-sign after every change.
+          SECURITY_POLICY_HMAC_KEY: ${{ secrets.SECURITY_POLICY_HMAC_KEY }}
           SECURITY_GATE_SCANNERS: ".github/security-tools-ci.json"
           # Self-scan scope: exclude the tool's own intentional example/test/rule content
           # from its vulnerability scan. fixtures/ are deliberately-insecure test inputs,

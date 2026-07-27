@@ -21,6 +21,7 @@ import { notifyIfUpdateAvailable } from "./update.js";
 import { autoHardenTree } from "../gate/cloud-controls/apply.js";
 import { runGateFromEnv } from "../ci/pr-gate.js";
 import { signPolicyFile } from "../gate/policy.js";
+import { signExceptionsFileBody } from "../gate/exceptions.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -70,6 +71,7 @@ COMMANDS
   autoharden       Auto-apply FSBP/CIS hardening fixes to Terraform (use --dry-run to preview)
   ci:pr-gate       Run the policy gate against the current diff (for CI/pre-commit)
   sign-policy      Sign the policy file with SECURITY_POLICY_HMAC_KEY for tamper protection
+  sign-exceptions  Sign the exceptions file so it may suppress HIGH/CRITICAL findings
 
 OPTIONS (install)
   --claude-code        Write config for Claude Code only
@@ -237,7 +239,9 @@ function checkPinnedTomlConfig(configPath: string, label: string): DoctorCheck |
   if (!existsSync(configPath)) return null;
   try {
     const raw = readFileSync(configPath, "utf-8");
-    const header = /^\[mcp_servers\.security-mcp\][ \t]*$/m.exec(raw);
+    // Same trailing-comment tolerance as install.ts; a mismatch here made doctor silently
+    // skip a table it should have inspected.
+    const header = /^\[mcp_servers\.security-mcp\][ \t]*(#.*)?$/m.exec(raw);
     if (!header) return null; // no security-mcp table here
     const afterHeader = header.index + header[0].length;
     const rest = raw.slice(afterHeader);
@@ -361,6 +365,62 @@ async function runAutoHarden(dryRun: boolean): Promise<void> {
 
 // Minimum HMAC key length, mirrors POLICY_HMAC_MIN_KEY_BYTES in src/gate/policy.ts.
 const POLICY_HMAC_MIN_KEY_BYTES = 32;
+
+/**
+ * Sign an exceptions file by embedding `hmacSha256` in it.
+ *
+ * Unlike the policy, whose signature lives in a `.hmac` sidecar, the exceptions schema
+ * carries the signature inline. Without this command the only way to produce a signed
+ * exceptions file was to call signExceptionsFile() by hand, which meant "sign it" was advice
+ * nobody could act on, which is why every exceptions file in the wild is unsigned and why
+ * the CI file needed a filename-based trust exemption in the first place.
+ */
+function runSignExceptions(): void {
+  const key = process.env["SECURITY_POLICY_HMAC_KEY"];
+  if (!key || Buffer.byteLength(key, "utf-8") < POLICY_HMAC_MIN_KEY_BYTES) {
+    process.stderr.write(
+      `Error: SECURITY_POLICY_HMAC_KEY must be set and at least ${POLICY_HMAC_MIN_KEY_BYTES} bytes.\n` +
+        "Generate one with: openssl rand -hex 32\n"
+    );
+    process.exit(1);
+  }
+
+  const path = process.env["SECURITY_GATE_EXCEPTIONS"]
+    || (existsSync(".github/security-exceptions-ci.json")
+      ? ".github/security-exceptions-ci.json"
+      : ".mcp/exceptions/security-exceptions.json");
+  if (!existsSync(path)) {
+    process.stderr.write(
+      `Error: exceptions file not found at "${path}".\n` +
+        "Set SECURITY_GATE_EXCEPTIONS to its path.\n"
+    );
+    process.exit(1);
+  }
+
+  let signed: { hmacSha256: string; normalized: Record<string, unknown> };
+  try {
+    // signExceptionsFileBody runs the SAME zod parse the gate's verifier uses, so the bytes
+    // signed here are the bytes verified there. Signing the raw array instead produced a
+    // signature the gate rejected as tampering.
+    signed = signExceptionsFileBody(readFileSync(path, "utf-8"), key);
+  } catch (e) {
+    // A file that will not parse or validate is never rewritten: that would destroy the
+    // operator's justifications and replace them with an empty, signed, trusted document.
+    process.stderr.write(`Error: "${path}" is not a valid exceptions file, refusing to rewrite it.\n  ${e instanceof Error ? e.message : String(e)}\n`);
+    process.exit(1);
+    return;
+  }
+
+  const count = Array.isArray(signed.normalized["exceptions"]) ? (signed.normalized["exceptions"] as unknown[]).length : 0;
+  writeFileSync(path, JSON.stringify(signed.normalized, null, 2) + "\n", { mode: 0o600 });
+
+  process.stdout.write(`\nsecurity-mcp sign-exceptions v${VERSION}\n`);
+  process.stdout.write("=".repeat(40) + "\n\n");
+  process.stdout.write(`  [SIGNED] ${path} (${count} exception(s))\n\n`);
+  process.stdout.write("Commit the file. A signed exceptions file may suppress HIGH/CRITICAL findings;\n");
+  process.stdout.write("an unsigned one may not, and needs no filename-based trust exemption.\n");
+  process.stdout.write("Re-run this after every edit — an edit invalidates the signature.\n\n");
+}
 
 function runSignPolicy(): void {
   const key = process.env["SECURITY_POLICY_HMAC_KEY"];
@@ -493,6 +553,11 @@ async function main(): Promise<void> {
 
     case "sign-policy": {
       runSignPolicy();
+      break;
+    }
+
+    case "sign-exceptions": {
+      runSignExceptions();
       break;
     }
 

@@ -235,7 +235,16 @@ function classifyChangeType(files: string[]): ChangeType {
   const allMatch = (pattern: RegExp) => files.every((f) => pattern.test(f));
   const anyMatch = (pattern: RegExp) => files.some((f) => pattern.test(f));
 
-  if (allMatch(/\.(md|txt|rst)$|\/docs\/|README/i)) {
+  // Documentation is decided by EXTENSION, not by a substring of the path.
+  //
+  // This was `/\.(md|txt|rst)$|\/docs\/|README/i`, which matched any path merely CONTAINING
+  // "/docs/" or "readme", whatever the file type. The docs tier runs checkSecrets and
+  // nothing else, so `src/docs/handler.ts`, `src/readme-utils/handler.ts`, and
+  // `src/lib/README-parser.ts` each dropped 40 of 41 check modules: identical code with
+  // `eval(req.query.q)` scored 47 findings at `src/api/handler.ts` and 0 at `src/docs/`.
+  // A source file is never documentation, regardless of the directory it sits in.
+  const DOC_EXTENSION_RE = /\.(md|markdown|mdx|txt|rst|adoc)$/i;
+  if (allMatch(DOC_EXTENSION_RE)) {
     // Fix 8: override docs tier when security config files are in the changeset
     if (anyMatch(SECURITY_CONFIG_RE)) {
       console.warn("[policy] Docs-tier override: security configuration file detected in changed files");
@@ -550,7 +559,9 @@ export async function runPrGate(opts: {
 
   // Apply exceptions — Fix 7: pass require_ticket from policy config
   const requireTicket = policy.exceptions?.require_ticket ?? false;
-  const exceptionResult = await applySecurityExceptions(rawFindings, { requireTicket });
+  // changedFiles is passed so the CI exceptions file cannot grant itself trust in the same
+  // change set that adds or edits it. See ciExceptionsTrusted() in exceptions.ts.
+  const exceptionResult = await applySecurityExceptions(rawFindings, { requireTicket, changedFiles });
   const controlCoverageWithExceptions = controlCoverage.map((control) => {
     const excepted = exceptionResult.activeControlExceptionIds.includes(control.id);
     if (excepted && control.status === "missing") {

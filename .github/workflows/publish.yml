@@ -74,9 +74,20 @@ jobs:
           # Do NOT set SECURITY_GATE_EXCEPTIONS to the CI file: passing it via the env
           # override marks it isOverride, and unsigned override files are barred from
           # suppressing HIGH/CRITICAL. Leaving it unset lets the gate auto-load
-          # .github/security-exceptions-ci.json as the isCiFile, which IS allowed to
-          # suppress the self-scan false positives. (Verified: with the override the
-          # self-check FAILs on 554 self-scan CRIT/HIGH; without it, PASS.)
+          # .github/security-exceptions-ci.json.
+          #
+          # Auto-loading is no longer sufficient on its own. Being named
+          # .github/security-exceptions-ci.json used to grant that file permission to suppress
+          # HIGH/CRITICAL, but it lives inside the repo under scan, so any pull request could
+          # add one and suppress every blocking finding.
+          # Trust comes from a valid HMAC signature and nothing else (SECURITY_POLICY_HMAC_KEY
+          # below). A fork PR never sees the secret, so it cannot produce a valid signature.
+          # Sign with `security-mcp sign-exceptions` and commit the result.
+          # Without the secret the file is unsigned, and an unsigned file may only suppress
+          # LOW/MEDIUM noise. HIGH and CRITICAL stay active and the gate blocks on them. That
+          # is intended: threats are fixed or explicitly signed for, never suppressed by
+          # configuration.
+          SECURITY_POLICY_HMAC_KEY: ${{ secrets.SECURITY_POLICY_HMAC_KEY }}
           SECURITY_GATE_SCANNERS: ".github/security-tools-ci.json"
         run: node dist/ci/pr-gate.js
 
