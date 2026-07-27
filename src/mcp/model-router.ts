@@ -27,6 +27,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
+import { getWorkspaceRoot } from "../repo/workspace.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -36,10 +37,17 @@ export const HAIKU_MODEL = "claude-haiku-4-5-20251001";
 export const SONNET_MODEL = "claude-sonnet-5";
 export const OPUS_MODEL = "claude-opus-4-8";
 
-const MEMORY_DIR = join(".mcp", "memory");
-const USAGE_FILE = join(MEMORY_DIR, "model-usage.json");
-const HEALTH_FILE = join(MEMORY_DIR, "provider-health.json");
-const POLICY_FILE = join(".mcp", "policies", "security-policy.json");
+// Resolved at call time against the workspace root, never as module-level relative
+// constants. A bare join(".mcp", ...) resolves against process.cwd(), which diverges from
+// the workspace whenever the server is started outside it (e.g. the supervisor's detached
+// child inherits the server's cwd). That divergence is silent: the budget policy is never
+// read so the circuit breaker runs on the default, and spend is written to the wrong tree.
+// This is the same defect that made audit-chain report correctly-attested agents as
+// unattested. See src/mcp/audit-chain.ts.
+const MEMORY_DIR = () => join(getWorkspaceRoot(), ".mcp", "memory");
+const USAGE_FILE = () => join(MEMORY_DIR(), "model-usage.json");
+const HEALTH_FILE = () => join(MEMORY_DIR(), "provider-health.json");
+const POLICY_FILE = () => join(getWorkspaceRoot(), ".mcp", "policies", "security-policy.json");
 
 const DEFAULT_BUDGET_USD = 5;
 const CIRCUIT_BREAKER_THRESHOLD = 3;   // failures before circuit opens
@@ -364,10 +372,22 @@ export type UsageRecord = {
   inputTokens: number;
   outputTokens: number;
   estimatedCostUsd: number;
+  /**
+   * Cost as REPORTED by the executing CLI, when it reports one. Preferred over the
+   * estimate, because the estimate is computed from MODEL_REGISTRY prices keyed on
+   * model IDs the local CLIs never actually use. On a subscription plan this figure
+   * is API-equivalent, not money charged — see AgentExecutionRecord.costIsNotional.
+   */
+  actualCostUsd?: number;
+  reportedBy?: "cli" | "estimate";
   agentName?: string;
   agentRunId?: string;
   timestamp: string;
 };
+
+/** Input to trackUsage: cost fields are computed or passed through, never required. */
+export type UsageInput =
+  Omit<UsageRecord, "timestamp" | "estimatedCostUsd" | "reportedBy"> & { estimatedCostUsd?: number };
 
 export type BudgetStatus = {
   maxBudgetUsd: number;
@@ -443,12 +463,12 @@ type SecurityPolicy = {
 // ---------------------------------------------------------------------------
 
 async function ensureMemoryDir(): Promise<void> {
-  await mkdir(MEMORY_DIR, { recursive: true, mode: 0o700 });
+  await mkdir(MEMORY_DIR(), { recursive: true, mode: 0o700 });
 }
 
 async function loadUsageStore(): Promise<UsageStore> {
   try {
-    const raw = await readFile(USAGE_FILE, "utf-8");
+    const raw = await readFile(USAGE_FILE(), "utf-8");
     return JSON.parse(raw) as UsageStore;
   } catch {
     return { version: 1, updatedAt: new Date().toISOString(), totalSpentUsd: 0, records: [] };
@@ -458,12 +478,12 @@ async function loadUsageStore(): Promise<UsageStore> {
 async function saveUsageStore(store: UsageStore): Promise<void> {
   await ensureMemoryDir();
   store.updatedAt = new Date().toISOString();
-  await writeFile(USAGE_FILE, JSON.stringify(store, null, 2) + "\n", { encoding: "utf-8", mode: 0o600 });
+  await writeFile(USAGE_FILE(), JSON.stringify(store, null, 2) + "\n", { encoding: "utf-8", mode: 0o600 });
 }
 
 async function loadHealthStore(): Promise<ProviderHealthStore> {
   try {
-    const raw = await readFile(HEALTH_FILE, "utf-8");
+    const raw = await readFile(HEALTH_FILE(), "utf-8");
     return JSON.parse(raw) as ProviderHealthStore;
   } catch {
     return { version: 1, updatedAt: new Date().toISOString(), providers: {} };
@@ -473,12 +493,12 @@ async function loadHealthStore(): Promise<ProviderHealthStore> {
 async function saveHealthStore(store: ProviderHealthStore): Promise<void> {
   await ensureMemoryDir();
   store.updatedAt = new Date().toISOString();
-  await writeFile(HEALTH_FILE, JSON.stringify(store, null, 2) + "\n", { encoding: "utf-8", mode: 0o600 });
+  await writeFile(HEALTH_FILE(), JSON.stringify(store, null, 2) + "\n", { encoding: "utf-8", mode: 0o600 });
 }
 
 async function loadMaxBudget(): Promise<number> {
   try {
-    const raw = await readFile(POLICY_FILE, "utf-8");
+    const raw = await readFile(POLICY_FILE(), "utf-8");
     const policy = JSON.parse(raw) as SecurityPolicy;
     return policy.model_budget?.max_total_cost_usd ?? DEFAULT_BUDGET_USD;
   } catch {
@@ -488,7 +508,7 @@ async function loadMaxBudget(): Promise<number> {
 
 async function loadPreferredProviders(): Promise<Provider[] | null> {
   try {
-    const raw = await readFile(POLICY_FILE, "utf-8");
+    const raw = await readFile(POLICY_FILE(), "utf-8");
     const policy = JSON.parse(raw) as SecurityPolicy;
     return policy.model_budget?.preferred_providers ?? null;
   } catch {
@@ -498,7 +518,7 @@ async function loadPreferredProviders(): Promise<Provider[] | null> {
 
 async function loadAdvancedTaskPreferences(): Promise<TaskType[]> {
   try {
-    const raw = await readFile(POLICY_FILE, "utf-8");
+    const raw = await readFile(POLICY_FILE(), "utf-8");
     const policy = JSON.parse(raw) as SecurityPolicy;
     return policy.model_budget?.advanced_task_preference ?? [];
   } catch {
@@ -509,7 +529,7 @@ async function loadAdvancedTaskPreferences(): Promise<TaskType[]> {
 /** Opt-out list: task types forced down to standard tier. Never crashes on missing files. */
 async function loadForceStandardTierFor(): Promise<TaskType[]> {
   try {
-    const raw = await readFile(POLICY_FILE, "utf-8");
+    const raw = await readFile(POLICY_FILE(), "utf-8");
     const policy = JSON.parse(raw) as SecurityPolicy;
     return policy.model_budget?.force_standard_tier_for ?? [];
   } catch {
@@ -520,7 +540,7 @@ async function loadForceStandardTierFor(): Promise<TaskType[]> {
 /** Budget safety-valve threshold (percent). Never crashes on missing files. */
 async function loadDowngradeThresholdPct(): Promise<number> {
   try {
-    const raw = await readFile(POLICY_FILE, "utf-8");
+    const raw = await readFile(POLICY_FILE(), "utf-8");
     const policy = JSON.parse(raw) as SecurityPolicy;
     const pct = policy.model_budget?.downgrade_threshold_pct;
     return typeof pct === "number" && pct >= 0 && pct <= 100 ? pct : DEFAULT_DOWNGRADE_THRESHOLD_PCT;
@@ -839,7 +859,7 @@ function buildRationale(
  * Updates the running total and per-provider spend breakdown.
  * Resets circuit breaker failure count for successful provider calls.
  */
-export async function trackUsage(usage: Omit<UsageRecord, "timestamp">): Promise<void> {
+export async function trackUsage(usage: UsageInput & { actualCostUsd?: number }): Promise<void> {
   const [store, health] = await Promise.all([loadUsageStore(), loadHealthStore()]);
 
   const model = MODEL_REGISTRY.find((m) => m.modelId === usage.model);
@@ -850,9 +870,13 @@ export async function trackUsage(usage: Omit<UsageRecord, "timestamp">): Promise
     (usage.inputTokens / 1_000_000) * inputRate +
     (usage.outputTokens / 1_000_000) * outputRate;
 
+  // A cost the CLI actually reported beats one derived from registry prices keyed on
+  // model IDs that no local CLI accepts. Without this, real spend data is discarded.
+  const reportedBy: "cli" | "estimate" = usage.actualCostUsd !== undefined ? "cli" : "estimate";
   const record: UsageRecord = {
     ...usage,
-    estimatedCostUsd: estimatedCost,
+    estimatedCostUsd: usage.actualCostUsd ?? usage.estimatedCostUsd ?? estimatedCost,
+    reportedBy,
     timestamp: new Date().toISOString()
   };
 

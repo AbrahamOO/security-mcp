@@ -6,18 +6,23 @@
  * Persists to .mcp/memory/patterns.json (per-project, gitignore-safe).
  */
 
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
+import { getWorkspaceRoot } from "../repo/workspace.js";
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const MEMORY_DIR = join(".mcp", "memory");
-const PATTERNS_FILE = join(MEMORY_DIR, "patterns.json");
-const PATTERNS_HASH_FILE = join(MEMORY_DIR, "patterns.sha256");
+// Resolved at call time against the workspace root. A module-level join(".mcp", ...)
+// resolves against process.cwd(), which silently diverges from the workspace whenever the
+// server runs outside it, sending pattern state to the wrong tree. Same defect class as the
+// audit-chain one. See src/mcp/audit-chain.ts.
+const MEMORY_DIR = () => join(getWorkspaceRoot(), ".mcp", "memory");
+const PATTERNS_FILE = () => join(MEMORY_DIR(), "patterns.json");
+const PATTERNS_HASH_FILE = () => join(MEMORY_DIR(), "patterns.sha256");
 const MIN_SAMPLE_SIZE = 10;      // need ≥10 outcomes before routing is trusted (was 3 — too easy to manipulate)
 const HIGH_CONFIDENCE = 0.85;   // route automatically above this success rate
 const LOW_CONFIDENCE = 0.40;    // escalate below this success rate
@@ -148,17 +153,17 @@ export type PatternReport = {
 // ---------------------------------------------------------------------------
 
 async function ensureMemoryDir(): Promise<void> {
-  await mkdir(MEMORY_DIR, { recursive: true });
+  await mkdir(MEMORY_DIR(), { recursive: true, mode: 0o700 });
 }
 
 async function loadStore(): Promise<PatternsStore> {
   try {
-    const raw = await readFile(PATTERNS_FILE, "utf-8");
+    const raw = await readFile(PATTERNS_FILE(), "utf-8");
 
     // Integrity check: compare SHA-256 of file content against stored sidecar hash.
     // If the sidecar exists and the hash mismatches, the file may have been tampered with.
     try {
-      const storedHash = (await readFile(PATTERNS_HASH_FILE, "utf-8")).trim();
+      const storedHash = (await readFile(PATTERNS_HASH_FILE(), "utf-8")).trim();
       const actualHash = createHash("sha256").update(raw).digest("hex");
       // Use timingSafeEqual to prevent timing-oracle inference of the stored hash (CWE-208).
       const storedBuf = Buffer.from(storedHash, "hex");
@@ -186,16 +191,28 @@ async function saveStore(store: PatternsStore): Promise<void> {
   const content = JSON.stringify(store, null, 2) + "\n";
   const hash = createHash("sha256").update(content).digest("hex");
 
-  // Write patterns + sidecar atomically: write to temp files first, then rename
-  // both into place. This prevents a TOCTOU window where an attacker could replace
-  // patterns.json between the two writes and pass integrity on the next load.
-  // CWE-367 (TOCTOU Race Condition) / CAPEC-29.
-  const tmpPatterns = PATTERNS_FILE + ".tmp";
-  const tmpHash    = PATTERNS_HASH_FILE + ".tmp";
+  // Write patterns + sidecar via temp files, then rename both into place. This closes the
+  // TOCTOU window where an attacker could replace patterns.json between the two writes and
+  // still pass integrity on the next load. CWE-367 / CAPEC-29.
+  //
+  // The temp suffix must be RANDOM, as every other atomic write in this repo does it. With
+  // a fixed ".tmp" name, concurrent saveStore calls raced on the same two paths: the first
+  // rename won and every other caller failed with ENOENT, discarding its outcome. Measured
+  // at 23 of 24 concurrent recordOutcome calls lost.
+  const suffix = `.tmp-${randomBytes(6).toString("hex")}`;
+  const patternsPath = PATTERNS_FILE();
+  const hashPath = PATTERNS_HASH_FILE();
+  const tmpPatterns = patternsPath + suffix;
+  const tmpHash = hashPath + suffix;
   await writeFile(tmpPatterns, content, { encoding: "utf-8", mode: 0o600 });
   await writeFile(tmpHash, hash + "\n", { encoding: "utf-8", mode: 0o600 });
-  await rename(tmpPatterns, PATTERNS_FILE);
-  await rename(tmpHash, PATTERNS_HASH_FILE);
+  await rename(tmpPatterns, patternsPath);
+  await rename(tmpHash, hashPath);
+  // NOT fixed here: the two renames are individually atomic but not atomic together, so a
+  // crash between them leaves body and sidecar out of step in either order, and loadStore
+  // then reports LEARNING_INTEGRITY_VIOLATION and wipes the store. Closing that requires
+  // folding the hash into the JSON so one rename covers both, which changes the on-disk
+  // format. Tracked in docs/LIMITATIONS.md rather than claimed as done.
 }
 
 // ---------------------------------------------------------------------------

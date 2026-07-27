@@ -49,9 +49,15 @@ export async function readFileSafe(relPath: string): Promise<string> {
 	// CWE-400/CWE-789: refuse oversized files so a hostile repo cannot exhaust
 	// memory or feed a multi-MB contiguous token into a global regex (RangeError).
 	// Loop-callers (secret/cloud-controls/search scanners) catch this and skip the file.
-	const { size } = await stat(p);
-	if (size > MAX_FILE_BYTES) {
-		throw new Error(`File too large to scan safely: ${relPath} (${size} bytes > ${MAX_FILE_BYTES})`);
+	const st = await stat(p);
+	// Regular files only. stat() reports size 0 for a FIFO, so the size guard below passes
+	// and readFile then blocks forever with no timeout, hanging the caller and keeping the
+	// process alive. Sockets and device files are refused for the same reason.
+	if (!st.isFile()) {
+		throw new Error(`Not a regular file, refusing to read: ${relPath}`);
+	}
+	if (st.size > MAX_FILE_BYTES) {
+		throw new Error(`File too large to scan safely: ${relPath} (${st.size} bytes > ${MAX_FILE_BYTES})`);
 	}
 
 	return await readFile(p, "utf8");
