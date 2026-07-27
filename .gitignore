@@ -16,6 +16,7 @@ HANDOFF.md
 .mcp/catalog/
 .mcp/exceptions/
 .mcp/scanners/
+.mcp/agent-clis/
 .mcp/mappings/
 .mcp/policies/
 .mcp/agent-runs/
@@ -42,3 +43,6 @@ security-mcp-deck-prompt.md
 # These live under .claude/ but must be tracked so CI's npm test can detect them.
 !fixtures/agentic-malicious/.claude/
 !fixtures/agentic-malicious/.claude/**
+
+# Generated executive deck (binary, regenerated from security-mcp-deck-prompt.md)
+security-mcp-Executive-Deck.pptx

@@ -1,0 +1,78 @@
+{
+  "$comment": "Bindings from source paths to the docs that must describe them. Enforced by scripts/check-doc-drift.mjs (npm run docs:check). Two rules: (1) every anchor must appear in every bound doc, always; (2) if a change set touches a bound source path, it must also touch the bound docs. Rule 2 is scoped to the current change set, so a doc is never flagged for an edit made three commits ago. Advisory bindings warn but never block.",
+  "version": 1,
+  "bindings": [
+    {
+      "id": "agent-exec",
+      "source": "src/agent-exec/",
+      "docs": ["docs/ARCHITECTURE.md", "docs/DATA_FLOW.md", "docs/LIMITATIONS.md"],
+      "anchors": ["agent-exec", "start_agent_run", "executor_status"],
+      "why": "The local-CLI agent execution engine spawns child processes with credential passthrough. A reader who cannot find it in ARCHITECTURE.md will not know it exists."
+    },
+    {
+      "id": "mcp-tools",
+      "source": "src/mcp/server.ts",
+      "docs": ["README.md"],
+      "anchors": ["security.start_review", "repo.read_file"],
+      "why": "server.ts is the registered MCP tool surface and README carries the tool table. Adding or removing a tool changes that table."
+    },
+    {
+      "id": "executor-tools",
+      "source": "src/agent-exec/tools.ts",
+      "docs": ["docs/WIKI.md"],
+      "anchors": ["orchestration.start_agent_run", "orchestration.executor_status"],
+      "why": "WIKI.md is the operator reference. The five executor tools have a call order that must be followed, and an operator who cannot find it will drive the run wrong."
+    },
+    {
+      "id": "network-egress",
+      "source": "src/gate/threat-intel.ts",
+      "docs": ["docs/DATA_FLOW.md", "README.md"],
+      "anchors": ["CISA KEV", "EPSS"],
+      "why": "Every outbound call is a trust-boundary crossing and must be enumerated in DATA_FLOW.md."
+    },
+    {
+      "id": "webhook-egress",
+      "source": "src/mcp/reports.ts",
+      "docs": ["docs/DATA_FLOW.md"],
+      "anchors": ["SECURITY_ATTEST_KEY"],
+      "why": "Report persistence writes signed artifacts to .mcp/reports/. The key handling belongs in the data-flow doc."
+    },
+    {
+      "id": "gate-core",
+      "source": "src/gate/policy.ts",
+      "docs": ["docs/ARCHITECTURE.md"],
+      "anchors": ["runAllChecks"],
+      "why": "The gate pipeline diagram in ARCHITECTURE.md is drawn from policy.ts. A pipeline change invalidates the diagram."
+    },
+    {
+      "id": "attestation",
+      "source": "src/mcp/audit-chain.ts",
+      "docs": ["docs/ARCHITECTURE.md", "docs/DATA_FLOW.md"],
+      "anchors": ["audit-chain"],
+      "why": "What an unsigned chain does and does not guarantee is the single most over-readable claim in this project."
+    },
+    {
+      "id": "cloud-controls",
+      "source": "src/gate/cloud-controls/",
+      "docs": ["docs/ARCHITECTURE.md"],
+      "anchors": ["cloud-controls"],
+      "why": "This engine writes to user IaC files. Behaviour changes must be documented before they ship."
+    },
+    {
+      "id": "cloud-controls-operator-ref",
+      "source": "src/gate/cloud-controls/",
+      "docs": ["docs/WIKI.md"],
+      "anchors": ["cloud-controls"],
+      "advisory": true,
+      "why": "WIKI.md is the operator reference and has no cloud-controls chapter at all, despite this being a 1,002-rule engine that auto-writes to user infrastructure files. Advisory rather than blocking because writing that chapter is its own piece of work, not a doc-sync edit. Tracked debt, not silent debt."
+    },
+    {
+      "id": "diagram-art",
+      "source": "src/",
+      "docs": ["assets/diagrams/system-overview.svg"],
+      "anchors": [],
+      "advisory": true,
+      "why": "The five SVGs are hand-rendered and embedded in README via absolute main-branch URLs, so a branch edit is invisible until merge. There is no renderer in the repo. Advisory so the staleness is tracked debt rather than silent debt."
+    }
+  ]
+}

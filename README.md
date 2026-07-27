@@ -1,6 +1,6 @@
 # security-mcp
 
-Last updated: 2026-07-17
+Last updated: 2026-07-25
 
 [![npm version](https://img.shields.io/npm/v/security-mcp.svg)](https://www.npmjs.com/package/security-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -63,11 +63,15 @@ You get three things from one install:
 
 ## Is security-mcp safe to use? (the MCP's own security & governance)
 
-A security tool that reads your repository and calls out to an AI model is itself part of your trust boundary. Short answer: security-mcp runs locally, sends your code to a third party only for steps you explicitly opt into, and is built so it cannot be silently disabled or made to lie about what it did.
+A security tool that reads your repository and calls out to an AI model is itself part of your trust boundary. Short answer: security-mcp makes no telemetry call and uploads no source code of its own, its own network requests carry metadata only, and it is built so it cannot be silently disabled or made to lie about what it did. Your code does reach a model provider, by two routes you control. Both are spelled out below and mapped edge by edge in [docs/DATA_FLOW.md](docs/DATA_FLOW.md).
 
 ### Does it send my code anywhere?
 
-No, not by default. security-mcp runs as a local MCP server over stdio (`src/mcp/server.ts` connects via `StdioServerTransport`, never an HTTP listener) or as a plain CLI, and there is no telemetry call anywhere in the server or CLI code. The network calls that do exist are ones you opt into: live threat intel (CISA KEV, EPSS, OpenSSF Scorecard, npm registry), scanner-binary and skill downloads, and any Slack/Jira/PagerDuty/webhook integration you configure. Set `SECURITY_OFFLINE=1` for a fully air-gapped run.
+**security-mcp never uploads your source itself.** It runs as a local MCP server over stdio (`src/mcp/server.ts` connects via `StdioServerTransport`, never an HTTP listener) or as a plain CLI, and there is no telemetry call anywhere in the server or CLI code. Its own outbound requests carry metadata only: CVE identifiers to CISA KEV and EPSS, dependency names to the npm registry and OpenSSF Scorecard, downloads of scanner binaries and skills, and finding *counts* to any Slack/Jira/PagerDuty/webhook integration you configure. No file contents, no file paths.
+
+**Your code still reaches a model provider by two routes, and you control both.** First, the AI client you are already running it in: when the host calls `repo.read_file`, the file contents come back as a tool result and the host sends that to whatever provider you chose. security-mcp does not make that request, but the content gets there, so "runs locally" does not mean "your code stays local". Second, a local agent CLI, and only when you explicitly call `orchestration.start_agent_run`: each spawned CLI makes its own inference call that this server never sees. `ollama` stays on your machine.
+
+`SECURITY_OFFLINE=1` cuts every outbound call and refuses agent execution outright rather than degrading it. It cannot affect the host-client route, because that is your client's request, not ours. For a run with no model in the loop at all, use the CLI or the CI gate (`npm run ci:pr-gate`).
 
 ### How does security-mcp protect my code and secrets?
 
@@ -91,7 +95,7 @@ It scans its own source on every change: `.github/workflows/security-gate.yml` r
 
 | Mechanism | What it protects | Where in code |
 | --- | --- | --- |
-| Local stdio process, no listener, no telemetry | Your code never leaves your machine to a third party by default | `src/mcp/server.ts` |
+| Local stdio process, no listener, no telemetry | security-mcp uploads no source itself; its own egress is metadata only. Code reaches a model via your AI client's tool results, or a local CLI on an explicit agent run | `src/mcp/server.ts`, [docs/DATA_FLOW.md](docs/DATA_FLOW.md) |
 | HMAC-signed policy / exceptions / baseline | An unsigned edit can't silently weaken the gate; HIGH/CRITICAL stay blocked | `src/gate/policy.ts`, `src/gate/exceptions.ts`, `src/gate/baseline.ts` |
 | Hash-linked, optionally signed audit chain + attestations | A verified record of what actually ran, not a self-reported one | `src/mcp/audit-chain.ts`, `src/mcp/orchestration.ts` |
 | Fail-safe crash containment | A crashing check becomes a HIGH finding, not a silent blind spot | `src/gate/policy.ts`, `src/gate/result.ts` |
@@ -177,6 +181,26 @@ It runs in three phases:
 </p>
 
 Cloud, AI/LLM, and mobile sub-agents are conditional: they activate only when the relevant stack is detected, and report N/A otherwise.
+
+### Agents that actually execute
+
+The orchestrator can run its roster itself instead of asking your assistant to role-play each specialist. `orchestration.start_agent_run` spawns a detached supervisor that drives every agent to a terminal state using **the LLM CLIs already installed on your machine** — `claude`, `codex`, and `copilot` are supported and verified; others are configurable. There is no API key: each CLI uses the subscription you already signed into.
+
+Call `orchestration.executor_status` first. It costs zero model tokens and reports which CLIs were found, whether each is authenticated, what each can actually do, what is degraded, an estimated wall-clock for the run, and whether a run could pass the capability gate at all.
+
+Detection searches `PATH`, well-known install paths, npm and pnpm global roots across every installed Node version, and editor extension bundles — Codex ships inside the ChatGPT VS Code extension and is invisible to a `PATH`-only scan.
+
+Every detected provider runs concurrently with its own rate limiter and circuit breaker, so throttling on one does not stall the others, the quota cost is split rather than falling on a single plan, and different model families see the same code. Scheduling comes from the DAG already recorded in `skills-manifest.json`: sub-agents wait for their lead, and Phase 2 waits for all of Phase 1, because `pentest-team` consumes the Phase 1 threat model as its attack brief.
+
+Before any agent starts, a deterministic pre-pass runs the scanners once and builds a repository map shared by the whole roster, so agents spend their turns reasoning rather than rediscovering, and cite evidence you can re-run. Scanners that are not installed are listed explicitly, because "we did not run gitleaks" and "gitleaks found nothing" must not look the same.
+
+**A run cannot be reported as done while any agent is pending.** `orchestration.assert_run_complete` throws rather than returning, `orchestration.merge_agent_findings` forces the gate to FAIL and names every unexecuted agent, and `security.attest_review` refuses to sign. An agent may instead finish as `completed_na` — a terminal verdict meaning its domain is absent — but only with recorded evidence of which signals were searched.
+
+Every findings file carries execution provenance: which CLI and binary, which model actually answered, capability tier, tools allowed and denied, timing, token counts, and any degradation. Each agent also leaves a readable transcript, so a reviewer can open the session behind any finding rather than trusting a summary.
+
+Agents run read-only by default. Auto-apply hands write access to a model reading untrusted repository content, so its risks and mitigations are stated plainly in [docs/LIMITATIONS.md](docs/LIMITATIONS.md), along with everything else this tool does not do well.
+
+If no local CLI is found, the previous host-driven path still works and is returned as an explicit fallback with the reason attached.
 
 ---
 
@@ -400,7 +424,7 @@ A security tool is part of your supply chain, so security-mcp is built to resist
 
 ## MCP tools
 
-Your AI calls these automatically; you rarely invoke them by hand. There are 41, grouped into three namespaces plus 6 MCP prompts.
+Your AI calls these automatically; you rarely invoke them by hand. There are 46, grouped into three namespaces plus 6 MCP prompts.
 
 ### Most useful tools
 
@@ -419,19 +443,24 @@ Your AI calls these automatically; you rarely invoke them by hand. There are 41,
 | `security.generate_remediations` | Concrete fix template per finding |
 | `repo.read_file` / `repo.search` | Read or search the codebase (guarded) |
 | `orchestration.create_agent_run` | Stand up the multi-agent run + manifest |
+| `orchestration.executor_status` | Which local LLM CLIs are usable, what is degraded, estimated wall clock (zero tokens) |
+| `orchestration.start_agent_run` | Execute the roster for real on your local CLIs, in a detached supervisor |
+| `orchestration.get_run_progress` | Phase, per-agent status, execution provenance, supervisor liveness |
+| `orchestration.assert_run_complete` | Throws while any agent is pending — "done" cannot be claimed falsely |
 | `orchestration.merge_agent_findings` | Dedupe and sort findings across agents |
 | `orchestration.verify_skill_coverage` | Check §1-§24 plus the 4 universal SKILL.md sections (28 total) |
 
 ### Operational families
 
-Beyond the tools above, the rest of the surface clusters into four families:
+Beyond the tools above, the rest of the surface clusters into five families:
 
+- **Agent execution.** `executor_status`, `start_agent_run`, `get_run_progress`, `cancel_agent_run`, `assert_run_complete`.
 - **Model routing and budget.** `get_routing`, `get_model_for_task`, `track_usage`, `model_budget_status`, `get_provider_health`, `record_provider_failure`, `reset_provider_circuit`.
 - **Learning and pattern memory.** `record_outcome`, `pattern_report`, `self_heal_loop`, plus `orchestration.read_agent_memory` / `write_agent_memory`.
 - **Attestation hash chain.** `init_chain`, `attest_agent`, `verify_chain`, `get_chain`.
 - **Caller auth and lifecycle.** `authenticate`, `logout`, plus update tools `orchestration.check_updates` / `apply_updates` and skill loading `orchestration.ensure_skill`.
 
-Namespace counts: `security.*` (30 tools), `repo.*` (2), `orchestration.*` (9), and 6 MCP prompts (`security-engineer`, `threat-model-template`, `ciso-orchestrator`, `senior-security-engineer`, `agentic-instruction-auditor`, `fortify`).
+Namespace counts: `security.*` (30 tools), `repo.*` (2), `orchestration.*` (14), and 6 MCP prompts (`security-engineer`, `threat-model-template`, `ciso-orchestrator`, `senior-security-engineer`, `agentic-instruction-auditor`, `fortify`).
 
 ---
 
@@ -622,6 +651,13 @@ The `security-mcp` binary exposes:
 
 ## Change History
 
+- 2026-07-25 - Corrected the trust-boundary claims in "Is security-mcp safe to use?". The previous
+  wording ("your code never leaves your machine to a third party by default") was wrong for the
+  normal case: running the server inside an AI client sends file contents to that client's model
+  provider on the first `repo.read_file`. The section now separates what security-mcp uploads
+  (nothing) from what reaches a model provider through the host client and through an explicit agent
+  run, and links the new [docs/DATA_FLOW.md](docs/DATA_FLOW.md), which maps every outbound call in
+  `src/` edge by edge.
 - 2026-07-17 — Added the "Strict mode" environment-variable section documenting
   `SECURITY_STRICT=1` (Track C): a single switch that requires both HMAC keys plus
   the MCP shared secret and forces offline mode, refusing to start if any

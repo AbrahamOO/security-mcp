@@ -49,6 +49,7 @@
     "skills/",
     "defaults/",
     "client-templates/",
+    "skills-manifest.json",
     "README.md",
     "LICENSE"
   ],
@@ -62,6 +63,7 @@
     "version:bump": "node scripts/bump-version.mjs",
     "version:check": "node scripts/check-version.mjs",
     "verify:claims": "node scripts/verify-claims.mjs --strict",
+    "docs:check": "node scripts/check-doc-drift.mjs",
     "test": "npm run build && node --test dist/tests/legacy.test.js"
   },
   "dependencies": {

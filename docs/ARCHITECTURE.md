@@ -1,6 +1,6 @@
 # Architecture
 
-Last updated: 2026-07-17
+Last updated: 2026-07-25
 
 > **Version note:** 1.4.0, 1.5.0, 1.6.0, and 1.6.1 referenced throughout this document
 > are internal milestones that were never published to npm. All of them ship publicly in
@@ -400,15 +400,76 @@ which model was used, what task type the agent was assigned, or which tools it i
 Where a floor cannot be evaluated because that metadata was never recorded, the enforcer
 does not silently pass it and does not fail it as if it had been checked; it emits a
 MEDIUM `CAPABILITY_UNVERIFIED` advisory naming exactly what orchestration needs to start
-recording. In practice this means the model-tier and tool-floor checks currently run in
-this "unverified" mode for most agents, since orchestration has not yet been updated to
-populate the forward-compatible metadata schema (`modelUsed`, `capabilityTierUsed`,
-`taskType`, `toolsUsed`, `toolsAvailable`) that `capability-enforcer.ts` already defines.
-Closing that gap, so those two floors become real HIGH-level checks instead of MEDIUM
-advisories, is tracked as a follow-up, not claimed as done.
+recording. In practice this means the model-tier and tool-floor checks run in this
+"unverified" mode for every host-driven agent, because a host playing a persona itself does
+not report which model or tools it used. The local-execution path described below does
+record it: `AgentExecutionRecord` in `src/types/agent-run.ts` populates the metadata schema
+(model, capability tier, task type, tools allowed and denied) that `capability-enforcer.ts`
+defines. So those two floors are real checks for executor-driven runs and advisories for
+host-driven ones.
 
 Enforcement is wrapped so that any internal error degrades to a non-fatal warning: a bug
 in the enforcer itself should never be able to take down an otherwise-passing gate.
+
+### Local agent execution (`src/agent-exec/`)
+
+Everything above describes the *host-driven* path: the AI client you are running in reads a
+persona and plays each agent itself. `src/agent-exec/` adds a second path, in which
+security-mcp drives the agent CLIs already installed and authenticated on your machine
+(`claude`, `codex`, `copilot`, and others) as child processes. The orchestration, merge,
+attestation, and thoroughness machinery is identical. Only the thing playing each agent
+changes.
+
+Adapters are **data, not code**. `defaults/agent-clis.json` describes each CLI: how to
+detect it, how to probe its auth, which argv tokens it accepts, and which tools it can be
+told to allow or deny. `src/agent-exec/adapter-schema.ts` validates that file with zod and
+rejects unknown argv tokens, so adding a CLI never means shipping new execution logic. Each
+adapter is class **A** (the CLI owns its own agent loop) or class **B** (completion-only).
+An `_unverified` list on each adapter records which fields are guesses rather than tested
+behaviour, and `docs/LIMITATIONS.md` names which adapters have actually been driven end to
+end.
+
+```mermaid
+flowchart TD
+    START["orchestration.start_agent_run<br/>src/agent-exec/tools.ts"] --> OFF{"SECURITY_OFFLINE<br/>or SECURITY_STRICT?"}
+    OFF -- set --> REFUSE(["refused — driving a CLI<br/>makes an outbound model call"])
+    OFF -- unset --> SUP["Detached supervisor<br/>src/agent-exec/supervisor.ts<br/>(lock · liveness · stale reap)"]
+    SUP --> CP["Context pack — computed ONCE per run<br/>src/agent-exec/context-pack.ts<br/>(shared prefix · records scannersUnavailable)"]
+    CP --> NA["Evidenced N/A sweep<br/>src/agent-exec/queue.ts<br/>(skip before spending a session)"]
+    NA --> Q["Scheduling DAG from the sha256-pinned<br/>skills-manifest.json — never from SKILL.md prose"]
+    Q --> LIM["Per-provider AIMD limiter<br/>src/agent-exec/limiter.ts<br/>(one per provider — separate quotas)"]
+    LIM --> EXEC["runAgent — src/agent-exec/executor.ts"]
+    EXEC --> ENV["buildChildEnv — extendEnv:false allowlist<br/>credential passthrough is PER ADAPTER"]
+    EXEC --> TOOLS["resolveTools — least privilege<br/>sub-agent-spawning tools always denied"]
+    ENV --> CHILD["child CLI process"]
+    TOOLS --> CHILD
+    CHILD --> NORM["normalizeAgentOutput<br/>src/agent-exec/agent-prompt.ts<br/>(drop hallucinated paths · coerce severity)"]
+    NORM --> FILE["findings file + self-attestation<br/>over the exact serialized array"]
+    FILE --> MERGE2["mergeAgentFindings<br/>(the same single trust sink)"]
+```
+
+Three properties are worth stating explicitly, because each is a boundary rather than a
+feature:
+
+- **The child's model call is invisible to this server.** security-mcp assembles the prompt
+  and reads the result. It never sees the request the CLI makes to its own provider, so it
+  cannot report or redact what crossed that line. See [DATA_FLOW.md](DATA_FLOW.md).
+- **Credential passthrough is per adapter, not global.** `buildChildEnv`
+  (`src/agent-exec/executor.ts`) builds the child environment from an allowlist with
+  `extendEnv: false`, rather than inheriting. A Claude child has no business seeing a GitHub
+  token, so it does not receive one.
+- **Recursion is structurally prevented.** A spawned child runs under the `child_readonly`
+  tool profile, in which non-allowlisted MCP tools are not registered at all rather than
+  registered and refused (`src/mcp/server.ts`). `orchestration.executor_status` reports
+  readiness and blockers at zero token cost, and `security.fortify` calls it so a host that
+  cannot use the executor falls back to the host-driven steps with a stated reason.
+
+Because the executor records what it actually did, the `AgentExecutionRecord` in
+`src/types/agent-run.ts` now carries the adapter, model, capability tier, task type, tool
+allow and deny lists, timings, token counts, and degradation reasons. That is the metadata
+the capability enforcer's model-tier and tool-floor checks were designed to consume, so for
+executor-driven runs those two floors can be evaluated rather than reported as
+`CAPABILITY_UNVERIFIED`. For host-driven runs they remain unverified, as described above.
 
 ## Model routing
 
@@ -472,6 +533,15 @@ produce the final verdict that either blocks a merge or clears it.
 
 ## Change History
 
+- 2026-07-25 - Added the "Local agent execution (`src/agent-exec/`)" subsection and a fourth
+  mermaid diagram covering the executor: adapters-as-data, the offline refusal, the detached
+  supervisor, the once-per-run context pack, the evidenced N/A sweep, the manifest-derived
+  scheduling DAG, the per-provider limiter, per-adapter credential passthrough, and least-privilege
+  tool resolution. The subsystem had shipped in `src/agent-exec/` while this document did not
+  mention it at all. Also corrected the capability-enforcement paragraph, which said orchestration
+  records no model or tool metadata; `AgentExecutionRecord` now records it for executor-driven runs,
+  so those floors are real checks there and advisories only for host-driven runs. Added a link to
+  the new [DATA_FLOW.md](DATA_FLOW.md).
 - 2026-07-17 — Rewrote the "fail safe" paragraph to distinguish a per-file skip
   (legitimately silent) from the whole check's evidence source being unavailable
   (must emit `EVAL_UNAVAILABLE_<NAME>`, not `[]`) — reconciles with README's "the

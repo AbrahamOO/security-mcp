@@ -1,6 +1,6 @@
 # Wiki
 
-Last updated: 2026-07-17
+Last updated: 2026-07-26
 
 A practical reference for running security-mcp, understanding how the gate decides
 PASS/FAIL, the full list of rule IDs added in 1.5.0, 1.6.0, and 1.6.1, how capability
@@ -110,9 +110,10 @@ high-risk lead produced real evidence rather than a silent empty result. A short
 raises a HIGH `CAPABILITY_DEGRADED::<agentName>` finding, and any degraded agent in the
 run raises one run-level CRITICAL `CAPABILITY_FLOOR_NOT_MET` that forces the gate to FAIL.
 Honestly disclosed limitation: the model-tier and tool floors depend on per-agent metadata
-(`modelUsed`, `taskType`, `toolsUsed`) that orchestration does not yet record for every
-agent, so those two floors currently surface as a MEDIUM `CAPABILITY_UNVERIFIED` advisory
-rather than a hard pass or fail until that metadata is wired up — see "Capability
+(`modelUsed`, `taskType`, `toolsUsed`). Executor-driven runs record it, so those floors are
+real checks there. Host-driven runs do not, because a host playing a persona itself does not
+report which model or tools it used, so both floors surface as a MEDIUM
+`CAPABILITY_UNVERIFIED` advisory rather than a hard pass or fail — see "Capability
 enforcement" above for the full detail.
 
 ### Does it execute anything unsafely?
@@ -524,8 +525,88 @@ themselves; they are evaluated against `model-router.ts`'s `TASK_CAPABILITY_MAP`
 `PROTECTED_MAX_POWER_TASKS`, which are code-level constants, not policy-file or
 environment-variable configuration, as of 1.5.0.
 
+## Exception trust: when suppressions are honoured
+
+An exceptions file may suppress LOW and MEDIUM findings freely. Suppressing **HIGH or
+CRITICAL** requires trust, and trust cannot come from the file's own name or location,
+because every candidate file lives inside the repository being scanned. A pull request that
+could grant itself suppressions is not a gate.
+
+Two ways to earn it, in order of strength:
+
+1. **Sign it.** `security-mcp sign-exceptions` embeds an `hmacSha256` keyed on
+   `SECURITY_POLICY_HMAC_KEY`. Hold that key as a CI secret and a fork PR can never produce a
+   valid signature. Re-run after every edit; an edit invalidates the signature.
+2. **Opt in from the workflow.** Set `SECURITY_TRUST_CI_EXCEPTIONS=1` in the workflow file,
+   never in repo content. For `pull_request` events GitHub runs the workflow definition from
+   the base branch, so a fork PR cannot introduce it. The gate additionally refuses this trust
+   when the change set under review modifies the exceptions file, and refuses it when no
+   change set was supplied, because an unverifiable claim is not a safe one.
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `SECURITY_POLICY_HMAC_KEY` | (none) | Signs and verifies policy, baseline, and exceptions. A verified signature is full trust |
+| `SECURITY_TRUST_CI_EXCEPTIONS` | (unset) | Lets an unsigned `.github/security-exceptions-ci.json` suppress HIGH/CRITICAL, but only when it is unmodified by the change set |
+| `SECURITY_REQUIRE_SIGNED_EXCEPTIONS` | (unset) | Fail-closed: reject unsigned exceptions entirely |
+| `SECURITY_ALLOW_UNSIGNED_HIGH_SUPPRESSION` | (unset) | Break-glass for scanning deliberately-vulnerable fixtures. Do not set in CI |
+
+Whenever an unsigned file suppresses anything, the gate raises
+`EXCEPTIONS_UNSIGNED_SUPPRESSION` at **the highest severity it hid**. Suppressing a CRITICAL
+unsigned therefore produces a CRITICAL, which blocks. That is deliberate: an unsigned
+suppression of a blocking finding should not itself be non-blocking.
+
+## Local agent execution: the executor tools
+
+By default `/ciso-orchestrator` is host-driven: the AI client you are running in reads each
+persona and plays each agent itself. The executor is the alternative, in which security-mcp
+drives the agent CLIs installed on your machine (`claude`, `codex`, `copilot` and others) as
+child processes. Five MCP tools control it. An agent run starts only when you call
+`orchestration.start_agent_run`. Adapter detection is separate: `executor_status` runs each candidate
+CLI with its version flag to identify it, and `security.fortify` calls `executor_status`, so those
+two do spawn short-lived local subprocesses without starting any agent.
+
+| Tool | What it does |
+| --- | --- |
+| `orchestration.executor_status` | Reports readiness: which CLIs are detected, their auth state, which adapter fields are unverified, and what is blocking. Spawns nothing and costs no tokens. Call this first |
+| `orchestration.start_agent_run` | Launches the detached supervisor for an existing agent-run manifest. Takes `agentRunId` (32 hex chars), an optional `concurrency`, and a remediation mode |
+| `orchestration.get_run_progress` | Polls a running supervisor: per-agent status, timings, and degradation reasons |
+| `orchestration.cancel_agent_run` | Requests cancellation of an in-flight run |
+| `orchestration.assert_run_complete` | Fails unless every agent reached a terminal status. Use it before `security.attest_review` so an incomplete run cannot be signed |
+
+Order of operations: `orchestration.create_agent_run` to build the manifest, then
+`executor_status` to confirm readiness, then `start_agent_run`, then `get_run_progress` until
+it settles, then `assert_run_complete`, then `orchestration.merge_agent_findings`.
+
+`security.fortify` calls `executor_status` for you and returns a ready-to-run
+`start_agent_run` payload when the executor is available, or the host-driven steps plus a
+`fallbackReason` when it is not.
+
+### Environment variables for the executor
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `SECURITY_AGENT_CLI` | (auto) | Forces a specific adapter id instead of the detection order in `defaults/agent-clis.json` |
+| `SECURITY_OFFLINE` | (unset) | Refuses agent execution outright. Driving a CLI necessarily makes an outbound model call, so this is a refusal rather than a degradation |
+| `SECURITY_STRICT` | (unset) | Implies `SECURITY_OFFLINE`, so it also refuses agent execution |
+| `SECURITY_MCP_TOOL_PROFILE` | (unset) | Set to `child_readonly` in a spawned child. Non-allowlisted MCP tools are then not registered at all, rather than registered and refused |
+| `SECURITY_MCP_AGENT_DEPTH` | `0` | Recursion depth. A value of 1 or higher also selects the child profile, which is what prevents an agent from starting another agent run |
+| `SECURITY_ATTEST_KEY` | (none) | HMAC key for agent attestations and persisted reports. Must be at least 32 hex characters. Unset means the recorded `sha256` is a recomputable integrity hash, not a signature |
+
+Adapter behaviour is configuration, not code. To fix a wrong flag for a CLI, edit
+`defaults/agent-clis.json`; the schema in `src/agent-exec/adapter-schema.ts` validates it and
+rejects unknown argv tokens. Which adapters have actually been driven end to end, and which
+ship as best-effort guesses, is recorded in [LIMITATIONS.md](LIMITATIONS.md).
+
 ## Change History
 
+- 2026-07-26 - Added the "Exception trust" section. Suppressing HIGH/CRITICAL now requires a
+  signature or an out-of-band workflow opt-in plus an unmodified file, because the previous
+  filename-based trust let any pull request suppress every blocking finding. Documents
+  `SECURITY_TRUST_CI_EXCEPTIONS`, the new `sign-exceptions` command, and the proportional
+  severity of `EXCEPTIONS_UNSIGNED_SUPPRESSION`.
+- 2026-07-25 - Added the "Local agent execution" section documenting the five
+  `orchestration.*` executor tools, their call order, and the executor environment
+  variables. This subsystem shipped in `src/agent-exec/` with no operator reference.
 - 2026-07-17 — Rewrote the "Fail safe" check-authoring rule (item 5) to distinguish
   a per-file skip (legitimately silent) from the whole check's evidence source
   being unavailable (must emit `EVAL_UNAVAILABLE_<NAME>`, not `[]`) — the old
