@@ -3,7 +3,7 @@
 All notable changes to `security-mcp` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.3.7] - 2026-07-27
 
 ### Trust hardening (2026-07-26)
 
