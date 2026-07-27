@@ -148,7 +148,7 @@ const CLEAN_ATTESTATION_RE =
  * then this static map is the source of truth; once recorded, prefer the recorded
  * value so the enforcer checks the real routing decision, not an inferred one.
  */
-const AGENT_TASK_TYPE: Partial<Record<AgentName, TaskType>> = {
+export const AGENT_TASK_TYPE: Partial<Record<AgentName, TaskType>> = {
   // ── Threat modelling leads/sub-agents → threat_model (protected/advanced) ──
   "threat-modeler": "threat_model",
   "stride-pasta-analyst": "threat_model",
@@ -230,7 +230,7 @@ const AGENT_TASK_TYPE: Partial<Record<AgentName, TaskType>> = {
  * (advanced tier) for any unmapped agent — we prefer to OVER-require capability for
  * an unknown security agent rather than let it slip below the floor unnoticed.
  */
-function taskTypeForAgent(agent: AgentName): TaskType {
+export function taskTypeForAgent(agent: AgentName): TaskType {
   return AGENT_TASK_TYPE[agent] ?? "code_review";
 }
 
