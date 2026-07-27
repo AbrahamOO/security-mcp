@@ -114,28 +114,33 @@ jobs:
         id: pack
         run: echo "tarball=$(npm pack --silent)" >> "$GITHUB_OUTPUT"
 
-      # Supply-chain attestation for a package published from a PRIVATE source repo.
+      # Cryptographic build attestation is NOT available for this package, and the reason is
+      # recorded here rather than left as an unexplained absence. Both mechanisms were tried
+      # against this repository and both are gated on source visibility:
       #
-      # `npm publish --provenance` is not usable here: npm rejects it with
-      # "Unsupported GitHub Actions source repository visibility: private" (HTTP 422), because
-      # npm provenance requires a public source repo so anyone can verify the build against it.
-      # The package is public; the repository is not.
+      #   npm publish --provenance
+      #     HTTP 422 "Unsupported GitHub Actions source repository visibility: private.
+      #     Only public source repositories are supported when publishing with provenance."
       #
-      # GitHub Artifact Attestations give the same underlying guarantee without that
-      # constraint: a Sigstore-signed SLSA build provenance statement binding this exact
-      # tarball digest to this workflow, this commit, and this runner, recorded in a
-      # transparency log. It works for private repositories. Anyone with repo access verifies
-      # with:
+      #   actions/attest-build-provenance
+      #     "Failed to persist attestation: Feature not available for user-owned private
+      #     repositories. To enable this feature, please make this repository public."
       #
-      #   gh attestation verify security-mcp-<version>.tgz --repo AbrahamOO/security-mcp
+      # The package is public; the source repository is private and user-owned. There is no
+      # widely verifiable provenance mechanism for that combination today.
       #
-      # This is an alternative to npm provenance, not a removal of attestation. If the repo is
-      # ever made public, add --provenance back to the publish step to also surface the
-      # "Provenance" badge on npmjs.com; the two are complementary.
-      - name: Attest build provenance
-        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a  # actions/attest-build-provenance@v3
-        with:
-          subject-path: ${{ steps.pack.outputs.tarball }}
+      # What consumers still get: npm records a sha512 integrity hash for every published
+      # tarball and every npm client verifies it on install, so the bytes cannot be altered
+      # after publication. The digest is printed below so it is pinned in this run's immutable
+      # log and can be compared against `npm view security-mcp dist.integrity`.
+      #
+      # To get real provenance, make the repository public and restore `--provenance` on the
+      # publish step below. Do not replace this with a step that fails open.
+      - name: Record artifact digest
+        run: |
+          echo "sha512: $(openssl dgst -sha512 -binary '${{ steps.pack.outputs.tarball }}' | openssl base64 -A)"
+          echo "sha256: $(shasum -a 256 '${{ steps.pack.outputs.tarball }}' | awk '{print $1}')"
+          echo "::warning::Published WITHOUT build provenance: the source repository is private and user-owned, which both npm provenance and GitHub Artifact Attestations refuse. Compare the sha512 above with 'npm view security-mcp dist.integrity'."
 
       - name: Publish
         # Publishes the attested tarball itself. --access public is what makes the package
