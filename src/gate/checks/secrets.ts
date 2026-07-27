@@ -333,7 +333,11 @@ export async function checkSecrets(_: { changedFiles: string[] }): Promise<Findi
     "src/gate/checks/secrets.ts"
   ];
 
-  const files = await fg(["**/*.*", "**/.*"], {
+  // "**/*" (not "**/*.*") — the dotted form silently excludes every extensionless
+  // file. SSH private keys (id_rsa, id_ed25519), Dockerfile, Makefile, Jenkinsfile,
+  // Procfile and bare "credentials" all have no dot, so this module could not see them
+  // at all. src/repo/search.ts:91 already carries this fix; it was never propagated.
+  const files = await fg(["**/*"], {
     dot: true,
     onlyFiles: true,
     ignore: IGNORE_LIST

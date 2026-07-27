@@ -62,7 +62,11 @@ async function runStaticAnalysis(changedFiles: string[]): Promise<Finding[]> {
   const files =
     changedFiles.length > 0
       ? changedFiles.filter((f) => SOURCE_FILE_RE.test(f))
-      : await fg(["**/*.*"], {
+      // "**/*" (not "**/*.*") — the dotted form silently excludes every extensionless
+  // file. SSH private keys (id_rsa, id_ed25519), Dockerfile, Makefile, Jenkinsfile,
+  // Procfile and bare "credentials" all have no dot, so this module could not see them
+  // at all. src/repo/search.ts:91 already carries this fix; it was never propagated.
+  : await fg(["**/*"], {
           dot: true,
           onlyFiles: true,
           ignore: ["**/node_modules/**", "**/.git/**", "**/dist/**", "**/.mcp/**"]
