@@ -1,11 +1,11 @@
 {
-  "runId": "bd8c86f0-2efe-40d3-935f-1dd2a40cba22",
-  "commitHash": "e5f76d664b7d59fbbd8092c71fbf15e8bc283bc5",
-  "savedAt": "2026-06-16T16:45:34.642Z",
+  "runId": "de5627d6-339a-4ad8-99ee-58840dc631b2",
+  "commitHash": "184c3e55e3276c0901e96e0043a1118c290862aa",
+  "savedAt": "2026-07-28T04:42:59.673Z",
   "result": {
     "status": "FAIL",
     "policyVersion": "1.0.0",
-    "evaluatedAt": "2026-06-16T16:45:34.642Z",
+    "evaluatedAt": "2026-07-28T04:42:59.660Z",
     "scope": {
       "mode": "folder_by_folder",
       "targets": [
@@ -16,12 +16,6 @@
         ".claude/CLAUDE.md",
         ".claude/hidden.md",
         ".mcp.json",
-        ".mcp/baselines/e5f76d664b7d59fbbd8092c71fbf15e8bc283bc5.json",
-        ".mcp/baselines/latest.json",
-        ".mcp/exceptions/security-exceptions.json",
-        ".mcp/mappings/evidence-map.json",
-        ".mcp/policies/security-policy.json",
-        ".mcp/scanners/security-tools.json",
         "package.json",
         "SKILL.md"
       ],
@@ -50,7 +44,7 @@
           "Reference the threat model from your PR description and link it to changed components."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "ARTIFACTS_NO_SBOM",
@@ -68,37 +62,48 @@
           "Ensure the SBOM is included in any artifact upload to your registry (SLSA Level 2+)."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
-      },
-      {
-        "id": "ARTIFACTS_COMPLIANCE_GAP",
-        "title": "Compliance-related files changed but no compliance gap analysis found",
-        "severity": "MEDIUM",
-        "evidence": [
-          "Changed files triggering this check: .mcp/policies/security-policy.json",
-          "Searched .mcp/, security/, and docs/ for compliance-gap* or compliance-findings* — no match found."
-        ],
-        "requiredActions": [
-          "Produce a compliance gap analysis document before merging compliance/policy changes.",
-          "Place it as compliance-gap-<date>.md in .mcp/, security/, or docs/.",
-          "The gap analysis must map each changed control to its framework requirement (HIPAA §164, PCI DSS 4.0, GDPR Art. 32, etc.).",
-          "Document any residual risk and obtain sign-off from the compliance owner."
-        ],
-        "sla": "30d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "GIT_HISTORY_SECRET",
-        "title": "Secret detected in git history (3 findings)",
+        "title": "Secret detected in git history (40 findings)",
         "severity": "HIGH",
         "files": [
+          "fixtures/data-platform-insecure/databricks/etl_notebook.py",
+          "fixtures/data-platform-insecure/snowflake/connection.tf",
+          "fixtures/gitops-insecure/argocd-repo-creds.yaml",
+          "fixtures/gitops-insecure/flux-helmrelease-inline.yaml",
+          "fixtures/gitops-insecure/plaintext-secret.yaml",
+          "fixtures/iac-insecure/cloudformation/deep.json",
+          "fixtures/iac-insecure/pulumi/index.ts",
+          "fixtures/iac-insecure/terraform/prod.auto.tfvars",
+          "fixtures/iac-insecure/terraform/r3_providers.tf",
+          "fixtures/iac-insecure/terraform/secrets.tf",
+          "fixtures/k8s-insecure/secret.yaml",
           "skills/stride-pasta-analyst/SKILL.md",
           "src/mcp/server.ts"
         ],
         "evidence": [
-          "commit=f6e03ae7 file=skills/stride-pasta-analyst/SKILL.md rule=jwt",
-          "commit=47fbcb09 file=src/mcp/server.ts rule=generic-api-key",
-          "commit=4dc3bc47 file=src/mcp/server.ts rule=generic-api-key"
+          "commit=4bd0a1f6 file=fixtures/data-platform-insecure/databricks/etl_notebook.py rule=generic-api-key",
+          "commit=4bd0a1f6 file=fixtures/data-platform-insecure/snowflake/connection.tf rule=hashicorp-tf-password",
+          "commit=4bd0a1f6 file=fixtures/data-platform-insecure/snowflake/connection.tf rule=hashicorp-tf-password",
+          "commit=4bd0a1f6 file=fixtures/gitops-insecure/argocd-repo-creds.yaml rule=private-key",
+          "commit=4bd0a1f6 file=fixtures/gitops-insecure/argocd-repo-creds.yaml rule=github-pat",
+          "commit=4bd0a1f6 file=fixtures/gitops-insecure/flux-helmrelease-inline.yaml rule=generic-api-key",
+          "commit=4bd0a1f6 file=fixtures/gitops-insecure/plaintext-secret.yaml rule=kubernetes-secret-yaml",
+          "commit=4bd0a1f6 file=fixtures/iac-insecure/cloudformation/deep.json rule=generic-api-key",
+          "commit=4bd0a1f6 file=fixtures/iac-insecure/pulumi/index.ts rule=generic-api-key",
+          "commit=4bd0a1f6 file=fixtures/iac-insecure/terraform/prod.auto.tfvars rule=generic-api-key",
+          "commit=4bd0a1f6 file=fixtures/iac-insecure/terraform/prod.auto.tfvars rule=generic-api-key",
+          "commit=4bd0a1f6 file=fixtures/iac-insecure/terraform/r3_providers.tf rule=generic-api-key",
+          "commit=4bd0a1f6 file=fixtures/iac-insecure/terraform/secrets.tf rule=hashicorp-tf-password",
+          "commit=4bd0a1f6 file=fixtures/iac-insecure/terraform/secrets.tf rule=generic-api-key",
+          "commit=4bd0a1f6 file=fixtures/iac-insecure/terraform/secrets.tf rule=generic-api-key",
+          "commit=4bd0a1f6 file=fixtures/iac-insecure/terraform/secrets.tf rule=generic-api-key",
+          "commit=4bd0a1f6 file=fixtures/k8s-insecure/secret.yaml rule=kubernetes-secret-yaml",
+          "commit=4bd0a1f6 file=fixtures/k8s-insecure/secret.yaml rule=generic-api-key",
+          "commit=00d1564d file=fixtures/data-platform-insecure/databricks/etl_notebook.py rule=generic-api-key",
+          "commit=00d1564d file=fixtures/data-platform-insecure/snowflake/connection.tf rule=hashicorp-tf-password"
         ],
         "requiredActions": [
           "Secrets in git history remain exposed even after removal from the working tree.",
@@ -107,7 +112,7 @@
           "Enable branch protection and secret scanning alerts on the remote host."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "LOCKFILE_MISSING",
@@ -118,7 +123,17 @@
           "Pin versions and enable dependency scanning in CI."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
+      },
+      {
+        "id": "PACKAGE_JSON_EMPTY",
+        "title": "package.json has no dependencies/devDependencies",
+        "severity": "LOW",
+        "requiredActions": [
+          "Verify this is intentional. If not, add dependencies with pinned ranges."
+        ],
+        "sla": "90d",
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -133,7 +148,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -148,7 +163,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -163,7 +178,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -178,7 +193,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -193,7 +208,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -208,7 +223,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -222,7 +237,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -236,7 +251,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -251,7 +266,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -266,7 +281,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -281,7 +296,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -296,7 +311,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -311,7 +326,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -326,7 +341,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -342,7 +357,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -358,7 +373,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -374,7 +389,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -390,7 +405,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -405,7 +420,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -420,7 +435,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -435,7 +450,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -450,7 +465,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -465,7 +480,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -480,7 +495,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -495,7 +510,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -510,7 +525,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -525,7 +540,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -540,7 +555,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "EVIDENCE_MAPPING_MISSING",
@@ -554,7 +569,7 @@
           "Map each control to file globs that prove the control exists."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "CONTROL_EVIDENCE_MISSING",
@@ -568,7 +583,7 @@
           "Add or update code, tests, or config so the evidence globs resolve."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "SBOM_MISSING",
@@ -582,7 +597,7 @@
           "Or set SECURITY_AUTO_SBOM=true to auto-generate on each gate run."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "PROVENANCE_MISSING",
@@ -597,7 +612,7 @@
           "Store provenance in .mcp/attestations/"
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "AGENT_INSTRUCTION_OVERRIDE",
@@ -619,7 +634,7 @@
           "Enforce instruction-hierarchy isolation in agent runtimes: render repo-sourced instruction files as untrusted DATA inside delimited boundaries, never as system authority."
         ],
         "sla": "24h",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "AGENT_INSTRUCTION_EXFIL",
@@ -637,7 +652,7 @@
           "Rotate any credentials reachable by the agent if there is evidence the instruction file was active during a run."
         ],
         "sla": "24h",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "AGENT_TOOL_POISONING",
@@ -655,7 +670,7 @@
           "Run agent tools under least privilege with an explicit allowlist; deny directives that disable auth, validation, or the sandbox."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "AGENT_PERSISTENCE_DIRECTIVE",
@@ -673,7 +688,7 @@
           "Audit version history of the file for a benign-then-weaponized edit pattern."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "AGENT_HIDDEN_INSTRUCTION",
@@ -691,7 +706,7 @@
           "Decode and review every embedded base64/hex blob; treat any that decodes to imperatives or URLs as a live injection payload."
         ],
         "sla": "24h",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "AGENT_CREDENTIAL_HARVEST",
@@ -709,7 +724,7 @@
           "Rotate any credentials the agent could reach and review run logs for prior harvesting attempts."
         ],
         "sla": "24h",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "AGENT_MEMORY_POISONING",
@@ -727,7 +742,7 @@
           "Audit existing agent memory for entries that may have been planted by this directive."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "AGENT_REMOTE_INSTRUCTION_LOAD",
@@ -745,7 +760,7 @@
           "Apply an egress allowlist so runtime instruction-fetching is blocked even if the directive survives review."
         ],
         "sla": "24h",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "AGENT_PERMISSION_ESCALATION",
@@ -763,7 +778,7 @@
           "Require human approval for any change to allowed-tools or permission scope."
         ],
         "sla": "7d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "AGENT_BACKDOOR_INSERT",
@@ -781,7 +796,7 @@
           "Block agent write-access to auth-sensitive paths (authorized_keys, IAM policies, CI secrets) entirely."
         ],
         "sla": "24h",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       },
       {
         "id": "AGENT_PROMPT_LEAK",
@@ -799,7 +814,43 @@
           "Log and alert on prompt-extraction attempts as a precursor to a targeted attack."
         ],
         "sla": "30d",
-        "slaAssignedAt": "2026-06-16T16:45:34.640Z"
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
+      },
+      {
+        "id": "AGENT_MCP_DESCRIPTION_POISONING",
+        "title": "MCP/tool description or schema field carries injected instructions (tool-description poisoning / rug pull)",
+        "severity": "CRITICAL",
+        "files": [
+          ".mcp.json"
+        ],
+        "evidence": [
+          ".mcp.json"
+        ],
+        "sla": "24h",
+        "requiredActions": [
+          "Inspect .mcp.json / tool definitions: a 'description' (or inputSchema description) that tells the model to 'ignore previous', 'always run X', hide actions from the user, or read .env/.ssh is a tool-poisoning payload the model silently obeys (OWASP LLM07, MITRE ATLAS AML.T0053, CWE-77).",
+          "Pin MCP servers/tool definitions by version + hash and re-review on every change — a benign tool can be rug-pulled into a malicious description after install.",
+          "Render tool descriptions as neutral capability summaries only; reject any tool whose description issues instructions to the model."
+        ],
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
+      },
+      {
+        "id": "AI_INVISIBLE_UNICODE_INJECTION",
+        "title": "Invisible Unicode (tag chars, zero-width, bidi override, or variation selectors) found in text/source — hidden LLM-prompt injection carrier (CWE-1427)",
+        "severity": "HIGH",
+        "evidence": [
+          "U+200B at .claude/hidden.md:5"
+        ],
+        "files": [
+          ".claude/hidden.md"
+        ],
+        "requiredActions": [
+          "These codepoints render as nothing to a human reviewer but are still read by an LLM/agent, so they smuggle hidden instructions (ASCII smuggling / bidi tricks) into prompts, RAG corpora, or tool metadata (CWE-1427, MITRE ATLAS AML.T0051).",
+          "Inspect each reported location by codepoint (the raw bytes are intentionally not shown here), confirm the character is legitimate, and strip it if not.",
+          "Normalize all ingested text to Unicode NFC and remove Tags (U+E0000-U+E007F), zero-width (U+200B/200C/200D/FEFF), bidi (U+202A-U+202E, U+2066-U+2069), and variation selectors before tokenization; add a pre-commit hook that rejects these ranges."
+        ],
+        "sla": "7d",
+        "slaAssignedAt": "2026-07-28T04:42:59.659Z"
       }
     ],
     "suppressedFindings": [],
@@ -1497,80 +1548,7 @@
     "baselineDiff": {
       "regressions": [],
       "improvements": [],
-      "newFindings": [
-        {
-          "id": "AGENT_REMOTE_INSTRUCTION_LOAD",
-          "title": "Agentic instruction file pulls instructions or commands from an external location",
-          "severity": "CRITICAL",
-          "files": [
-            ".claude/advanced.md"
-          ],
-          "evidence": [
-            ".claude/advanced.md"
-          ],
-          "requiredActions": [
-            "Remove directives that load/fetch/follow instructions from a URL or run command-substitution ($(curl …), `wget …`) — the visible file looks clean while the real payload arrives at runtime (indirect injection; OWASP LLM01, MITRE ATLAS AML.T0051).",
-            "Forbid agents from following instructions sourced from any network location; all agent authority must come from reviewed, pinned local files.",
-            "Apply an egress allowlist so runtime instruction-fetching is blocked even if the directive survives review."
-          ],
-          "sla": "24h",
-          "slaAssignedAt": "2026-06-16T16:45:34.640Z"
-        },
-        {
-          "id": "AGENT_PERMISSION_ESCALATION",
-          "title": "Agentic instruction file requests elevated permissions or tool access",
-          "severity": "HIGH",
-          "files": [
-            ".claude/advanced.md"
-          ],
-          "evidence": [
-            ".claude/advanced.md"
-          ],
-          "requiredActions": [
-            "Remove requests to skip permissions (--dangerously-skip-permissions, bypassPermissions, auto-approve), broaden allowed-tools to wildcards (Bash(*)), or run without confirmation — repo-sourced files must never widen the agent's own privileges (excessive agency; OWASP LLM08, CWE-269).",
-            "Pin the agent's permission mode and tool allowlist in trusted operator config, never in repo-readable instruction files.",
-            "Require human approval for any change to allowed-tools or permission scope."
-          ],
-          "sla": "7d",
-          "slaAssignedAt": "2026-06-16T16:45:34.640Z"
-        },
-        {
-          "id": "AGENT_BACKDOOR_INSERT",
-          "title": "Agentic instruction file directs the agent to insert a backdoor or persistent access",
-          "severity": "CRITICAL",
-          "files": [
-            ".claude/advanced.md"
-          ],
-          "evidence": [
-            ".claude/advanced.md"
-          ],
-          "requiredActions": [
-            "Remove directives to add SSH keys / authorized_keys, create admin accounts, plant reverse/bind shells, add webhooks, hardcode credentials, or disable MFA/signature checks (persistence + privilege escalation; MITRE ATT&CK T1098, CWE-912).",
-            "Treat the repository as potentially compromised: diff for any backdoor the agent may already have written, and review authorized_keys / IAM / webhook config.",
-            "Block agent write-access to auth-sensitive paths (authorized_keys, IAM policies, CI secrets) entirely."
-          ],
-          "sla": "24h",
-          "slaAssignedAt": "2026-06-16T16:45:34.640Z"
-        },
-        {
-          "id": "AGENT_PROMPT_LEAK",
-          "title": "Agentic instruction file attempts to extract the agent's system prompt or instructions",
-          "severity": "MEDIUM",
-          "files": [
-            ".claude/advanced.md"
-          ],
-          "evidence": [
-            ".claude/advanced.md"
-          ],
-          "requiredActions": [
-            "Remove directives asking the agent to repeat/print/reveal its system prompt, rules, or configuration — prompt-leak is reconnaissance that enables a tailored jailbreak (MITRE ATLAS AML.T0056).",
-            "Configure the agent runtime to refuse system-prompt disclosure and to treat such requests as adversarial probes.",
-            "Log and alert on prompt-extraction attempts as a precursor to a targeted attack."
-          ],
-          "sla": "30d",
-          "slaAssignedAt": "2026-06-16T16:45:34.640Z"
-        }
-      ],
+      "newFindings": [],
       "resolvedFindings": [],
       "coverageChange": 0
     }
