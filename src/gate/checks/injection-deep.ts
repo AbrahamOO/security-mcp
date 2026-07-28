@@ -2,7 +2,7 @@
  * Deep injection class enforcement — covers attack vectors not detected by existing checks.
  * CWE references per MITRE CWE catalog; ATT&CK techniques per MITRE ATT&CK v14.
  */
-import { Finding, sanitizeErrorMessage } from "../result.js";
+import { Finding, sanitizeErrorMessage, settleRules } from "../result.js";
 import { searchRepo } from "../../repo/search.js";
 
 const NON_CODE_RE = /\.(?:md|json|yaml|yml|txt|rst|toml|lock)$/i;
@@ -106,9 +106,14 @@ async function checkSsti(): Promise<Finding[]> {
 async function checkPrototypePollution(): Promise<Finding[]> {
   const findings: Finding[] = [];
 
-  // Original merge-with-user-input pattern
+  // Original merge-with-user-input pattern.
+  //
+  // The `merge\s*\(` alternative used to consume the call's own parenthesis, so the
+  // pattern then demanded a SECOND one: only `merge((...)` matched and the ordinary
+  // `merge({}, req.body)` never fired. Every alternative is now a bare callee name
+  // and the single `\s*\(` after the group supplies the parenthesis.
   const mergeHits = await codeSearch(
-    String.raw`(?:_\.merge|Object\.assign|deepmerge|lodash\.merge|merge\s*\()\s*\(\s*(?:\{\}|obj|target|options|config|settings|result)\s*,\s*(?:req\.|body\.|params\.|query\.|user\.|payload\.|data\.)`
+    String.raw`(?:_\.merge|Object\.assign|deepmerge|lodash\.merge|\bmerge|\bdeepExtend|\bextend)\s*\(\s*(?:\{\}|obj|target|options|config|settings|result)\s*,\s*(?:req\.|body\.|params\.|query\.|user\.|payload\.|data\.|JSON\.parse\s*\([^)]*(?:req|body|params|query)\.)`
   );
   if (mergeHits.length) {
     findings.push({
@@ -125,9 +130,17 @@ async function checkPrototypePollution(): Promise<Finding[]> {
     });
   }
 
-  // Direct __proto__ assignment patterns
+  // Direct __proto__ assignment patterns.
+  //
+  // Writing THROUGH the prototype (`obj.__proto__.isAdmin = true`, the textbook
+  // pollution) was missed: the old pattern required `=` to follow `__proto__`
+  // immediately, which only covers replacing the prototype wholesale. Both forms,
+  // bracket access, and Object.setPrototypeOf/defineProperty on __proto__ now match.
+  // The property path after __proto__ is a character run, not a repeated group:
+  // a group with a quantifier inside another quantifier is what searchRepo's own
+  // ReDoS guard rejects, and a rejected query throws instead of matching.
   const directProtoHits = await codeSearch(
-    String.raw`(?:\.__proto__\s*=|\['__proto__'\]\s*=|\["__proto__"\]\s*=|\.constructor\.prototype\s*=)`
+    String.raw`(?:\.__proto__[\w$.\[\]'"]{0,40}\s*=[^=]|\[\s*['"]__proto__['"]\s*\][\w$.\[\]'"]{0,40}\s*=[^=]|\.constructor\.prototype[\w$.]{0,40}\s*=[^=]|Object\.setPrototypeOf\s*\([^)]{0,60}(?:req\.|body\.|params\.|query\.|payload\.|JSON\.parse)|Object\.defineProperty\s*\([^,]{1,40},\s*['"]__proto__['"])`
   );
   if (directProtoHits.length) {
     findings.push({
@@ -609,13 +622,16 @@ async function checkMongoAggregationInjection(): Promise<Finding | null> {
 }
 
 async function checkLdapInjection(): Promise<Finding | null> {
+  // The library gate accepted `require('ldapjs')` only, so the identical
+  // vulnerability written as `import ldap from "ldapjs"` — the form any modern
+  // TypeScript service uses — produced no finding at all.
   const ldapLibHits = await codeSearch(
-    String.raw`require\s*\(\s*['"](?:ldapjs|ldapts|activedirectory)['"]\)`
+    String.raw`require\s*\(\s*['"](?:ldapjs|ldapts|activedirectory)['"]\)|(?:^|\s)import\s[^;\n]*['"](?:ldapjs|ldapts|activedirectory)['"]|from\s*['"](?:ldapjs|ldapts|activedirectory)['"]`
   );
   if (!ldapLibHits.length) return null;
 
   const filterHits = await codeSearch(
-    String.raw`(?:\(uid=.*req\.|filter.*\+.*req\.|dn.*\+.*req\.|searchFilter.*\+|filter\s*=\s*[\x60'"][^\x60'"]*\$\{)`
+    String.raw`(?:\(uid=[^\n]{0,80}req\.|filter[^\n]{0,60}\+[^\n]{0,60}req\.|dn[^\n]{0,60}\+[^\n]{0,60}req\.|searchFilter[^\n]{0,60}\+|filter\s*=\s*[\x60'"][^\x60'"]*\$\{)`
   );
   if (!filterHits.length) return null;
 
@@ -634,13 +650,15 @@ async function checkLdapInjection(): Promise<Finding | null> {
 }
 
 async function checkXpathInjection(): Promise<Finding | null> {
+  // `import { select } from "xpath"` is as common as `xpath.select(...)`, and used
+  // to miss the library gate entirely — the rule could not fire on a named import.
   const xpathLibHits = await codeSearch(
-    String.raw`require\s*\(\s*['"]xpath['"]|xpath\.select|xpath\.evaluate|XPathEvaluator`
+    String.raw`require\s*\(\s*['"]xpath['"]|xpath\.select|xpath\.evaluate|XPathEvaluator|(?:^|\s)import\s[^;\n]*['"]xpath(?:-ts)?['"]|from\s*['"]xpath(?:-ts)?['"]`
   );
   if (!xpathLibHits.length) return null;
 
   const injectionHits = await codeSearch(
-    String.raw`(?:xpath.*\+.*req\.|select\s*\([^)]*req\.|evaluate\s*\([^)]*req\.|xpath\s*=\s*[\x60'"][^\x60'"]*\$\{[^\x60'"]*(?:req|body|params|query))`
+    String.raw`(?:xpath[^\n]{0,60}\+[^\n]{0,60}req\.|select\s*\([^)]*req\.|evaluate\s*\([^)]*req\.|xpath\s*=\s*[\x60'"][^\x60'"]*\$\{[^\x60'"]*(?:req|body|params|query))`
   );
   if (!injectionHits.length) return null;
 
@@ -760,8 +778,15 @@ async function checkSecondOrderInjection(): Promise<Finding | null> {
 }
 
 async function checkSstiJavaPhp(): Promise<Finding | null> {
+  // Each engine name had to be followed immediately by `(`, so the normal Velocity
+  // and Freemarker call — `velocityEngine.getTemplate(request.getParameter("tpl"))`
+  // — matched nothing: the parenthesis belongs to `.getTemplate`, not the engine.
+  // A `.getTemplate(` / `.mergeTemplate(` call on any receiver is now accepted,
+  // still only when a request value appears inside the arguments. Deliberately not
+  // `.evaluate(` or `.getInstance(`: those belong to XPath and to singletons, and
+  // claiming them here would mislabel a different vulnerability class as SSTI.
   const hits = await codeSearch(
-    String.raw`(?:freemarker\.template|VelocityEngine|Template\.getInstance|cfg\.getTemplate|\$twig->render|\$smarty->display|mako\.template\.Template)\s*\([^)]*(?:request|req\.|userInput|getParam)`
+    String.raw`(?:freemarker\.template|VelocityEngine|Template\.getInstance|\.getTemplate|\.mergeTemplate|\$twig->render|\$twig->createTemplate|\$smarty->display|\$smarty->fetch|mako\.template\.Template)\s*\([^)]*(?:request|req\.|userInput|getParam)`
   );
   if (!hits.length) return null;
   return {
@@ -855,9 +880,34 @@ async function checkCssInjection(): Promise<Finding | null> {
 }
 
 async function checkElasticsearchInjection(): Promise<Finding | null> {
-  const hits = await codeSearch(
-    String.raw`(?:client\.search\s*\(|esClient\.search\s*\()[^)]*(?:req\.|body\.|params\.|query\.)|(?:query_string|script\.source)\s*:\s*(?:req\.|body\.|params\.|query\.)`
+  // `client.search(...)` is not an Elasticsearch signature. ldapjs, ldapts and
+  // several SDKs name their client `client` and expose `.search()`, so this rule
+  // claimed an LDAP filter concatenation as "Elasticsearch Painless injection" —
+  // wrong id, wrong CWE, wrong remediation, and it also masked LDAP_INJECTION for
+  // the same line. The generic call shape now requires an Elasticsearch or
+  // OpenSearch client in the same file; the ES-specific keys still stand alone.
+  const esLibHits = await codeSearch(
+    String.raw`@elastic/elasticsearch|@opensearch-project/opensearch|['"]elasticsearch['"]|elasticsearch\.Client|OpenSearchClient|@elastic/transport`
   );
+  const esFiles = new Set(esLibHits.map((h) => h.file));
+
+  const genericSearchHits = (
+    await codeSearch(
+      String.raw`(?:client\.search\s*\(|esClient\.search\s*\()[^)]*(?:req\.|body\.|params\.|query\.)`
+    )
+  ).filter((h) => esFiles.has(h.file));
+
+  const esSpecificHits = await codeSearch(
+    String.raw`(?:query_string|script\.source)\s*:\s*(?:req\.|body\.|params\.|query\.)`
+  );
+
+  const seen = new Set<string>();
+  const hits = [...genericSearchHits, ...esSpecificHits].filter((h) => {
+    const key = `${h.file}:${h.line}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
   if (!hits.length) return null;
   return {
     id: "ELASTICSEARCH_INJECTION",
@@ -1066,8 +1116,12 @@ async function checkPerlEvalInjection(): Promise<Finding | null> {
     String.raw`(?:^|\s)(?:use\s+strict|use\s+warnings|CGI->new|\$cgi->param|require\s+CGI)`
   );
   if (!perlLibHits.length) return null;
+  // `(?:\{[^}]*|\()?` is an optional group containing a quantifier, which
+  // searchRepo's ReDoS guard rejects — so in a Perl repo (the only place this rule
+  // runs) the query threw, and until the module was made failure-tolerant that
+  // single throw discarded the findings of all 40 other injection rules.
   const hits = await codeSearch(
-    String.raw`eval\s*(?:\{[^}]*|\()?[^;\n]*(?:\$cgi->param|param\s*\(|\$ENV\{QUERY|\$q->param|<STDIN>|\$ARGV|\$_(?:GET|POST|REQUEST))`
+    String.raw`eval\s*[{(]?[^;\n]{0,200}(?:\$cgi->param|param\s*\(|\$ENV\{QUERY|\$q->param|<STDIN>|\$ARGV|\$_(?:GET|POST|REQUEST))`
   );
   if (!hits.length) return null;
   return {
@@ -1086,8 +1140,11 @@ async function checkPerlEvalInjection(): Promise<Finding | null> {
 
 async function checkMongoServerSideJs(): Promise<Finding | null> {
   // $where / mapReduce server-side JS combined with user-controlled data.
+  // The concatenation form — `$where: 'this.name == "' + req.query.n + '"'` — was
+  // missed: only template-literal interpolation and a bare `$where: req.x` matched,
+  // and string concatenation is the older and more common way to write it.
   const hits = await codeSearch(
-    String.raw`(?:\$where\s*:\s*[\x60'"][^\x60'"]*\$\{(?:req|body|params|query)|\.mapReduce\s*\([^)]*(?:req\.|body\.|params\.|query\.)|(?:map|reduce)\s*:\s*[\x60'"][^\x60'"]*\$\{(?:req|body|params|query)|\$where\s*:\s*(?:req\.|body\.|params\.|query\.))`
+    String.raw`(?:\$where\s*:\s*[\x60'"][^\x60'"]*\$\{(?:req|body|params|query)|\.mapReduce\s*\([^)]*(?:req\.|body\.|params\.|query\.)|(?:map|reduce)\s*:\s*[\x60'"][^\x60'"]*\$\{(?:req|body|params|query)|\$where\s*:\s*(?:req\.|body\.|params\.|query\.)|\$where\s*:\s*[^,}\n]{0,80}\+\s*(?:req|body|params|query)\.)`
   );
   if (!hits.length) return null;
   return {
@@ -1132,8 +1189,13 @@ async function checkImageMagickShellInjection(): Promise<Finding | null> {
 }
 
 async function checkSvgXxe(): Promise<Finding | null> {
+  // `sharp\s*\([^)]*\)` could not match `sharp(Buffer.from(svg))` — the character
+  // class stops at the inner call's closing parenthesis, so the most common way to
+  // hand sharp an in-memory SVG produced no hit. The alternative now matches the
+  // call opening only; the /svg/i filter below still requires the line to be about
+  // SVG, which is what kept this rule specific in the first place.
   const svgParseHits = await codeSearch(
-    String.raw`(?:svg2img|svgson\.parse|new\s+Resvg|sharp\s*\([^)]*\)\.[^;]*|parseSvg|loadSVG|\.from\s*\([^)]*\.svg|svgParse|xmldom.*svg|DOMParser[^;]*svg)`
+    String.raw`(?:svg2img|svgson\.parse|new\s+Resvg|sharp\s*\(|parseSvg|loadSVG|\.from\s*\([^)]*\.svg|svgParse|xmldom[^\n]{0,40}svg|DOMParser[^;]*svg)`
   );
   if (!svgParseHits.length) return null;
   const unsafe = svgParseHits.filter(
@@ -1185,13 +1247,58 @@ async function checkStaticRedos(): Promise<Finding | null> {
   const regexLit = String.raw`\/[^\/\n]*(?:` + nested + "|" + dotStar + "|" + altGrp + String.raw`)[^\/\n]*\/[gimsuy]*`;
   const usage = String.raw`\.(?:test|exec|match|replace)\s*\(\s*(?:req\.|body\.|params\.|query\.|user\.|input\b)`;
   const hits = await codeSearch(regexLit + String.raw`\s*` + usage);
-  if (!hits.length) return null;
+
+  // searchRepo matches one line at a time, so the inline form above only sees
+  //   if (/^([a-z0-9]+)+@example\.com$/.test(req.query.email)) { ... }
+  // and missed the ordinary way the same bug is written:
+  //   const EMAIL = /^([a-z0-9]+)+@example\.com$/;
+  //   export const ok = (s) => EMAIL.test(s);
+  // Second pass: find the vulnerable literal bound to a name, then look for that
+  // name being run as a matcher anywhere in the repo. The argument is not required
+  // to be a request value — a validator reached through a function parameter is the
+  // normal shape, and the exponential blow-up belongs to the pattern either way.
+  // `[^=\n]{0,20}=` rather than an optional `(?::\s*RegExp\s*)?` type-annotation
+  // group: an optional group containing a quantifier is what searchRepo's ReDoS
+  // guard rejects, and a rejected query throws rather than returning no matches.
+  const literalDecls = await codeSearch(
+    String.raw`(?:const|let|var|static|readonly|public|private)\s+([A-Za-z_$][\w$]*)[^=\n]{0,20}=\s*` + regexLit
+  );
+  const declNameRe = /(?:const|let|var|static|readonly|public|private)\s+([A-Za-z_$][\w$]*)/;
+  const declaredNames = [
+    ...new Set(
+      literalDecls
+        .map((h) => declNameRe.exec(h.preview)?.[1])
+        .filter((n): n is string => typeof n === "string" && n.length > 1)
+    )
+  ].slice(0, 20); // keep the assembled query under searchRepo's 500-char cap
+
+  const indirectHits: Hit[] = [];
+  if (declaredNames.length) {
+    const names = declaredNames.join("|");
+    const usedAsMatcher = await codeSearch(
+      String.raw`\b(?:` + names + String.raw`)\s*\.\s*(?:test|exec)\s*\(|\.(?:match|matchAll|replace|replaceAll|split|search)\s*\(\s*(?:` + names + String.raw`)\s*[,)]`
+    );
+    for (const h of usedAsMatcher) {
+      if (literalDecls.some((d) => d.file === h.file && d.line === h.line)) continue;
+      indirectHits.push(h);
+    }
+  }
+
+  const combined = [...hits, ...(indirectHits.length ? literalDecls : []), ...indirectHits];
+  const seen = new Set<string>();
+  const deduped = combined.filter((h) => {
+    const key = `${h.file}:${h.line}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  if (!deduped.length) return null;
   return {
     id: "REDOS_STATIC_NESTED_QUANTIFIER",
     title: "ReDoS — static regex with nested quantifier ((.*)+, (\\w*)*, (a|ab)+) run against user input (CWE-1333)",
     severity: "HIGH",
-    evidence: toEvidence(hits),
-    files: toFiles(hits),
+    evidence: toEvidence(deduped),
+    files: toFiles(deduped),
     requiredActions: [
       "Rewrite the regex to remove nested quantifiers and ambiguous alternation ((.*)+, (\\w*)*, (a|ab)+ backtrack exponentially).",
       "CWE-1333 / ATT&CK T1499 — a crafted input string makes the pattern backtrack for seconds, hanging the Node.js event loop per request.",
@@ -1294,7 +1401,9 @@ async function checkXpathFunctionInjection(): Promise<Finding | null> {
 
 export async function checkInjectionDeep(_opts: { changedFiles: string[] }): Promise<Finding[]> {
   try {
-    const results = await Promise.all([
+    // settleRules, not Promise.all: one rule that throws used to discard the
+    // findings of all 40 others and return [], which reads as a clean repository.
+    return await settleRules("injection-deep", [
       checkXxe(),
       checkSsti(),
       checkPrototypePollution(),
@@ -1345,9 +1454,23 @@ export async function checkInjectionDeep(_opts: { changedFiles: string[] }): Pro
       checkLdapWildcardInjection(),
       checkXpathFunctionInjection(),
     ]);
-    return results.flat().filter((f): f is Finding => f !== null);
   } catch (err) {
+    // settleRules() absorbs per-rule failures, so reaching here means the module
+    // itself could not run. Report the gap; never return [] — an empty list from a
+    // module that never ran is read as "no injection vulnerabilities".
     console.warn("[checkInjectionDeep] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));
-    return [];
+    return [{
+      id: "GATE_CHECK_CRASHED",
+      title: "Security check module crashed — coverage gap",
+      severity: "HIGH",
+      evidence: [
+        "Check module: injection-deep",
+        `Error: ${sanitizeErrorMessage(err instanceof Error ? err.message : String(err))}`
+      ],
+      requiredActions: [
+        "The injection-deep module threw before any rule completed. No injection findings were produced, which is a coverage gap, not a clean result.",
+        "Check the gate logs for the underlying error and file a bug if it reproduces."
+      ]
+    }];
   }
 }
