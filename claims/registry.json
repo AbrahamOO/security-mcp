@@ -29,6 +29,19 @@
       "owner": "security-mcp-team"
     },
     {
+      "id": "control-catalog-count-arch",
+      "type": "QUANTITY",
+      "status": "TRUE",
+      "source": {
+        "file": "docs/ARCHITECTURE.md",
+        "line": 153
+      },
+      "verbatim": "96 controls",
+      "probe": "controlCatalogCount",
+      "owner": "security-mcp-team",
+      "note": "Added 2026-07-27 with the control-catalog section. The catalog answers 'is a required control present', a separate question from the pattern checks, and no doc described it before. The probe reads defaults/control-catalog.json, the same file the gate loads at runtime."
+    },
+    {
       "id": "remediation-template-count-readme",
       "type": "QUANTITY",
       "status": "TRUE",
@@ -36,7 +49,7 @@
         "file": "README.md",
         "line": 118
       },
-      "verbatim": "900 remediation templates",
+      "verbatim": "911 remediation templates",
       "probe": "remediationTemplateCount",
       "owner": "security-mcp-team"
     },
@@ -48,7 +61,7 @@
         "file": "docs/ARCHITECTURE.md",
         "line": 39
       },
-      "verbatim": "900 templates",
+      "verbatim": "911 templates",
       "probe": "remediationTemplateCount",
       "owner": "security-mcp-team"
     },
@@ -60,7 +73,7 @@
         "file": "docs/WIKI.md",
         "line": 368
       },
-      "verbatim": "900 fix templates",
+      "verbatim": "911 fix templates",
       "probe": "remediationTemplateCount",
       "owner": "security-mcp-team"
     },
@@ -212,7 +225,7 @@
       "verbatim": "up from just 71 templates (roughly 8% of finding IDs) before this release",
       "probe": null,
       "owner": "security-mcp-team",
-      "note": "Point-in-time historical fact (the pre-1.6.1 baseline), not a live-state claim \u2014 no probe to verify against, since nothing in the current codebase should equal a superseded baseline. Registered so the unregistered-number scan doesn't flag it as an unaccounted-for number; the QUANTITY verifier treats a null probe as auto-pass once the verbatim-presence check succeeds."
+      "note": "Point-in-time historical fact (the pre-1.6.1 baseline), not a live-state claim — no probe to verify against, since nothing in the current codebase should equal a superseded baseline. Registered so the unregistered-number scan doesn't flag it as an unaccounted-for number; the QUANTITY verifier treats a null probe as auto-pass once the verbatim-presence check succeeds."
     },
     {
       "id": "historical-remediation-baseline-arch",
@@ -286,12 +299,12 @@
         "file": "docs/WIKI.md",
         "line": 368
       },
-      "verbatim": "900 fix templates covering 100% (900/900) of detection IDs",
+      "verbatim": "911 fix templates covering 100% (911/911) of detection IDs",
       "probeA": "ruleIds",
       "probeB": "remediationTemplateIds",
       "mode": "set-equal",
       "owner": "security-mcp-team",
-      "note": "First run of this claim (2026-07-17) found the sets were NOT equal despite equal counts: EVAL_UNAVAILABLE_THREAT_INTEL (a live rule, added in the Wave-1 evaluability fix) had no template, and DEP_UNPINNED_VERSION (a template) had no live rule pointing to it \u2014 a dangling remnant of a renamed check. Fixed both in src/gate/remediation-map.ts so the claim is now literally true, not just count-coincidentally true."
+      "note": "First run of this claim (2026-07-17) found the sets were NOT equal despite equal counts: EVAL_UNAVAILABLE_THREAT_INTEL (a live rule, added in the Wave-1 evaluability fix) had no template, and DEP_UNPINNED_VERSION (a template) had no live rule pointing to it — a dangling remnant of a renamed check. Fixed both in src/gate/remediation-map.ts so the claim is now literally true, not just count-coincidentally true. 2026-07-27: the probe read src/gate/checks/** only, so the ids the gate itself emits (BASELINE_REGRESSION, GATE_CHECK_CRASHED, SEARCH_RESULTS_TRUNCATED and every exceptions-integrity finding) sat outside the claim - nine of them had no template while the claim still read 100%. ruleIds() now also reads src/gate/*.ts and the nine missing templates were written."
     },
     {
       "id": "coverage-skill-manifest-integrity",
@@ -303,7 +316,7 @@
       "verbatim": "every shipped skill is registered in skills-manifest.json with a sha256 that matches its current SKILL.md content",
       "mode": "skill-manifest-integrity",
       "owner": "security-mcp-team",
-      "note": "Verifies two things per skill, bulk (91 skills, one claim \u2014 see the note in scripts/verify-claims.mjs on why this replaced 91 near-duplicate per-skill entries): (1) skills-manifest.json's key set equals the set of skills/*/SKILL.md directories (excluding _TEMPLATE); (2) each entry's sha256 equals sha256(readFileSync(skills/<name>/SKILL.md)) \u2014 this hash is actively enforced at skill-load time (src/mcp/orchestration.ts's remote-fetch integrity check throws on mismatch). First run found 3 stale hashes (aws/gcp/azure-penetration-tester, edited after the manifest was last regenerated) and fixed them. Deliberately does NOT check description-field parity between the manifest and the SKILL.md frontmatter: verified empirically that all 91 differ by design \u2014 the frontmatter description carries Claude-facing trigger phrases, the manifest description is an independent short capability summary for the MCP prompt listing. Treating that as a bug would be enforcing an invariant that was never actually promised."
+      "note": "Verifies two things per skill, bulk (91 skills, one claim — see the note in scripts/verify-claims.mjs on why this replaced 91 near-duplicate per-skill entries): (1) skills-manifest.json's key set equals the set of skills/*/SKILL.md directories (excluding _TEMPLATE); (2) each entry's sha256 equals sha256(readFileSync(skills/<name>/SKILL.md)) — this hash is actively enforced at skill-load time (src/mcp/orchestration.ts's remote-fetch integrity check throws on mismatch). First run found 3 stale hashes (aws/gcp/azure-penetration-tester, edited after the manifest was last regenerated) and fixed them. Deliberately does NOT check description-field parity between the manifest and the SKILL.md frontmatter: verified empirically that all 91 differ by design — the frontmatter description carries Claude-facing trigger phrases, the manifest description is an independent short capability summary for the MCP prompt listing. Treating that as a bug would be enforcing an invariant that was never actually promised."
     },
     {
       "id": "guarantee-severity-block-fail-safe",
@@ -328,7 +341,7 @@
       "verbatim": "a check whose entire evidence source is unavailable emits EVAL_UNAVAILABLE_<NAME> instead of silently reporting clean",
       "test": "attempt_npm_audit_unavailable__does_not_report_clean",
       "owner": "security-mcp-team",
-      "note": "The general form of the evaluability guarantee added by the Track E fail-open sweep. Verified concretely via checkCveExploitation (dependencies.ts): forcing npm audit to fail (empty PATH -> ENOENT, no stdout) must produce EVAL_UNAVAILABLE_NPM_AUDIT, not a silently-clean gate PASS. The other 11 EVAL_UNAVAILABLE_* sites added in the same sweep (cloud-controls, scanners x5, nuclei, runtime x2, auth-deep, business-logic) follow the identical pattern and are covered by the coverage-rule-remediation-parity claim (every one has a real rule id and a real template) plus manual code review, but are not independently adversarially tested here \u2014 extending this test to each would require a network/tool-failure seam per site, deferred as a follow-up rather than blocking this pass."
+      "note": "The general form of the evaluability guarantee added by the Track E fail-open sweep. Verified concretely via checkCveExploitation (dependencies.ts): forcing npm audit to fail (empty PATH -> ENOENT, no stdout) must produce EVAL_UNAVAILABLE_NPM_AUDIT, not a silently-clean gate PASS. The other 11 EVAL_UNAVAILABLE_* sites added in the same sweep (cloud-controls, scanners x5, nuclei, runtime x2, auth-deep, business-logic) follow the identical pattern and are covered by the coverage-rule-remediation-parity claim (every one has a real rule id and a real template) plus manual code review, but are not independently adversarially tested here — extending this test to each would require a network/tool-failure seam per site, deferred as a follow-up rather than blocking this pass."
     },
     {
       "id": "guarantee-strict-mode-refuses-misconfigured-start",
@@ -356,7 +369,7 @@
         "testName": "compliance report truth (no satisfied-by-default)"
       },
       "owner": "security-mcp-team",
-      "note": "Already covered by the existing e2e test suite (added in the Wave 1 hardening pass): security.generate_compliance_report with no gate run must return 0 satisfied / all unverified, carry the not-an-audit caveat, and reject GDPR. Delegated rather than reimplemented \u2014 verify-claims.mjs runs `node --test dist/tests/legacy.test.js` once and this claim passes iff that run's exit code is 0."
+      "note": "Already covered by the existing e2e test suite (added in the Wave 1 hardening pass): security.generate_compliance_report with no gate run must return 0 satisfied / all unverified, carry the not-an-audit caveat, and reject GDPR. Delegated rather than reimplemented — verify-claims.mjs runs `node --test dist/tests/legacy.test.js` once and this claim passes iff that run's exit code is 0."
     },
     {
       "id": "scoped-wiki-90pct-fixing-determinism",
@@ -369,7 +382,7 @@
       "verbatim": "This is what makes the \"90% fixing, 10% advisory\" operating mandate a deterministic property of the gate engine, verifiable by calling security.generate_remediations, rather than something that depends on the live agent's judgment call in the moment.",
       "rewrite": {
         "newVerbatim": "operating mandate achievable in practice: every detection ID has a concrete template to work from",
-        "reason": "The original claim overstated what the engine verifies. Every remediation template is a static {pattern, fix, explanation, references} object \u2014 nothing in src/ applies it; the calling agent reads the template and writes the fix by hand, and \"verification\" re-runs the same regex that originally fired, which cannot distinguish a real fix from a regex-evasion. The only path that is genuinely deterministic end-to-end is Terraform via security-mcp autoharden (apply -> re-detect -> revert). Rewritten 2026-07-17 to claim what's true: template coverage, not deterministic verification, except where autoharden actually delivers it."
+        "reason": "The original claim overstated what the engine verifies. Every remediation template is a static {pattern, fix, explanation, references} object — nothing in src/ applies it; the calling agent reads the template and writes the fix by hand, and \"verification\" re-runs the same regex that originally fired, which cannot distinguish a real fix from a regex-evasion. The only path that is genuinely deterministic end-to-end is Terraform via security-mcp autoharden (apply -> re-detect -> revert). Rewritten 2026-07-17 to claim what's true: template coverage, not deterministic verification, except where autoharden actually delivers it."
       },
       "owner": "security-mcp-team"
     },
@@ -399,7 +412,7 @@
       "verbatim": "so the audit trail cannot be silently rewritten after the fact",
       "rewrite": {
         "newVerbatim": "a rewrite requires the key, not just filesystem access",
-        "reason": "The original claim was unconditional. In the default (unsigned) configuration, the hash chain alone provides no forgery resistance to an attacker with filesystem write access to .mcp/agent-runs/ \u2014 they can simply recompute every hash over their edited content. Only the HMAC-signed case (SECURITY_AUDIT_HMAC_KEY configured) actually delivers tamper-evidence against that threat model, matching the residual-risk note already present elsewhere in the docs. Rewritten 2026-07-17 to scope the claim to the case where it holds."
+        "reason": "The original claim was unconditional. In the default (unsigned) configuration, the hash chain alone provides no forgery resistance to an attacker with filesystem write access to .mcp/agent-runs/ — they can simply recompute every hash over their edited content. Only the HMAC-signed case (SECURITY_AUDIT_HMAC_KEY configured) actually delivers tamper-evidence against that threat model, matching the residual-risk note already present elsewhere in the docs. Rewritten 2026-07-17 to scope the claim to the case where it holds."
       },
       "owner": "security-mcp-team"
     },

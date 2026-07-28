@@ -48,19 +48,29 @@ export async function remediationTemplateCount() {
 }
 
 /**
- * Distinct finding ids the check modules can emit, from source (not dist) since
- * this is a static-literal scan, not a runtime call. Excludes the 3 known
- * runtime-templated ids (NUCLEI_*, SEMGREP_*, CHECKOV_*) which aren't string
- * literals and can't be enumerated without executing the scanner.
+ * Distinct finding ids the gate can emit, from source (not dist) since this is a
+ * static-literal scan, not a runtime call. Excludes the 3 known runtime-templated
+ * ids (NUCLEI_*, SEMGREP_*, CHECKOV_*) which aren't string literals and can't be
+ * enumerated without executing the scanner.
+ *
+ * Covers src/gate/checks/** AND the gate's own modules (policy.ts, baseline.ts,
+ * exceptions.ts). This probe used to read the check modules only, so the ids the
+ * gate itself emits — BASELINE_REGRESSION, every exceptions-integrity finding,
+ * GATE_CHECK_CRASHED — were outside the coverage claim entirely: nine of them had no
+ * remediation template and the claim still measured 100%. They are findings a report
+ * can contain, so they are findings the claim has to count.
  */
 export function ruleIds() {
-  const dir = join(ROOT, "src/gate/checks");
   const ids = new Set();
-  for (const file of readdirSync(dir)) {
-    if (!file.endsWith(".ts")) continue;
-    const text = readText(`src/gate/checks/${file}`);
-    for (const m of text.matchAll(/id:\s*"([A-Z][A-Z0-9_]+)"/g)) ids.add(m[1]);
-  }
+  const collect = (relDir) => {
+    for (const file of readdirSync(join(ROOT, relDir))) {
+      if (!file.endsWith(".ts")) continue;
+      const text = readText(`${relDir}/${file}`);
+      for (const m of text.matchAll(/id:\s*"([A-Z][A-Z0-9_]+)"/g)) ids.add(m[1]);
+    }
+  };
+  collect("src/gate/checks");
+  collect("src/gate");
   return ids;
 }
 
