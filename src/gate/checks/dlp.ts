@@ -332,31 +332,64 @@ export async function checkDlp(_opts: { changedFiles: string[] }): Promise<Findi
 		}
 
 		// 7. Server version disclosure
-		const poweredByHits = await searchRepo({
-			query: String.raw`X-Powered-By|Server:\s*(?:Express|nginx|Apache)|app\.set\s*\(\s*['"]x-powered-by['"]`,
-			isRegex: true,
-			maxMatches: 200
-		});
-		if (poweredByHits.length > 0) {
-			// Check if x-powered-by is disabled nearby
-			const disableHits = await searchRepo({
-				query: String.raw`app\.disable\s*\(\s*['"]x-powered-by['"]`,
+		//
+		// The old query matched the bare string "X-Powered-By" anywhere in the repo, so a
+		// security checklist saying the header should be SUPPRESSED reported the header as
+		// exposed — this repository flagged its own checklist text. And the only accepted
+		// mitigation was `app.disable('x-powered-by')`, so every Express app using helmet
+		// (which removes the header by default) was flagged too.
+		//
+		// Two signals now, both context-bound: a header actually being set, and an Express
+		// app that never disables the header it sets by default.
+		const SUPPRESSION_CONTEXT_RE =
+			/remove|delete|disable|suppress|unset|strip|hide|omit|\bno\b|helmet|false|should not|must not/i;
+
+		const explicitSetHits = (
+			await searchRepo({
+				query: String.raw`(?:res|response|reply)\.(?:set|setHeader|header|writeHead)\s*\([^)]{0,60}['"](?:X-Powered-By|Server)['"]|['"]X-Powered-By['"]\s*:\s*['"]|add_header\s+(?:X-Powered-By|Server)\s|app\.set\s*\(\s*['"]x-powered-by['"]\s*,\s*true|Server:\s*(?:Express|nginx|Apache)[/ ][\d.]`,
 				isRegex: true,
 				maxMatches: 200
+			})
+		).filter((m) => !SUPPRESSION_CONTEXT_RE.test(m.preview));
+
+		// Express sets X-Powered-By itself unless told not to, so an Express app with no
+		// suppression anywhere is disclosing it even though nothing in the source says so.
+		const [expressAppHits, suppressionHits] = await Promise.all([
+			searchRepo({
+				query: String.raw`require\s*\(\s*['"]express['"]\s*\)|from\s+['"]express['"]|express\s*\(\s*\)`,
+				isRegex: true,
+				maxMatches: 5
+			}),
+			searchRepo({
+				query: String.raw`app\.disable\s*\(\s*['"]x-powered-by['"]|hidePoweredBy|helmet\s*\(|removeHeader\s*\(\s*['"](?:X-Powered-By|Server)['"]|app\.set\s*\(\s*['"]x-powered-by['"]\s*,\s*false`,
+				isRegex: true,
+				maxMatches: 5
+			})
+		]);
+		const expressDefaultExposure = expressAppHits.length > 0 && suppressionHits.length === 0;
+
+		if (explicitSetHits.length > 0 || expressDefaultExposure) {
+			const evidence =
+				explicitSetHits.length > 0
+					? explicitSetHits.slice(0, 10).map((m) => `${m.file}:${m.line}:${m.preview}`)
+					: expressAppHits
+							.slice(0, 3)
+							.map((m) => `${m.file}:${m.line}: Express app with no x-powered-by suppression anywhere in the repo`);
+			findings.push({
+				id: "DLP_SERVER_HEADER_DISCLOSURE",
+				title: "Server technology disclosed via X-Powered-By or Server response header",
+				severity: "MEDIUM",
+				evidence,
+				files: [
+					...new Set(
+						(explicitSetHits.length > 0 ? explicitSetHits : expressAppHits).slice(0, 10).map((m) => m.file)
+					)
+				],
+				requiredActions: [
+					"Call app.disable('x-powered-by') in Express, or use helmet(), which removes the header for you.",
+					"Remove or obscure Server headers — version disclosure aids attacker reconnaissance."
+				]
 			});
-			if (disableHits.length === 0) {
-				findings.push({
-					id: "DLP_SERVER_HEADER_DISCLOSURE",
-					title: "Server technology disclosed via X-Powered-By or Server response header",
-					severity: "MEDIUM",
-					evidence: poweredByHits.slice(0, 10).map((m) => `${m.file}:${m.line}:${m.preview}`),
-					files: [...new Set(poweredByHits.slice(0, 10).map((m) => m.file))],
-					requiredActions: [
-						"Call app.disable('x-powered-by') in Express.",
-						"Remove or obscure Server headers — version disclosure aids attacker reconnaissance."
-					]
-				});
-			}
 		}
 	} catch (err) {
 		console.warn("[checkDlp] Internal error:", sanitizeErrorMessage(err instanceof Error ? err.message : String(err)));
