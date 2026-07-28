@@ -70,7 +70,13 @@ jobs:
           # (package.json "files") and this is the one gate that actually scans them.
           # remediation-parts/ is the fix-template registry's own before/after examples,
           # same false-positive class as fixtures/.
-          SECURITY_GATE_IGNORE: "fixtures,**/remediation-parts/**"
+          # src/tests is the rule corpus: deliberately-vulnerable sample pairs, same class
+          # as fixtures/.
+          # src/gate and .claude are the detection engine's own patterns and this repo's
+          # agent-instruction files. They used to be excluded from inside the product, which
+          # silently excluded the same paths in every reviewed project; the exclusion is now
+          # stated here, where it applies to this repo alone.
+          SECURITY_GATE_IGNORE: "fixtures,**/remediation-parts/**,src/gate,.claude,src/tests"
           # Do NOT set SECURITY_GATE_EXCEPTIONS to the CI file: passing it via the env
           # override marks it isOverride, and unsigned override files are barred from
           # suppressing HIGH/CRITICAL. Leaving it unset lets the gate auto-load

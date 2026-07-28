@@ -3,6 +3,7 @@ import { createHmac, timingSafeEqual, randomUUID } from "node:crypto";
 import { scopedFg as fg } from "./scan-scope.js";
 import { GateResult, Finding, FindingSeverity, ControlCoverage, sanitizeErrorMessage } from "./result.js";
 import { getChangedFiles } from "./diff.js";
+import { consumeSearchTruncations } from "../repo/search.js";
 import { detectSurfaces } from "./findings.js";
 import { checkRequiredArtifacts } from "./checks/required-artifacts.js";
 import { checkSecrets } from "./checks/secrets.js";
@@ -280,7 +281,6 @@ function assignRiskSlas(findings: Finding[]): Finding[] {
 type ScannerReadiness = Awaited<ReturnType<typeof checkScannerReadiness>>;
 type Surfaces = ReturnType<typeof detectSurfaces>;
 
-// Names aligned with check array order in runAllChecks — used for GATE_CHECK_CRASHED findings
 /**
  * Everything a check needs to decide whether it applies and to run.
  * `stagingUrl` is only set when SECURITY_STAGING_URL is configured — the two
@@ -384,6 +384,10 @@ async function runAllChecks(opts: {
 }): Promise<Finding[]> {
   const ctx: CheckCtx = { ...opts, stagingUrl: process.env["SECURITY_STAGING_URL"] };
 
+  // Discard anything left over from an earlier run so the ledger below describes
+  // this run only.
+  consumeSearchTruncations();
+
   const settled = await Promise.allSettled(
     CHECKS.map((def) => (def.when && !def.when(ctx) ? Promise.resolve([]) : def.run(ctx)))
   );
@@ -411,6 +415,28 @@ async function runAllChecks(opts: {
         ]
       });
     }
+  }
+
+  // A capped search and an exhausted search return the same array, so a rule that
+  // filters or intersects its hits can miss the one that mattered and report
+  // nothing. Say so rather than letting a partial scan read as a complete one.
+  const truncated = consumeSearchTruncations();
+  if (truncated.length > 0) {
+    findings.push({
+      id: "SEARCH_RESULTS_TRUNCATED",
+      title: "Content search hit its per-query match cap — some matching lines were never examined",
+      severity: "MEDIUM",
+      sla: "30d",
+      evidence: truncated
+        .slice(0, 10)
+        .map((t) => `stopped at ${t.maxMatches} matches: /${t.query}/`)
+        .concat(truncated.length > 10 ? [`… and ${truncated.length - 10} more capped quer(ies)`] : []),
+      requiredActions: [
+        `${truncated.length} detection quer(ies) reached the match cap. Every rule driven by them saw a prefix of the matching lines, not all of them, so a finding those rules would have raised on a later line is absent from this report.`,
+        "Narrow the run so each query stays under the cap: scan a subdirectory at a time (SECURITY_GATE_TARGETS), or exclude vendored/generated trees with SECURITY_GATE_IGNORE.",
+        "This is expected on large monorepos and is not itself a vulnerability. Treat it as reduced confidence in the absence of findings, not as a clean result."
+      ]
+    });
   }
   return findings;
 }

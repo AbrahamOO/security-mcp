@@ -87,6 +87,38 @@ function scanLines(
 	}
 }
 
+/**
+ * Truncation ledger.
+ *
+ * Every query stops at `maxMatches`. Nothing recorded that it had stopped, so a rule
+ * that filters its hits — "keep the ones whose line does not also contain a
+ * sanitizer" — could have its unsafe match sitting at position 201 and report
+ * nothing, and a rule that intersects two searches by filename could miss the file
+ * entirely. The gate reported that as a clean result, because a capped search and an
+ * exhausted search return the same shape.
+ *
+ * Queries that only ask whether ANY match exists use small caps (5) and are not
+ * truncation-sensitive: they got their answer. Only evidence-collecting queries,
+ * which ask for 50 or more, are recorded.
+ */
+export type SearchTruncation = { query: string; maxMatches: number };
+
+const EVIDENCE_CAP_THRESHOLD = 50;
+const truncations: SearchTruncation[] = [];
+/** Cap on remembered entries — the ledger must not grow without bound on a huge repo. */
+const MAX_REMEMBERED_TRUNCATIONS = 200;
+
+function recordTruncation(query: string, maxMatches: number): void {
+	if (truncations.length >= MAX_REMEMBERED_TRUNCATIONS) return;
+	if (truncations.some((t) => t.query === query)) return;
+	truncations.push({ query: query.slice(0, 120), maxMatches });
+}
+
+/** Returns every truncation recorded since the last call, and clears the ledger. */
+export function consumeSearchTruncations(): SearchTruncation[] {
+	return truncations.splice(0, truncations.length);
+}
+
 export async function searchRepo(opts: SearchOptions): Promise<RepoMatch[]> {
 	// "**/*" (not "**/*.*") — the dotted form silently excludes every
 	// extensionless file (Dockerfile, Makefile, Jenkinsfile, Procfile, ...),
@@ -98,15 +130,23 @@ export async function searchRepo(opts: SearchOptions): Promise<RepoMatch[]> {
 		// so discovery and readFileSafe() resolve against the same tree under withWorkspace().
 		cwd: getWorkspaceRoot(),
 		followSymbolicLinks: false,  // Prevent glob-based symlink traversal outside workspace root.
-		// scanIgnoreGlobs adds the always-ignore set (node_modules, .git, dist, .mcp)
-		// and any SECURITY_GATE_IGNORE project paths (e.g. fixtures/) on top of the
-		// search-specific exclusions below.
-		//   - .claude/: agent-instruction files are scanned by a dedicated check.
-		//   - src/gate/**: the detection-engine source defines the regex patterns the
-		//     checks search for, so it would trigger its own scanners. When deployed as
-		//     an npm package the compiled dist/ runs and src/ lives in node_modules
-		//     (already excluded); this ignore only affects the tool's self-scan.
-		ignore: scanIgnoreGlobs(["**/.claude/**", "src/gate/**"])
+		// Only the always-ignore set (node_modules, .git, dist, .mcp) plus the
+		// operator's SECURITY_GATE_IGNORE paths.
+		//
+		// This deliberately carries NO path exclusions of its own. It previously
+		// skipped "src/gate/**" and "**/.claude/**" so the tool's own self-scan would
+		// not flag its detection patterns and agent-instruction files. Those globs
+		// applied to EVERY workspace, so any reviewed project with a src/gate/
+		// directory (an API gateway, a feature-gate module) or a .claude/ directory
+		// (every repo that uses Claude Code) had those trees silently excluded from
+		// every query-based check: SQL injection, crypto, secrets, web hardening.
+		// Absence of findings there read as clean.
+		//
+		// Excluding the tool's own source is an operator decision about one specific
+		// repository, so it belongs in SECURITY_GATE_IGNORE (environment, set by the
+		// operator) and not in the shipped product (repository content, set by whoever
+		// wrote the repo under review).
+		ignore: scanIgnoreGlobs()
 	});
 
 	const re = opts.isRegex ? compileUserRegex(opts.query) : null;
@@ -123,6 +163,10 @@ export async function searchRepo(opts: SearchOptions): Promise<RepoMatch[]> {
 		}
 
 		scanLines(file, text.split("\n"), opts, re, matches);
+	}
+
+	if (matches.length >= opts.maxMatches && opts.maxMatches >= EVIDENCE_CAP_THRESHOLD) {
+		recordTruncation(opts.query, opts.maxMatches);
 	}
 
 	return matches;

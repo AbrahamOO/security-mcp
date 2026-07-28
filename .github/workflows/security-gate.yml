@@ -145,5 +145,15 @@ jobs:
           # class as the REMEDIATION_MAP entries. None are shippable application code;
           # scanning them flags the tool's own definitions. This affects only this repo's
           # self-scan — it is not part of the published package or user gate runs.
-          SECURITY_GATE_IGNORE: "fixtures,skills,prompts,defaults,skills-manifest.json,.github/security-exceptions-ci.json,**/remediation-parts/**"
+          #
+          # src/tests holds the rule corpus: 522 deliberately-vulnerable/safe sample pairs
+          # that exist so every detection rule is proven to fire and to stay quiet. They are
+          # test data in the same sense fixtures/ is, and scanning them flags the samples the
+          # rules were written against.
+          # src/gate and .claude are here for the same reason, and used to be hardcoded
+          # inside the product (src/repo/search.ts, src/gate/checks/secrets.ts). There they
+          # excluded those paths from EVERY reviewed project, not just this one. Stating
+          # them here keeps this repo's self-scan quiet while every other project gets its
+          # src/gate/ and .claude/ trees scanned like any other source.
+          SECURITY_GATE_IGNORE: "fixtures,skills,prompts,defaults,skills-manifest.json,.github/security-exceptions-ci.json,**/remediation-parts/**,src/gate,.claude,src/tests"
         run: npm run ci:pr-gate
