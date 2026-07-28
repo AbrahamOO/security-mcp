@@ -208,5 +208,18 @@ export const cases: RuleCase[] = [
       content: `export async function runAssistantAction(userInput: string) {\n  const completion = await openai.chat.completions.create({\n    model: "gpt-4",\n    messages: [{ role: "user", content: userInput }],\n  });\n  const reply = completion.choices[0].message.content;\n  const allowedActions = new Set(["summarize", "translate", "search"]);\n  const intent = JSON.parse(reply).action;\n  if (!allowedActions.has(intent)) {\n    throw new Error("Unrecognized action");\n  }\n  await runAllowlistedAction(intent);\n}\n`
     },
     note: "Positive passes model output (completion.choices[0].message.content) straight into eval(), matching the dangerous-sink pattern. Negative parses the reply and checks the requested action against a fixed allowlist before running anything, and never calls eval/exec/spawn/Function/dangerouslySetInnerHTML at all."
+  },
+  {
+    ruleId: "VIBE_API_ROUTE_NO_SERVER_AUTHZ",
+    check: "vibe-coding",
+    positive: {
+      file: "app/api/admin/route.ts",
+      content: `import { prisma } from "@/lib/prisma";\n\n// the webhook receiver lives in another file\nexport async function DELETE(req: Request) {\n  const { id } = await req.json();\n  await prisma.user.delete({ where: { id } });\n  return Response.json({ ok: true });\n}\n`
+    },
+    negative: {
+      file: "app/api/admin/route.ts",
+      content: `import Stripe from "stripe";\nimport { prisma } from "@/lib/prisma";\n\nconst stripe = new Stripe(process.env.STRIPE_KEY!);\n\nexport async function POST(req: Request) {\n  const signature = req.headers.get("stripe-signature")!;\n  const event = stripe.webhooks.constructEvent(await req.text(), signature, process.env.STRIPE_WEBHOOK_SECRET!);\n  await prisma.order.update({ where: { id: event.data.object.id }, data: { paid: true } });\n  return Response.json({ ok: true });\n}\n`
+    },
+    note: "The word 'webhook' appears in both. The positive only mentions it in a comment and authorizes nothing; the negative is a real webhook receiver that verifies the provider signature over the raw body, which is the correct authorization for an endpoint with no user session. Naming a handler after a webhook is a claim; verifying the signature is the control."
   }
 ];

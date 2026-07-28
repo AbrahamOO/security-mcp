@@ -208,5 +208,31 @@ export const cases: RuleCase[] = [
       content: `import express from "express";\nconst app = express();\napp.disable("x-powered-by");\napp.listen(3000);\n`
     },
     note: "The rule only fires when an X-Powered-By/Server-header reference is found AND no app.disable('x-powered-by') call exists anywhere in the repo. Negative's app.disable(\"x-powered-by\") line matches both the disable-check query and the disclosure query itself, so disableHits is non-empty and the finding is suppressed."
+  },
+  {
+    ruleId: "DLP_SERVER_HEADER_DISCLOSURE",
+    check: "dlp",
+    positive: {
+      file: "src/server.ts",
+      content: `import express from "express";\n\nconst app = express();\napp.get("/", (req, res) => res.send("ok"));\napp.listen(3000);\n`
+    },
+    negative: {
+      file: "src/server.ts",
+      content: `import express from "express";\nimport helmet from "helmet";\n\nconst app = express();\napp.use(helmet());\napp.get("/", (req, res) => res.send("ok"));\napp.listen(3000);\n`
+    },
+    note: "Express sets X-Powered-By itself unless told not to, so the positive discloses it without any line saying so. The negative uses helmet, which removes the header — previously only app.disable('x-powered-by') counted as a mitigation, so every helmet-using Express app was flagged."
+  },
+  {
+    ruleId: "DLP_SERVER_HEADER_DISCLOSURE",
+    check: "dlp",
+    positive: {
+      file: "src/http/headers.ts",
+      content: `export function applyHeaders(res) {\n  res.setHeader("X-Powered-By", "Express 4.18.2");\n}\n`
+    },
+    negative: {
+      file: "src/http/headers.ts",
+      content: `export function applyHeaders(res) {\n  res.removeHeader("X-Powered-By");\n}\n`
+    },
+    note: "Both lines name the header in a header call; only the positive sets it. The rule used to match the bare string anywhere, so any mention — including a checklist line saying the header should be suppressed — counted as disclosure."
   }
 ];

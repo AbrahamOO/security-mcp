@@ -260,5 +260,109 @@ export const cases: RuleCase[] = [
       content: `export async function searchUsers(db, req) {\n  const minAge = Number(req.query.minAge);\n  const users = await db.collection("users").find({ age: { $gt: minAge } });\n  return users;\n}\n`
     },
     note: "Positive's .find({ $where: ... }) matches the same-line \\.find\\s*\\(\\s*\\{[^}]*\\$where check. Negative uses the native $gt operator with a coerced number — the literal substring '$where' (and '$function'/'$accumulator'/aggregate-file correlation) never appears anywhere in the file."
+  },
+  {
+    ruleId: "LDAP_INJECTION",
+    check: "injection-deep",
+    positive: {
+      file: "src/directory/lookup.ts",
+      content: `import ldap from "ldapjs";\n\nconst client = ldap.createClient({ url: process.env.LDAP_URL! });\n\nexport function findUser(req, cb) {\n  client.search("dc=example,dc=com", { filter: "(uid=" + req.query.user + ")" }, cb);\n}\n`
+    },
+    negative: {
+      file: "src/directory/lookup.ts",
+      content: `import ldap from "ldapjs";\n\nconst client = ldap.createClient({ url: process.env.LDAP_URL! });\n\nexport function findUser(req, cb) {\n  const uid = ldap.filters.EqualityFilter({ attribute: "uid", value: String(req.query.user) });\n  client.search("dc=example,dc=com", { filter: uid }, cb);\n}\n`
+    },
+    note: "ESM import form. The library gate accepted require('ldapjs') only, so this whole shape produced no finding. Negative builds the filter through ldapjs's own EqualityFilter constructor rather than string concatenation, which is the documented escape path."
+  },
+  {
+    ruleId: "XPATH_INJECTION",
+    check: "injection-deep",
+    positive: {
+      file: "src/xml/find-user.ts",
+      content: `import { select } from "xpath";\n\nexport function findUser(req, doc) {\n  return select('//user[name="' + req.query.name + '"]', doc);\n}\n`
+    },
+    negative: {
+      file: "src/xml/find-user.ts",
+      content: `import { select } from "xpath";\n\nconst ALLOWED = new Set(["alice", "bob"]);\n\nexport function findUser(req, doc) {\n  const name = String(req.query.name);\n  if (!ALLOWED.has(name)) return [];\n  return select("//user[position()=1]", doc);\n}\n`
+    },
+    note: "Named-import form: the library gate matched xpath.select / require('xpath') only, so a named import missed entirely. Negative validates against an allowlist and uses a constant expression, so no user value reaches the XPath string."
+  },
+  {
+    ruleId: "ELASTICSEARCH_INJECTION",
+    check: "injection-deep",
+    positive: {
+      file: "src/search/query.ts",
+      content: `import { Client } from "@elastic/elasticsearch";\n\nconst client = new Client({ node: process.env.ES_NODE });\n\nexport async function search(req) {\n  return client.search({ index: "products", q: req.query.q });\n}\n`
+    },
+    negative: {
+      file: "src/directory/search.ts",
+      content: `import ldap from "ldapjs";\n\nconst client = ldap.createClient({ url: process.env.LDAP_URL! });\n\nexport function search(req, cb) {\n  client.search("dc=example,dc=com", { filter: "(uid=" + req.query.user + ")" }, cb);\n}\n`
+    },
+    note: "The negative is a genuinely vulnerable LDAP call, and that is the point: client.search() is not an Elasticsearch signature. This rule used to claim it as Painless script injection — wrong id, wrong CWE, wrong fix — and that mislabel also masked LDAP_INJECTION on the same line. The generic call shape now requires an Elasticsearch/OpenSearch client in the file, which only the positive has."
+  },
+  {
+    ruleId: "PROTOTYPE_POLLUTION_DIRECT",
+    check: "injection-deep",
+    positive: {
+      file: "src/config/apply.ts",
+      content: `export function applyOverrides(req, obj) {\n  obj.__proto__.isAdmin = req.body.isAdmin;\n  return obj;\n}\n`
+    },
+    negative: {
+      file: "src/config/apply.ts",
+      content: `export function applyOverrides(req, obj) {\n  const safe = Object.create(null);\n  safe.isAdmin = Boolean(req.body.isAdmin);\n  return Object.assign(obj, safe);\n}\n`
+    },
+    note: "Writing THROUGH the prototype is the textbook pollution and was missed: the pattern required '=' to follow __proto__ immediately, which only covers replacing the prototype wholesale. Negative writes to a null-prototype object instead of touching any prototype."
+  },
+  {
+    ruleId: "MONGO_SERVER_SIDE_JS",
+    check: "injection-deep",
+    positive: {
+      file: "src/db/users.ts",
+      content: `export function findByName(req, db) {\n  return db.collection("users").find({ $where: 'this.name == "' + req.query.n + '"' });\n}\n`
+    },
+    negative: {
+      file: "src/db/users.ts",
+      content: `export function findByName(req, db) {\n  return db.collection("users").find({ name: { $eq: String(req.query.n) } });\n}\n`
+    },
+    note: "String concatenation into $where, the older and more common form, matched nothing: only template-literal interpolation and a bare $where: req.x were covered. Negative uses the native $eq operator, the fix the rule recommends, so no JavaScript reaches the server."
+  },
+  {
+    ruleId: "SVG_XXE",
+    check: "injection-deep",
+    positive: {
+      file: "src/upload/thumbnail.ts",
+      content: `import sharp from "sharp";\n\nexport async function thumbnail(req, out) {\n  const svg = req.body.svg;\n  await sharp(Buffer.from(svg)).png().toFile(out);\n}\n`
+    },
+    negative: {
+      file: "src/upload/thumbnail.ts",
+      content: `import sharp from "sharp";\nimport createDOMPurify from "dompurify";\n\nexport async function thumbnail(req, out) {\n  const clean = createDOMPurify().sanitize(req.body.svg, { USE_PROFILES: { svg: true } });\n  await sharp(Buffer.from(clean)).png().toFile(out);\n}\n`
+    },
+    note: "`sharp\\s*\\([^)]*\\)` could not match sharp(Buffer.from(svg)) — the character class stops at the inner call's closing parenthesis — so the most common way to hand sharp an in-memory SVG produced nothing. Negative sanitizes with DOMPurify's SVG profile first, which strips DOCTYPE and entities."
+  },
+  {
+    ruleId: "SSTI_JAVA_PHP_ENGINES",
+    check: "injection-deep",
+    positive: {
+      file: "src/main/java/Render.java",
+      content: `public class Render {\n  public String render(HttpServletRequest request) {\n    Template t = velocityEngine.getTemplate(request.getParameter("tpl"));\n    return merge(t);\n  }\n}\n`
+    },
+    negative: {
+      file: "src/main/java/Render.java",
+      content: `public class Render {\n  public String render(HttpServletRequest request) {\n    Template t = velocityEngine.getTemplate("templates/profile.vm");\n    context.put("name", request.getParameter("name"));\n    return merge(t);\n  }\n}\n`
+    },
+    note: "Every engine name had to be followed immediately by '(', so the normal call velocityEngine.getTemplate(...) matched nothing: the parenthesis belongs to .getTemplate. Negative loads a fixed template path and passes the user value as a context variable, the documented fix."
+  },
+  {
+    ruleId: "REDOS_STATIC_NESTED_QUANTIFIER",
+    check: "injection-deep",
+    positive: {
+      file: "src/validate/email.ts",
+      content: `const EMAIL = /^([a-zA-Z0-9]+)+@example\\.com$/;\n\nexport const isCorporateEmail = (s: string) => EMAIL.test(s);\n`
+    },
+    negative: {
+      file: "src/validate/email.ts",
+      content: `const EMAIL = /^[a-zA-Z0-9]{1,64}@example\\.com$/;\n\nexport const isCorporateEmail = (s: string) => s.length <= 254 && EMAIL.test(s);\n`
+    },
+    note: "searchRepo matches one line at a time, so the rule only saw the inline `/(x+)+/.test(req.query.email)` form and missed the ordinary one: literal bound to a const, used on another line. Negative removes the nested quantifier, bounds the repetition, and caps input length — all three fixes the rule recommends."
   }
 ];
