@@ -1,7 +1,7 @@
 # Limitations
 
 Created: 2026-07-25
-Last updated: 2026-07-25
+Last updated: 2026-07-27
 
 What this tool does not do, cannot do, or does less well than it might appear. Written
 for a reviewer deciding how much weight to put on its output.
@@ -109,6 +109,38 @@ An agent that ignores the hint and searches the repo itself is behaving correctl
 the run's context pack under "Scanners UNAVAILABLE" precisely so absence of findings is
 not read as absence of problems.
 
+## The detection engine
+
+**Content matching is line-based.** Every rule driven by `searchRepo` sees one line at a
+time, so a construct spread over several lines is only judged by the line that matched.
+Rules where that matters read a window around the hit instead (the password-reset and
+refresh-token rules do), but this is per rule, not a property of the engine. A vulnerable
+pattern split across lines in a way no rule anticipates can be missed.
+
+**Each query stops at its match cap, and the run says so.** A capped search returns the
+same shape as an exhausted one, so a rule that filters its hits — keep the ones without a
+sanitizer on the line — can have the match that mattered sitting past the cap.
+`SEARCH_RESULTS_TRUNCATED` (MEDIUM) names the queries that hit the ceiling. It means
+reduced confidence in the absence of findings for those rules, not a vulnerability, and it
+is expected on large monorepos. Scan in slices to clear it.
+
+**Nothing is excluded from a scan by directory name.** Per-project exclusions come only
+from `SECURITY_GATE_IGNORE`, which the operator sets. Anything excluded that way is
+genuinely unscanned: the tool cannot distinguish "no findings here" from "never looked".
+
+**Two rules are narrower than their names suggest.** `PIP_NO_HASH_CHECKING` fires on a
+`pip install` invocation without `--require-hashes`, not on a `requirements.txt` that
+merely lacks hashes — flagging every hash-less requirements file would fire on nearly
+every Python repository. `AGENT_SYMLINK_ESCAPE` is about a real symlink whose target
+leaves the workspace, not about a path written inside an instruction file's text; a
+`../../etc/passwd` mentioned in prose is not a symlink and is not this finding.
+
+**Finding ids are the rule's name, not a generic category.** A weak-random identifier is
+`CRYPTO_INSECURE_RANDOM`, a header-splitting sink is `HTTP_RESPONSE_SPLITTING_HEADER`, and
+a hardcoded credential is usually `POSSIBLE_SECRET` at CRITICAL. Searching a report for a
+category name you expected, rather than reading the ids present, will read as a gap that
+is not there.
+
 ## Historical data
 
 **The 13 agent runs predating this work are not evidence.** They sit at `phase: 0` with
@@ -118,5 +150,11 @@ now refuses to merge or attest them, which is the honest outcome. Move them asid
 than treating them as history.
 
 ## Change History
+
+- 2026-07-27 - Added "The detection engine": line-based matching, the per-query match cap and
+  the `SEARCH_RESULTS_TRUNCATED` finding that now reports it, the rule that nothing is excluded
+  by directory name (only `SECURITY_GATE_IGNORE`), the two rules narrower than their names
+  (`PIP_NO_HASH_CHECKING`, `AGENT_SYMLINK_ESCAPE`), and the fact that finding ids are rule names
+  rather than generic categories.
 
 - 2026-07-25 - Created. Documents adapter verification status, Class B quality ceiling, corroboration semantics, attestation and cost caveats, N/A and prefilter limits, and the status of pre-existing runs.

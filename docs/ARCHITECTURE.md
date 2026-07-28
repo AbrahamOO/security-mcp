@@ -1,6 +1,6 @@
 # Architecture
 
-Last updated: 2026-07-25
+Last updated: 2026-07-27
 
 > **Version note:** 1.4.0, 1.5.0, 1.6.0, and 1.6.1 referenced throughout this document
 > are internal milestones that were never published to npm. All of them ship publicly in
@@ -36,7 +36,7 @@ flowchart TD
     CI["CI runner<br/>src/ci/pr-gate.ts"] --> GATE
     MCP --> GATE["Gate engine<br/>runAllChecks — src/gate/policy.ts"]
     GATE --> CC["Cloud-controls engine<br/>src/gate/cloud-controls/ (1,002 IaC rules)"]
-    GATE --> RM["Remediation map<br/>src/gate/remediation-map.ts (900 templates)"]
+    GATE --> RM["Remediation map<br/>src/gate/remediation-map.ts (911 templates)"]
     GATE --> VERDICT{{"PASS / FAIL"}}
 ```
 
@@ -50,9 +50,9 @@ flowchart TD
     P1["1 · Load + HMAC-verify policy<br/>(unsigned policy cannot relax HIGH/CRITICAL)"] --> P2
     P2["2 · Resolve scope<br/>src/gate/diff.ts · scan-scope.ts"] --> P3
     P3["3 · Detect surfaces<br/>detectSurfaces — web · api · infra · mobile · ai · agentic"] --> P4
-    P4["4 · Run check modules in parallel<br/>Promise.allSettled — crash ⇒ GATE_CHECK_CRASHED (HIGH)"]
-    P4 --> A["Always-on checks<br/>secrets · deps · crypto · graphql · k8s · database ·<br/>dlp · sbom · playbook · ci-pipeline · supply-chain-deep ·<br/>business-logic · docker-deep · iac · gitops · data-platform ·<br/>cloud-controls · emerging-supply-ai · vibe-coding · web-hardening"]
-    P4 --> S["Surface-gated checks<br/>web-nextjs · injection-deep · auth-deep (web/api) ·<br/>api · infra · mobile-ios · mobile-android ·<br/>ai · ai-redteam · ai-governance (ai) ·<br/>agentic-instructions (agentic) ·<br/>emerging-web (web/api) · emerging-cloud (infra)"]
+    P4["4 · Run the CHECKS registry in parallel (40 entries)<br/>Promise.allSettled — crash ⇒ GATE_CHECK_CRASHED (HIGH)"]
+    P4 --> A["Always-on checks<br/>required-artifacts · secrets · deps · crypto · graphql · k8s ·<br/>database · dlp · sbom · playbook · ci-pipeline · docker ·<br/>docker-deep · supply-chain-deep · business-logic · iac · gitops ·<br/>data-platform · cloud-controls · emerging-supply-ai ·<br/>vibe-coding · web-hardening<br/>+ precomputed feeds: scanner-readiness · evidence-coverage"]
+    P4 --> S["Surface-gated checks<br/>web-nextjs (web) · injection-deep · auth-deep (web/api) ·<br/>api (api) · infra (infra) · mobile-ios · mobile-android ·<br/>ai · ai-redteam · ai-governance (ai) ·<br/>agentic-instructions (agentic) ·<br/>emerging-web (web/api) · emerging-cloud (infra)"]
     P4 --> L["Live-target checks<br/>runtime · nuclei (need SECURITY_STAGING_URL)"]
     P4 --> X["Third-party scanners<br/>gitleaks · semgrep · trivy · osv-scanner · checkov ·<br/>conftest · zap — folded into the same Finding[] model"]
     A --> P5; S --> P5; L --> P5; X --> P5
@@ -87,26 +87,42 @@ A single gate run does the following, in order:
    `terraform/`, `k8s/`, `.github/workflows/`, or with a `.tf`/`.bicep` extension marks
    `infra`; and so on. `policy.ts` also derives a convenience flag, `isApiOrWeb = surfaces.web
    || surfaces.api`, used to gate checks that make sense on either surface.
-4. **Run checks in parallel.** `runAllChecks` builds an array of check promises and
-   awaits them with `Promise.allSettled`, so one crashing module cannot take the rest of
-   the gate down with it. A settled-but-rejected promise becomes a `GATE_CHECK_CRASHED`
-   HIGH finding: the absence of a result is itself treated as a result, not silently
-   dropped. Each check module is an async function that returns `Finding[]`. Some checks
-   are unconditional (secrets, dependencies, crypto, GraphQL, Kubernetes, database, DLP,
-   SBOM, the incident-response playbook, CI pipeline hardening, deep supply chain,
-   business logic, Docker, IaC, GitOps, data platform, cloud controls, and the new
-   `emerging-supply-ai`); others are surface-gated (`web-nextjs` and `injection-deep` /
-   `auth-deep` on web or API, `api` on API, `infra` on infra, `mobile-ios` /
-   `mobile-android` on their platforms, `ai` / `ai-redteam` / `ai-governance` on AI
-   surfaces, `agentic-instructions` on agentic surfaces, and the two new surface-gated
-   1.5.0 modules described below); a few run only when a live target is configured
-   (`runtime` and `nuclei` require `SECURITY_STAGING_URL`).
+4. **Run checks in parallel.** What the gate runs is declared in one place: the `CHECKS`
+   registry in `src/gate/policy.ts`, a readonly array of `CheckDef` entries. Each entry
+   co-locates the check's `name`, an optional `when(ctx)` applicability predicate (absent
+   means always-on), and a `run(ctx)` that returns `Finding[]`. `runAllChecks` maps the
+   registry to promises, substituting `Promise.resolve([])` for any entry whose `when`
+   returns false, and awaits them with `Promise.allSettled`, so one crashing module cannot
+   take the rest of the gate down with it. A settled-but-rejected promise becomes a
+   `GATE_CHECK_CRASHED` HIGH finding named with `CHECKS[i].name`: the absence of a result
+   is itself treated as a result, not silently dropped.
+
+   The registry replaced an earlier design in which a `CHECK_NAMES` array had to be kept
+   positionally aligned with a separate `Promise.allSettled([...])` literal by hand;
+   inserting a check into one and not the other silently attributed a crash to the wrong
+   module. Co-locating name, gate, and invocation in one entry makes that misalignment
+   impossible to express, so adding a check is a single-line addition with no invariant to
+   remember.
+
+   Most entries are unconditional (required artifacts, secrets, dependencies, crypto,
+   GraphQL, Kubernetes, database, DLP, SBOM, the incident-response playbook, CI pipeline
+   hardening, Docker and deep Docker, deep supply chain, business logic, IaC, GitOps,
+   data platform, cloud controls, third-party scanner orchestration, `emerging-supply-ai`,
+   `vibe-coding`, and `web-hardening`); others are surface-gated (`web-nextjs` on web,
+   `injection-deep` / `auth-deep` / `emerging-web` on web or API, `api` on API, `infra` and
+   `emerging-cloud` on infra, `mobile-ios` / `mobile-android` on their platforms, `ai` /
+   `ai-redteam` / `ai-governance` on AI surfaces, `agentic-instructions` on agentic
+   surfaces); and two run only when a live target is configured (`runtime` and `nuclei`
+   require `SECURITY_STAGING_URL`). Two further entries, `scanner-readiness` and
+   `evidence-coverage`, are not check modules at all: they are precomputed feeds that
+   surface findings `runPrGate` computed before `runAllChecks` was called, registered here
+   so they flow through the same crash attribution and normalization as everything else.
 5. **Normalize into `Finding[]`.** Every check module returns the same shape, defined in
    `src/gate/result.ts`: an `id` (the rule ID, e.g. `WEB_NEXTJS_MIDDLEWARE_AUTH_BYPASS`), a
    `title`, a `severity` (`CRITICAL` / `HIGH` / `MEDIUM` / `LOW`), evidence and file
    references, and `requiredActions`. This is the one contract every check module,
-   old or new, must honor, which is what lets `runAllChecks` treat 30-plus independently
-   written modules as one flat list.
+   old or new, must honor, which is what lets `runAllChecks` treat the registry's 40
+   independently written entries as one flat list.
 6. **Assign SLAs, apply exceptions, score confidence.** Findings get an SLA by severity
    (`CRITICAL` 24h, `HIGH` 7d, `MEDIUM` 30d, `LOW` 90d, via `SLA_MAP`). Approved,
    non-expired entries in the exceptions file (`.mcp/exceptions/security-exceptions.json`)
@@ -129,6 +145,38 @@ intel (CISA KEV, EPSS, OpenSSF Scorecard, npm registry metadata) enriches severi
 EPSS score above 0.5 escalates a finding. `SECURITY_OFFLINE=1` disables every third-party
 network call, and scoped/private package names are never sent to a public endpoint
 whether offline mode is on or off.
+
+### Control catalog and evidence coverage
+
+The pattern checks above answer "did we find something bad?" A second, independent
+question — "is a control we require actually present?" — is answered by the control
+catalog. `defaults/control-catalog.json` declares 96 controls, each with an `id`, the
+`surfaces` it applies to, the compliance `frameworks` it maps to, and an `automation` mode
+that decides who resolves it: `evidence` (43), `tooling` (45), `workflow` (6), or
+`approval` (2). `src/gate/catalog.ts` loads and zod-validates that file and exposes
+`controlApplies`, the surface filter.
+
+`src/gate/evidence.ts` resolves the `evidence` controls. For each in-scope control it looks
+up the control's evidence IDs in `.mcp/mappings/evidence-map.json` (overridable via
+`SECURITY_GATE_EVIDENCE_MAP`, which is path-traversal guarded) and globs the workspace for
+matching files. A control whose globs resolve to nothing becomes a HIGH
+`CONTROL_EVIDENCE_MISSING`; a control referencing an evidence ID the map does not define
+becomes a HIGH `EVIDENCE_MAPPING_MISSING` — an unmappable control is reported, not skipped.
+The `tooling` controls are resolved separately by `buildToolingCoverage` against scanner
+readiness, so a control that depends on a scanner nobody installed shows as missing rather
+than satisfied.
+
+Both feeds are computed in `runPrGate` before `runAllChecks` (alongside
+`checkScannerReadiness`, in one `Promise.all`), because their results are needed twice: as
+the `controlCoverage` array on the gate result, and as findings. The findings half is what
+the `evidence-coverage` and `scanner-readiness` registry entries return, which is why those
+two `CHECKS` entries wrap an already-resolved value instead of running a module. Registering
+them there rather than concatenating them later is deliberate: it puts them under the same
+exception handling, SLA assignment, and severity decision as every other finding.
+
+Control coverage is also where approved exceptions are visible as a state rather than an
+absence: a `missing` control covered by an active exception is rewritten to `risk_accepted`
+with the exception noted, instead of disappearing from the report.
 
 ## Detection method: regex and heuristic, not AST
 
@@ -160,6 +208,38 @@ Detection is one of three patterns, sometimes combined:
   byte sequence. The finding text itself says a clean result is not proof of safety, and
   this document repeats that caveat rather than letting the feature imply more assurance
   than it delivers.
+
+### Scoping a pattern to a handler instead of a file
+
+Regex detection has a failure mode that is worth naming, because two shipped rules had it.
+`WEB_SERVER_ACTION_NO_AUTHZ` (`web-hardening.ts`) and `VIBE_API_ROUTE_NO_SERVER_AUTHZ`
+(`vibe-coding.ts`) both ask "does this publicly reachable handler verify its caller?", and
+both used to answer it by testing an auth-verifier regex and an "intentionally public"
+regex against the *whole file*. Whole-file matching means any text anywhere in the file can
+suppress the finding: a comment containing the word `webhook`, or a `const getToken = () =>
+null` that is never called, cleared a file whose exported action deletes rows with no
+authentication at all. The evasion needs no intent, only an unlucky identifier.
+
+`src/gate/checks/authz-scope.ts` is the shared fix, and it is the one place in the gate that
+does something closer to parsing than matching. `exportedHandlers(content)` splits a file
+into its exported functions by scanning for export declarations and then walking forward
+brace-balanced to isolate each body, skipping string literals, template literals, and
+comments, and tracking parenthesis and angle-bracket depth so a destructured parameter list
+(`function f({ id }) {`) or a generic return type (`: Promise<{ ok: boolean }>`) is not
+mistaken for the body. `handlerIsAuthorized(handler)` then tests each handler's own region,
+and every auth pattern requires the verifier in *call* position (each alternative ends in an
+opening parenthesis), so an import, a type name, or an unused helper no longer counts. The
+bare-`webhook` exemption was replaced by `WEBHOOK_SIGNATURE_RE`, which looks for actual
+signature verification (`constructEvent(`, `createHmac(`, `timingSafeEqual(`, a provider
+signature header): naming a handler after a webhook is a claim, verifying the signature is
+the control. An explicit `// PUBLIC` marker, or `@public`, still exempts a handler, read
+from the handler's region or the comment lines directly above it.
+
+This is still a heuristic, not an AST. A file that exports no functions at all — a route
+module exporting a plain object, a script doing top-level work — has nothing to scope to,
+so `fileIsAuthorized(content)` falls back to whole-file matching with the same
+call-position patterns. Isolation narrows what can suppress a finding; it never removes
+coverage.
 
 Because there is no semantic understanding of the code, every check module is written to
 fail safe: wrapped in try/catch, logging via `sanitizeErrorMessage` rather than throwing.
@@ -196,25 +276,25 @@ whether or not it was touched in the current change.
   supply-chain compromise indicators and AI-agent-adjacent risks (invisible Unicode,
   MCP config tampering, model file poisoning) are not scoped to any one surface.
 
-Each of the three is registered in `CHECK_NAMES` immediately after `cloud-controls`, so
-their position in the check-name array matches their position in the check-promise array,
-preserving the invariant the rest of `policy.ts` depends on for reporting which named
-check produced which finding.
+Each of the three is a `CHECKS` entry immediately after `cloud-controls`, carrying its own
+`when` predicate (or none, for `emerging-supply-ai`). Registry position no longer encodes
+anything: crash attribution reads `name` off the same entry that ran, so ordering is
+readability only.
 
 ## Where the 1.6.0 "vibe coding" module fits
 
-`src/gate/checks/vibe-coding.ts` (`checkVibeCoding`) is registered in `CHECK_NAMES` as
+`src/gate/checks/vibe-coding.ts` (`checkVibeCoding`) is registered in `CHECKS` as
 `vibe-coding`, immediately after `emerging-supply-ai`, and follows the identical
 `export async function checkVibeCoding(_: { changedFiles: string[] }): Promise<Finding[]>`
-contract as every other check module. In `runAllChecks` it is called unconditionally,
-alongside `checkEmergingSupplyAi`, rather than behind an `isApiOrWeb` or `surfaces.infra`
-guard:
+contract as every other check module. Its entry carries no `when` predicate, so it runs on
+every invocation alongside `emerging-supply-ai` rather than behind an `isApiOrWeb` or
+`surfaces.infra` gate:
 
 ```ts
-checkEmergingSupplyAi({ changedFiles }),
+{ name: "emerging-supply-ai", run: (c) => checkEmergingSupplyAi({ changedFiles: c.changedFiles }) },
 // Always-on: vibe-coded apps often don't match a specific surface but still
 // ship client-side secrets, RLS-off datastores, and unauthenticated APIs.
-checkVibeCoding({ changedFiles })
+{ name: "vibe-coding",        run: (c) => checkVibeCoding({ changedFiles: c.changedFiles }) }
 ```
 
 The reasoning mirrors why `emerging-supply-ai` is unconditional: a repo generated end to
@@ -253,18 +333,17 @@ concrete, copy-pasteable fix for each one rather than a generic advisory.
 
 ## Where the 1.6.1 "web-hardening" module fits
 
-`src/gate/checks/web-hardening.ts` (`checkWebHardening`) is registered in `CHECK_NAMES` as
-`web-hardening`, immediately after `vibe-coding`, and is called unconditionally in
-`runAllChecks`, in the same always-on group as `vibe-coding` and `checkEmergingSupplyAi`
-rather than behind a surface guard:
+`src/gate/checks/web-hardening.ts` (`checkWebHardening`) is registered in `CHECKS` as
+`web-hardening`, immediately after `vibe-coding`, and likewise carries no `when` predicate,
+putting it in the same always-on group as `vibe-coding` and `emerging-supply-ai` rather
+than behind a surface gate:
 
 ```ts
-checkVibeCoding({ changedFiles }),
+{ name: "vibe-coding",        run: (c) => checkVibeCoding({ changedFiles: c.changedFiles }) },
 // Always-on: web-hardening blindspots (security headers, open redirect,
-// hardcoded session secrets, email header injection, unauthorized server
-// actions, sensitive fields in responses) are dangerous regardless of
-// detected surface.
-checkWebHardening({ changedFiles })
+// hardcoded session secrets, email header injection, unauthenticated Server
+// Actions, sensitive-field exposure) apply regardless of detected surface.
+{ name: "web-hardening",      run: (c) => checkWebHardening({ changedFiles: c.changedFiles }) }
 ```
 
 The reasoning is the same as for `vibe-coding` and `emerging-supply-ai`: a missing
@@ -510,10 +589,13 @@ crypto, JWT, SAML, OAuth, passwords, database, Snowflake, Databricks, supply-cha
 hygiene), `web.ts` (203: web, API, business logic, GraphQL, Android, iOS, DLP, CI),
 `misc.ts` (112: injection, deserialization, SSRF, TLS, tokens, mobile storage, XSS), and
 `web-hardening-remediations.ts` (6, one per new `WEB_` rule from the 1.6.1 `web-hardening`
-module), plus the evaluability-gap templates in the base map. The result is 900 fix templates covering 100% (900 of 900) of detection IDs, up
-from roughly 8% — every finding the gate can raise now has a concrete template to work
-from, so the "90% fixing, 10% advisory" mandate is no longer bottlenecked by missing
-templates. Applying a template is still the calling agent's responsibility: nothing in the
+module), plus the evaluability-gap templates and the gate-level findings in the base map.
+Coverage counts the IDs the gate itself emits rather than a check module
+(`GATE_CHECK_CRASHED`, `BASELINE_REGRESSION`, `SEARCH_RESULTS_TRUNCATED`, and the
+exceptions-integrity findings), which sat outside the claim until 2026-07-27. The result is
+911 fix templates covering 100% (911 of 911) of detection IDs, up from roughly 8% —
+every finding the gate can raise now has a concrete template to work from, so the "90%
+fixing, 10% advisory" mandate is no longer bottlenecked by missing templates. Applying a template is still the calling agent's responsibility: nothing in the
 engine itself writes the fix, and the re-verification step re-runs the same detection rule
 that originally fired, which confirms the flagged pattern is gone but cannot independently
 prove the vulnerability is resolved rather than merely evaded. `security-mcp autoharden` is
@@ -532,6 +614,29 @@ coverage, checks for ghost/escalated agents, checks capability floors including 
 produce the final verdict that either blocks a merge or clears it.
 
 ## Change History
+
+- 2026-07-27 - Reconciled the gate-engine sections with `policy.ts`. The doc described a
+  `CHECK_NAMES` array kept positionally aligned with a separate `Promise.allSettled([...])`
+  literal; that design was replaced by the `CHECKS` registry (name + `when` + `run` per
+  entry), so all three registration passages and the pipeline diagram now describe the
+  registry. The always-on list was missing four checks that always run
+  (`required-artifacts`, `docker`, and the `scanner-readiness` / `evidence-coverage`
+  precomputed feeds), `web-nextjs` was described as web-or-API when it gates on web only,
+  and "30-plus modules" is 40. Corrected the remediation total in the 1.6.1 section from
+  900 to 911, which the diagram and the claims registry already carried. Added two missing
+  subsections: the control catalog and evidence coverage (`src/gate/catalog.ts`,
+  `evidence.ts`, `defaults/control-catalog.json`), which no doc mentioned, and
+  handler-scoped authorization detection (`src/gate/checks/authz-scope.ts`), which replaces
+  whole-file matching in the two "does this handler verify its caller?" rules. None of this
+  was detectable by `docs:check`: its anchors were all still present, and Rule 2 was
+  satisfied because the commit that removed `CHECK_NAMES` edited this file for other
+  reasons.
+
+- 2026-07-27 - Remediation template count in the pipeline diagram updated to 911 (a
+  `GATE_CHECK_CRASHED` template plus nine gate-level findings that had none). Detection-scope change: `searchRepo` no longer excludes
+  `src/gate/**` or `**/.claude/**`. Those globs were this project's self-scan preference applied to
+  every reviewed repository, so any project with a directory of either name was silently unscanned
+  by every query-based check. The exclusion now lives in this repo's own `SECURITY_GATE_IGNORE`.
 
 - 2026-07-25 - Added the "Local agent execution (`src/agent-exec/`)" subsection and a fourth
   mermaid diagram covering the executor: adapters-as-data, the offline refusal, the detached

@@ -1,6 +1,6 @@
 # Wiki
 
-Last updated: 2026-07-26
+Last updated: 2026-07-27
 
 A practical reference for running security-mcp, understanding how the gate decides
 PASS/FAIL, the full list of rule IDs added in 1.5.0, 1.6.0, and 1.6.1, how capability
@@ -366,7 +366,7 @@ writing the returned template's fix directly into the working tree, then re-runn
 check to confirm the finding cleared. As of 1.6.1, `REMEDIATION_MAP` is composed from six
 domain partials under `src/gate/remediation-parts/` — `cloud.ts` (256 templates), `ai.ts`
 (69), `data.ts` (172), `web.ts` (203), `misc.ts` (112), and `web-hardening-remediations.ts`
-(6), plus the evaluability-gap templates in the base map — for **900 fix templates covering 100% (900/900) of detection IDs**, up from just 71
+(6), plus the evaluability-gap and gate-level templates in the base map — for **911 fix templates covering 100% (911/911) of detection IDs**, up from just 71
 templates (roughly 8% of finding IDs) before this release. Each template pairs a realistic
 vulnerable pattern with a concrete secure fix in the correct language, a plain-language
 explanation, and standards references (CWE plus OWASP Top 10 / API Security Top 10 / LLM
@@ -598,6 +598,13 @@ rejects unknown argv tokens. Which adapters have actually been driven end to end
 ship as best-effort guesses, is recorded in [LIMITATIONS.md](LIMITATIONS.md).
 
 ## Change History
+
+- 2026-07-27 - Fix-template coverage restated as **911** templates / 100% (911/911) of detection
+  IDs. The coverage probe previously read `src/gate/checks/**` only, so the ids the gate itself
+  emits sat outside the claim: nine of them (`BASELINE_REGRESSION`, every exceptions-integrity
+  finding) had no template while the claim still read 100%. Those templates were written and the
+  probe extended. Also records that per-project scan exclusions are expressed only through
+  `SECURITY_GATE_IGNORE`; the engine no longer exempts any directory by name.
 
 - 2026-07-26 - Added the "Exception trust" section. Suppressing HIGH/CRITICAL now requires a
   signature or an out-of-band workflow opt-in plus an unmodified file, because the previous

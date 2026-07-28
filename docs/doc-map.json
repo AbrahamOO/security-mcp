@@ -59,6 +59,27 @@
       "why": "This engine writes to user IaC files. Behaviour changes must be documented before they ship."
     },
     {
+      "id": "control-catalog",
+      "source": "src/gate/catalog.ts",
+      "docs": ["docs/ARCHITECTURE.md"],
+      "anchors": ["control-catalog.json"],
+      "why": "The catalog answers a different question from the pattern checks — is a required control present — and it is what the compliance frameworks map to. It shipped undocumented: ARCHITECTURE.md did not mention it until 2026-07-27 because no binding required it to."
+    },
+    {
+      "id": "evidence-coverage",
+      "source": "src/gate/evidence.ts",
+      "docs": ["docs/ARCHITECTURE.md"],
+      "anchors": ["CONTROL_EVIDENCE_MISSING"],
+      "why": "Evidence resolution decides whether a required control is reported satisfied or missing, driven by an operator-editable glob map. A reader who cannot find how that map is consulted cannot tell a real 'satisfied' from an unmapped one."
+    },
+    {
+      "id": "authz-scope",
+      "source": "src/gate/checks/authz-scope.ts",
+      "docs": ["docs/ARCHITECTURE.md"],
+      "anchors": ["authz-scope"],
+      "why": "This is the only place in the gate that isolates a function body rather than matching whole files, and it is what makes two authorization rules non-suppressible by unrelated text. A change here changes what those rules can be evaded by, which the detection-method section must keep describing."
+    },
+    {
       "id": "cloud-controls-operator-ref",
       "source": "src/gate/cloud-controls/",
       "docs": ["docs/WIKI.md"],

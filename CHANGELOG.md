@@ -5,6 +5,125 @@ All notable changes to `security-mcp` are documented here. Format follows
 
 ## [1.3.7] - 2026-07-27
 
+### Detection engine (2026-07-27)
+
+The 49 check modules and the rule corpus, audited against hostile inputs. Every defect
+below was reproduced against the previous build and is now pinned by a test or a corpus
+case. Same shape as the trust-hardening pass: something unknown was reported as clean.
+
+- **Two directories of every reviewed project were exempt from scanning.** `searchRepo`
+  hardcoded `ignore: ["**/.claude/**", "src/gate/**"]` and the secret scanner hardcoded
+  `fixtures/`, `.claude/` and its own source path. These were this project's self-scan
+  preferences, but they applied to every workspace: a reviewed repository with an
+  api-gateway module under `src/gate/`, or the `.claude/` directory every Claude Code user
+  has, lost 16 finding ids including `SQL_INJECTION_CONCAT`, `CRYPTO_WEAK_HASH` and
+  `HARDCODED_CREDENTIALS`, and an AWS key committed under any `fixtures/` directory was
+  never secret-scanned. A repository that excludes itself by directory name is trust
+  granted by filename. Per-project exclusions now come only from `SECURITY_GATE_IGNORE`,
+  which the operator sets; this repo's own workflows set it.
+- **One failing rule discarded 40 others and reported a clean module.** `injection-deep`
+  and `vibe-coding` ran their rules under `Promise.all` inside `catch { return [] }`.
+  `checkPerlEvalInjection` carried a query the ReDoS guard rejects, so in any Perl
+  repository that one throw emptied the entire module — indistinguishable from no
+  injection vulnerabilities. Rules now settle independently (`settleRules` in
+  `result.ts`), a rule that throws is reported as `GATE_CHECK_CRASHED`, and the rejected
+  Perl pattern was rewritten.
+- **The Server Action and API route authorization rules were suppressible by a comment.**
+  Both tested their "has auth" and "intentionally public" regexes against the whole file,
+  so a comment containing the word *webhook*, or an unrelated `const getToken = () => null`
+  stub, cleared every handler in the file. Two unauthenticated public endpoints that delete
+  rows passed the gate. Both rules now judge each exported handler over its own body
+  (`authz-scope.ts`), require the verifier in call position, and accept a webhook only when
+  it verifies the provider signature. A file mixing one authorized and one unauthorized
+  action is now caught; previously the authorized one cleared the other.
+- **A single-line file stalled the gate for six and a half minutes.** The account
+  enumeration query used three unbounded `.*` runs in one alternative: 6 s against a 64 KB
+  minified bundle, 390 s at 256 KB, with the whole gate at 412 s. Bounded to `{0,40}`, the
+  same file now costs 680 ms and the full gate 20 s. A test asserts the budget so the class
+  cannot regress.
+- **The rule corpus could vanish and the suite would still pass.** `runRuleCorpusTests`
+  returned success on zero cases as "bootstrap-safe", so an empty corpus directory, a
+  renamed export in every corpus file, or a build regression leaving one file of 37 all
+  reported a green run. It now requires the compiled set to match the authored set, every
+  file to export a non-empty `cases` array (with the two documented empty modules listed by
+  name), and a committed floor of 522 cases.
+- **Two rules read this project's own security documentation as vulnerabilities.**
+  `DLP_SERVER_HEADER_DISCLOSURE` matched the bare string `X-Powered-By` anywhere, so a
+  checklist line stating that the header is *suppressed* was reported as the header being
+  exposed; its only accepted mitigation was `app.disable('x-powered-by')`, so every Express
+  app using helmet — which removes the header for you — was flagged as well. It now
+  requires the header to actually be set (and ignores lines about removing it), plus a
+  second signal for the real common case: an Express app with no suppression anywhere,
+  since Express sets the header by default. `SNOWFLAKE_PII_NO_MASKING_POLICY` matched a
+  PII word followed by an unbounded type name, and `CHAR` matches inside "chars" — so the
+  sentence "Only allow ASCII alphanumeric + standard email special chars" was read as an
+  unmasked PII column. The type name must now be a whole token in a column declaration.
+- **An instruction file committed as a symlink was invisible to every agentic rule.**
+  `fg({ onlyFiles: true, followSymbolicLinks: false })` drops symlinks — fast-glob filters
+  on the lstat entry, and a symlink is not a file — so a `CLAUDE.md` symlinked anywhere
+  never reached the scan loop. Every rule in the module (instruction override,
+  exfiltration, tool poisoning, credential harvest) silently skipped it, and
+  `AGENT_SYMLINK_ESCAPE` could never fire at all: its enumeration excluded exactly what it
+  detects. Symlinked candidates are now enumerated, their content is scanned like any
+  other instruction file, and the escape check runs *before* the read so a link pointing
+  outside the workspace is reported even though it cannot be read. Two further defects in
+  that check: a broken link was swallowed by `realpath()` (so `CLAUDE.md -> /etc/shadow` on
+  a host without that file produced nothing — it now falls back to `readlink`), and the
+  resolved target was compared against an *unresolved* workspace root, so on macOS
+  (`/var` → `/private/var`) every purely internal symlink was reported as an escape.
+- **Two rules were defeated by ordinary bulk, and the truncation ledger is what found
+  them.** `SUPPLY_LOCKFILE_OFFREGISTRY_RESOLVED` collected every `resolved:` line in a
+  lockfile and filtered for off-registry hosts afterwards. Searches stop at 200 matches and
+  the first 200 lines of any real lockfile are ordinary `registry.npmjs.org` entries, so the
+  redirected package this rule exists to catch — the whole point of the rule — was never
+  read in any project with 200+ dependencies. Measured: 600 benign entries plus one
+  attacker host returned 200 hits, none of them the attacker's. `WEB_MISSING_SRI` had the
+  same shape: 300 scripts with integrity hashes filled the cap ahead of the one without.
+  Both now exclude the benign form in the query itself, so the cap can only be reached by
+  matches that are already findings.
+- **A search that stopped at its cap looked identical to one that finished.** Every query
+  ends at `maxMatches` and nothing recorded that it had. A rule that filters its hits — keep
+  the lines without a sanitizer — can have the match that mattered sitting at position 201,
+  and the gate reported that as clean. `searchRepo` now keeps a truncation ledger and the
+  gate emits `SEARCH_RESULTS_TRUNCATED` (MEDIUM) naming the capped queries. Existence probes
+  (cap 5) are excluded: they got their answer.
+- **`SECRET_MANAGER_NOT_DETECTED` fired at HIGH on every repository without cloud
+  infrastructure.** The evidence patterns recognised a cloud provider's SDK or Terraform
+  resource and nothing else, so a CLI, a library, or any project whose secrets live in a CI
+  platform's encrypted store was told at HIGH that it had no secret manager. GitHub Actions
+  secrets, Kubernetes `secretKeyRef` / External Secrets / Sealed Secrets, SOPS, Infisical,
+  Akeyless and Conjur now count as evidence. The true positive — a config module reading
+  plain environment variables with nothing managing them — still fires.
+- **Nine gate-level findings had no remediation template, and the coverage claim could not
+  see them.** The rule/template parity probe read `src/gate/checks/**` only, so
+  `BASELINE_REGRESSION`, `GATE_CHECK_CRASHED`, `SEARCH_RESULTS_TRUNCATED` and every
+  exceptions-integrity finding resolved to nothing in `security.generate_remediations`
+  while the claim still measured 100%. Templates written, probe extended to the gate's own
+  modules: **911 templates, 100% (911/911)**.
+- **This repo's own secret-manager control was being satisfied by its test corpus.**
+  `src/tests/corpus/**` holds 522 deliberately-vulnerable and deliberately-safe sample
+  pairs, and the self-scan read them as repository content: they produced 303 of the
+  self-scan's 556 findings, and the `secretsmanager`/`vault` strings inside three of them
+  were the only evidence satisfying `SECRET_MANAGER_NOT_DETECTED`. The corpus is test data
+  in the same sense `fixtures/` is, so it moved into `SECURITY_GATE_IGNORE` alongside it.
+  With the fixture evidence gone the control now reports honestly, and it needs a real
+  decision — a signed exception recording that this CLI holds no runtime secrets — rather
+  than a pass borrowed from sample data.
+- **Fourteen rules missed the form the vulnerability is usually written in.** LDAP and
+  XPath injection could not fire on an ESM import; `client.search()` was claimed as
+  Elasticsearch injection when it was an ldapjs call, which also masked `LDAP_INJECTION`;
+  `merge({}, req.body)` never matched because the pattern consumed its own parenthesis;
+  writing *through* `__proto__` was missed while replacing it was caught;
+  a `$where` clause assembled by string concatenation from a request value missed
+  because only template-literal interpolation was covered; `sharp(Buffer.from(svg))` missed because the character class stopped at the
+  inner parenthesis; `velocityEngine.getTemplate(request.getParameter(...))` missed because
+  the engine name had to be followed immediately by `(`; a ReDoS-prone regex bound to a
+  const and used on the next line missed because matching is line-by-line; an API key or
+  session token placed into a URL was missed while reading one from a URL was caught; a
+  reset token persisted without an expiry column and a refresh endpoint echoing the same
+  token back were both missed. All fixed, each with a true-positive/true-negative corpus
+  case (507 to 522 cases, `tpRate=1.00`, `fpRate=0.00`).
+
 ### Trust hardening (2026-07-26)
 
 Six defects, one shape: something unknown or untrusted was treated as good. Each fix was

@@ -1,6 +1,6 @@
 # security-mcp
 
-Last updated: 2026-07-25
+Last updated: 2026-07-27
 
 [![npm version](https://img.shields.io/npm/v/security-mcp.svg)](https://www.npmjs.com/package/security-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -119,7 +119,7 @@ security-mcp is honest about where its trust model stops: this is a single-tenan
 
 **Stale-install detection.** `security-mcp doctor` now detects a global install older than the running version and unpinned `npx security-mcp` launch entries across Claude Code, Cursor, VS Code, and Windsurf, and `ciso-orchestrator` halts with exact remediation instead of silently degrading to a deterministic-only run when the `orchestration.*` control plane is genuinely missing.
 
-For every prior release — the cloud controls engine, the vibe-coding and web-hardening modules, 900 remediation templates at 100% detection-ID coverage, capability-floor enforcement, and inter-agent payload integrity — see the [CHANGELOG](CHANGELOG.md).
+For every prior release — the cloud controls engine, the vibe-coding and web-hardening modules, 911 remediation templates at 100% detection-ID coverage, capability-floor enforcement, and inter-agent payload integrity — see the [CHANGELOG](CHANGELOG.md).
 
 ---
 
@@ -650,6 +650,11 @@ The `security-mcp` binary exposes:
 ---
 
 ## Change History
+
+- 2026-07-27 - Remediation template count 900 to 911. A `GATE_CHECK_CRASHED` template was added
+  when the detection modules started reporting a crashed rule as a finding instead of returning an
+  empty result, and nine gate-level findings (baseline regression, exceptions integrity, search
+  truncation) that had never had one were written, closing a gap the coverage claim could not see.
 
 - 2026-07-25 - Corrected the trust-boundary claims in "Is security-mcp safe to use?". The previous
   wording ("your code never leaves your machine to a third party by default") was wrong for the
