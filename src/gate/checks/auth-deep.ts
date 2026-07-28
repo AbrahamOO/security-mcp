@@ -5,6 +5,7 @@
  */
 import { Finding, sanitizeErrorMessage } from "../result.js";
 import { searchRepo } from "../../repo/search.js";
+import { readFileSafe } from "../../repo/fs.js";
 
 const NON_CODE_RE = /\.(?:md|json|yaml|yml|txt|rst|toml|lock)$/i;
 
@@ -21,6 +22,36 @@ async function codeSearch(query: string): Promise<Hit[]> {
   return (await searchRepo({ query, isRegex: true, maxMatches: 200 })).filter(
     (h) => !NON_CODE_RE.test(h.file)
   );
+}
+
+/**
+ * Keeps only the hits whose surrounding lines do NOT contain `mitigation`.
+ *
+ * searchRepo matches one line at a time, so a same-line filter cannot tell an
+ * unguarded token from one whose expiry (or rotation, or revocation) is set on the
+ * next line of the same object literal. Rules that judge a multi-line construct
+ * read a window around the hit instead, so the safe form is not reported.
+ */
+async function withoutNearby(hits: Hit[], mitigation: RegExp, radius = 8): Promise<Hit[]> {
+  const fileLines = new Map<string, string[]>();
+  const kept: Hit[] = [];
+  for (const h of hits) {
+    let lines = fileLines.get(h.file);
+    if (!lines) {
+      try {
+        lines = (await readFileSafe(h.file)).split("\n");
+      } catch {
+        lines = [];
+      }
+      fileLines.set(h.file, lines);
+    }
+    const window = lines.slice(Math.max(0, h.line - 1 - radius), h.line + radius).join("\n");
+    // An unreadable file leaves an empty window, which cannot prove the mitigation
+    // is present — keep the hit rather than dropping it on missing evidence.
+    if (mitigation.test(window)) continue;
+    kept.push(h);
+  }
+  return kept;
 }
 
 async function checkJwtAlgNone(): Promise<Finding[]> {
@@ -569,8 +600,12 @@ async function checkJwtHsRsConfusion(): Promise<Finding[]> {
 }
 
 async function checkApiKeyInUrl(): Promise<Finding | null> {
+  // Only the RECEIVING side was covered (`req.query.api_key`). Putting a key in a
+  // URL you CALL leaks it exactly the same way — into the upstream's access logs,
+  // any proxy in between, and this process's own outbound request logs — and it is
+  // the more common form in application code.
   const hits = await codeSearch(
-    String.raw`(?:req\.query\.|query\.\b)(?:api_key|apikey|access_token|token|key|secret|auth|authorization)\b`
+    String.raw`(?:req\.query\.|query\.\b)(?:api_key|apikey|access_token|token|key|secret|auth|authorization)\b|[?&](?:api_key|apikey|access_token|auth_token|api-key|token|secret)=(?:\$\{|['"]\s*\+|%s)`
   );
   if (!hits.length) return null;
   return {
@@ -588,12 +623,33 @@ async function checkApiKeyInUrl(): Promise<Finding | null> {
 }
 
 async function checkPasswordResetNoExpiry(): Promise<Finding | null> {
-  const hits = await codeSearch(
+  const compareHits = await codeSearch(
     String.raw`(?:resetToken|reset_token|passwordResetToken|forgotToken|verificationToken)\s*(?:===|==)\s*(?:req\.|body\.|params\.|token\b)`
   );
-  const unsafe = hits.filter(
+  const comparedWithoutExpiry = compareHits.filter(
     (h) => !/expir|ttl|expiresAt|Date\.now|createdAt.*<|isExpired|maxAge/i.test(h.preview)
   );
+
+  // Only the VERIFY side was covered. A token persisted with no expiry column is
+  // the same defect one step earlier, and it is where the bug is usually written:
+  //   await db.resetToken.create({ data: { token, userId: user.id } });
+  // The expiry commonly sits on a neighbouring line of the same object literal, so
+  // this is judged over a window rather than the matched line alone.
+  const issueHits = await codeSearch(
+    String.raw`(?:resetToken|reset_token|passwordResetToken|forgotToken|verificationToken)[^\n]{0,60}\.(?:create|insert|save|upsert|set)\s*\(|\.(?:create|insert|upsert)\s*\(\s*\{[^\n]{0,80}(?:resetToken|reset_token|passwordResetToken|verificationToken)`
+  );
+  const issuedWithoutExpiry = await withoutNearby(
+    issueHits,
+    /expir|ttl|expiresAt|expires_at|validUntil|valid_until|Date\.now|isExpired|maxAge|EX\s*:/i
+  );
+
+  const seen = new Set<string>();
+  const unsafe = [...comparedWithoutExpiry, ...issuedWithoutExpiry].filter((h) => {
+    const key = `${h.file}:${h.line}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
   if (!unsafe.length) return null;
   return {
     id: "PASSWORD_RESET_NO_EXPIRY",
@@ -700,11 +756,31 @@ async function checkAccountLockout(): Promise<Finding | null> {
 
 async function checkRefreshTokenNotRotated(): Promise<Finding | null> {
   const hits = await codeSearch(
-    String.raw`(?:refresh_token|refreshToken)\s*[:=](?:.*jwt\.sign|.*generateToken|.*createToken|.*sign\s*\()|(?:grantType|grant_type)\s*[:=]\s*['"]refresh_token['"]`
+    String.raw`(?:refresh_token|refreshToken)\s*[:=][^\n]{0,80}(?:jwt\.sign|generateToken|createToken|sign\s*\()|(?:grantType|grant_type)\s*[:=]\s*['"]refresh_token['"]`
   );
-  const unsafe = hits.filter(
+  const issuedWithoutRevocation = hits.filter(
     (h) => !/delete|revoke|invalidate|blacklist|rotateToken|revokeToken|tokenFamily|REFRESH_TOKEN_FAMILY/.test(h.preview)
   );
+
+  // The most literal form of "not rotated" — handing the SAME refresh token back in
+  // the response — matched nothing, because the old pattern required a token-minting
+  // call on the line. `res.json({ access_token, refresh_token: rt.token })` mints
+  // only the access token and returns the stored refresh token unchanged.
+  const echoHits = await codeSearch(
+    String.raw`(?:refresh_token|refreshToken)\s*:\s*(?:[A-Za-z_$][\w$]*\.(?:token|refreshToken|refresh_token)|req\.body\.refresh_token|refresh_token\b|rt\b)`
+  );
+  const echoedWithoutRotation = await withoutNearby(
+    echoHits,
+    /delete|revoke|invalidate|blacklist|rotate|tokenFamily|REFRESH_TOKEN_FAMILY|newRefresh|issueRefresh/i
+  );
+
+  const seen = new Set<string>();
+  const unsafe = [...issuedWithoutRevocation, ...echoedWithoutRotation].filter((h) => {
+    const key = `${h.file}:${h.line}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
   if (!unsafe.length) return null;
   return {
     id: "REFRESH_TOKEN_NOT_ROTATED",
@@ -888,8 +964,12 @@ async function checkOauthClientSecretPublic(): Promise<Finding | null> {
 }
 
 async function checkSessionTokenInUrl(): Promise<Finding | null> {
+  // Reading a session id from the query string was covered; WRITING one into a URL
+  // was not. `res.redirect(`/dashboard?session_token=${req.session.id}`)` hands the
+  // session to the browser history and to the Referer header of every subsequent
+  // outbound link — the same CWE-598 exposure, from the other direction.
   const hits = await codeSearch(
-    String.raw`req\.query\.(?:sessionid|session_id|sid|jsessionid|auth_token|session_token)`
+    String.raw`req\.query\.(?:sessionid|session_id|sid|jsessionid|auth_token|session_token)|[?&](?:sessionid|session_id|sid|jsessionid|auth_token|session_token)=(?:\$\{|['"]\s*\+|%s)`
   );
   if (!hits.length) return null;
   return {
@@ -970,8 +1050,14 @@ async function checkPasswordResetSingleUse(): Promise<Finding | null> {
 }
 
 async function checkAccountEnumeration(): Promise<Finding | null> {
+  // The gaps are bounded ({0,40}), not `.*`. Three unbounded `.*` runs in one
+  // alternative backtrack super-linearly against a long line: on a 64 KB
+  // single-line file (a minified bundle, a data blob) this pattern alone took 6
+  // seconds, and 390 seconds at 256 KB, stalling the whole gate on one file.
+  // An error message sits inside a string literal, so 40 characters between the
+  // words is far more than any real message needs.
   const hits = await codeSearch(
-    String.raw`(?:user|account|email).*not.*found|no.*user.*(?:found|exists)|User.*does.*not.*exist|unknown.*(?:email|user|account)`
+    String.raw`(?:user|account|email)[^\n]{0,40}not[^\n]{0,20}found|no[^\n]{0,20}user[^\n]{0,20}(?:found|exists)|User[^\n]{0,20}does[^\n]{0,10}not[^\n]{0,10}exist|unknown[^\n]{0,20}(?:email|user|account)`
   );
   const safeRe = /\/\/|expect\s*\(|toBe|toEqual|console\.log|logger\.(debug|info|warn)|\.test\s*\(/;
   const unsafe = hits.filter((h) => !safeRe.test(h.preview));
