@@ -2,8 +2,13 @@ export function detectSurfaces(changedFiles: string[]) {
   const has = (re: RegExp) => changedFiles.some((f) => re.test(f));
 
   return {
-    web: has(/^(app|pages|components|src)\/.*\.(ts|tsx|js|jsx)$/) || has(/^next\.config\./),
-    api: has(/^(app\/api|src\/api|api|server)\//),
+    // Anchored at any path segment, not at the repository root. Root-anchoring made
+    // surface detection a function of directory layout: the same file scored three
+    // CRITICALs at `app/api/x/route.ts` and zero at `packages/web/src/app/api/x/route.ts`,
+    // because five modules (roughly 160 rules, including injection-deep and auth-deep)
+    // are gated on these two flags. Every monorepo silently took the reduced rule set.
+    web: has(/(^|\/)(app|pages|components|src)\/.*\.(ts|tsx|js|jsx)$/) || has(/(^|\/)next\.config\./),
+    api: has(/(^|\/)(app\/api|src\/api|api|server)\//),
     infra:
       has(/^(infra|terraform|iac|k8s|helm|cloudbuild|argo(cd)?|flux|gitops|\.github\/workflows)\//) ||
       has(/\.(tf|tfvars)(\.json)?$/) ||

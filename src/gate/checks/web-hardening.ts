@@ -41,6 +41,7 @@ import { Finding } from "../result.js";
 import { searchRepo } from "../../repo/search.js";
 import { scopedFg as fg } from "../scan-scope.js";
 import { readFileSafe } from "../../repo/fs.js";
+import { exportedHandlers, handlerIsAuthorized, fileIsAuthorized } from "./authz-scope.js";
 
 type Hit = { file: string; line: number; preview: string };
 
@@ -419,11 +420,10 @@ const USE_SERVER_RE = /['"]use server['"]/;
 // A DB mutation/read — i.e. the action actually touches data.
 const ACTION_DOES_WORK_RE =
   /prisma\.|supabase\.|\bdb\.|drizzle|\.(?:insert|update|delete|findMany|findUnique|findFirst|create|createMany|updateMany|deleteMany)\s*\(/;
-// Any recognised server-side auth/identity verifier (same set as the API rule).
-const ACTION_HAS_AUTH_RE =
-  /getServerSession|auth\s*\(|currentUser|getUser\s*\(|clerkClient|verifyToken|getToken|requireAuth|getAuth\s*\(|next-auth|supabase[\s\S]{0,60}auth\.getUser/i;
-// An action explicitly marked public/webhook is intentional — don't flag it.
-const ACTION_PUBLIC_MARK_RE = /\/\/\s*PUBLIC(?:\s+ACTION)?|allowUnauthenticated|webhook/i;
+// The auth verifier and the "intentionally public" mark are evaluated per exported
+// action over that action's own body (authz-scope.ts). They used to be whole-file
+// regexes, so an unrelated `getToken` helper or a comment containing the word
+// "webhook" cleared the entire file. See authz-scope.ts for the two reproductions.
 
 async function checkServerActionNoAuthz(): Promise<Finding | null> {
   try {
@@ -445,9 +445,21 @@ async function checkServerActionNoAuthz(): Promise<Finding | null> {
       }
       if (!USE_SERVER_RE.test(content)) continue; // not a Server Action file
       if (!ACTION_DOES_WORK_RE.test(content)) continue; // no DB work — skip
-      if (ACTION_HAS_AUTH_RE.test(content)) continue; // has an auth verifier — ok
-      if (ACTION_PUBLIC_MARK_RE.test(content)) continue; // intentionally public
-      offenders.push(`${file}: 'use server' action performs a DB mutation/read with no server-side auth check`);
+
+      const actions = exportedHandlers(content).filter((h) => ACTION_DOES_WORK_RE.test(h.region));
+      if (actions.length > 0) {
+        for (const action of actions) {
+          if (handlerIsAuthorized(action)) continue;
+          offenders.push(
+            `${file}: 'use server' action ${action.name}() performs a DB mutation/read with no server-side auth check`
+          );
+          if (offenders.length >= 15) break;
+        }
+      } else if (!fileIsAuthorized(content)) {
+        // No exported function to scope to (top-level work, re-exported action).
+        // Fall back to the whole file rather than losing the detection.
+        offenders.push(`${file}: 'use server' action performs a DB mutation/read with no server-side auth check`);
+      }
       if (offenders.length >= 15) break;
     }
 

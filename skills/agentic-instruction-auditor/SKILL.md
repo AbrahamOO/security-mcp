@@ -8,7 +8,7 @@ description: >
   credential-harvest, and memory-poisoning payloads. Reasons about multi-file and encoded
   injection chains the static gate check cannot. Maps to OWASP LLM01, MITRE ATLAS AML.T0051/T0054.
 user-invocable: true
-allowed-tools: Read, Glob, Grep, Bash
+allowed-tools: Read, Glob, Grep, Bash, Edit, Write
 model: claude-opus-4-8
 ---
 

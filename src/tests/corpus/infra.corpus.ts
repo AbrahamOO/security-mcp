@@ -273,5 +273,18 @@ export const cases: RuleCase[] = [
       content: `resource "aws_instance" "worker" {\n  ami           = "ami-0abcdef1234567890"\n  instance_type = "m5.large"\n}\n\nresource "aws_securityhub_account" "main" {\n  enable_default_standards = true\n}\n`
     },
     note: "Absence check: fires when an aws_instance (matches awsInfraResults) exists but no aws_securityhub_account is found. Positive has only the instance; negative adds an aws_securityhub_account resource, whose literal text makes securityHubResults non-empty and suppresses the finding."
+  },
+  {
+    ruleId: "SECRET_MANAGER_NOT_DETECTED",
+    check: "infra",
+    positive: {
+      file: "src/config.ts",
+      content: `export const DB_URL = process.env.DATABASE_URL;\nexport const API_TOKEN = process.env.API_TOKEN;\n`
+    },
+    negative: {
+      file: ".github/workflows/publish.yml",
+      content: `name: publish\non:\n  push:\n    tags: ["v*"]\njobs:\n  npm:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm publish\n        env:\n          NODE_AUTH_TOKEN: \${{ secrets.NPM_TOKEN }}\n`
+    },
+    note: "The rule only recognised a cloud provider's SDK or Terraform resource, so any repository without cloud infrastructure — a CLI, a library, this repository — was told at HIGH that it had no secret manager while reading every key from GitHub encrypted secrets. A CI platform's encrypted store is a managed secret store; the positive keeps the real case, a config module that only reads plain environment variables with nothing managing them."
   }
 ];

@@ -22,6 +22,25 @@ const SECRET_MANAGER_PATTERN_B = [
   "op run|op read|onepassword",                // 1Password Secrets Automation
 ].join("|");
 
+// Platform-managed secret stores that are not a cloud SDK call.
+//
+// Patterns A and B only recognised a cloud provider's SDK or Terraform resource, so
+// every repository that keeps its secrets in a CI platform's encrypted store, in a
+// Kubernetes secrets operator, or in an encrypted-at-rest file was told "no secret
+// manager usage detected" at HIGH. That is the same mistake in the other direction:
+// a control satisfied by a mechanism the rule had never heard of, reported as absent.
+// A library or CLI with no cloud infrastructure hit it every time — including this
+// repository, whose workflows read every key from GitHub encrypted secrets.
+const SECRET_MANAGER_PATTERN_C = [
+  String.raw`\$\{\{\s*secrets\.`,              // GitHub Actions encrypted secrets
+  String.raw`\$\{\{\s*vars\.`,                 // GitHub Actions configuration variables
+  "external-secrets.io|ExternalSecret",        // External Secrets Operator (k8s)
+  "SealedSecret|kubeseal",                     // Bitnami Sealed Secrets (k8s)
+  String.raw`sops:|sops_file|creation_rules`,  // SOPS-encrypted files
+  "infisical|akeyless|conjur|CyberArk",        // Infisical / Akeyless / CyberArk Conjur
+  "secretKeyRef|valueFrom:",                   // k8s Secret reference in a pod spec
+].join("|");
+
 // IAM wildcard patterns — any cloud provider
 const IAM_WILDCARD_PATTERN =
   String.raw`"Action"\s*:\s*"\*"|` +           // AWS IAM wildcard action
@@ -63,11 +82,12 @@ export async function checkInfra(_: { changedFiles: string[] }): Promise<Finding
 
   // 1. Secret manager usage — cloud-agnostic check (split across two searches
   //    to stay under the 256-char ReDoS guard in searchRepo)
-  const [smRefsA, smRefsB] = await Promise.all([
+  const [smRefsA, smRefsB, smRefsC] = await Promise.all([
     searchRepo({ query: SECRET_MANAGER_PATTERN_A, isRegex: true, maxMatches: 5 }),
-    searchRepo({ query: SECRET_MANAGER_PATTERN_B, isRegex: true, maxMatches: 5 })
+    searchRepo({ query: SECRET_MANAGER_PATTERN_B, isRegex: true, maxMatches: 5 }),
+    searchRepo({ query: SECRET_MANAGER_PATTERN_C, isRegex: true, maxMatches: 5 })
   ]);
-  const secretManagerRefs = [...smRefsA, ...smRefsB];
+  const secretManagerRefs = [...smRefsA, ...smRefsB, ...smRefsC];
   if (secretManagerRefs.length === 0) {
     findings.push({
       id: "SECRET_MANAGER_NOT_DETECTED",
@@ -79,6 +99,7 @@ export async function checkInfra(_: { changedFiles: string[] }): Promise<Finding
         "  • GCP: Secret Manager with Workload Identity",
         "  • Azure: Azure Key Vault with Managed Identity",
         "  • Multi-cloud / self-hosted: HashiCorp Vault, Doppler, or 1Password Secrets Automation",
+        "  • No cloud infrastructure (a CLI, a library, a static site): a CI platform's encrypted store counts — GitHub Actions secrets, a Kubernetes External Secret or SealedSecret, or SOPS-encrypted files in the repo.",
         "Never store secrets in environment files committed to the repo, CI log output, or container images."
       ]
     });

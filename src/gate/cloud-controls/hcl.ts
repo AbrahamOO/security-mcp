@@ -91,9 +91,15 @@ function ensureLeafAttr(body: string, attr: string, value: string, indent: strin
   if (assignRe.test(body)) {
     return body.replace(assignRe, `$1${attr} = ${value}`);
   }
-  const leading = body.startsWith("\n") ? "\n" : "";
-  const rest = body.startsWith("\n") ? body.slice(1) : body;
-  return `${leading}${indent}${attr} = ${value}\n${rest}`;
+  // Match the document's own line ending. `startsWith("\n")` is false for a CRLF file,
+  // whose block body starts with "\r", so the attribute was inserted immediately after the
+  // opening brace with no newline. HCL requires a newline after `{`, so a valid CRLF file
+  // became a parse error: `resource "x" "y" {  enable_key_rotation = true\n\r\n ...`.
+  const eolMatch = /^\r?\n/.exec(body);
+  const leading = eolMatch ? eolMatch[0] : "";
+  const eol = eolMatch?.[0] ?? "\n";
+  const rest = eolMatch ? body.slice(eolMatch[0].length) : body;
+  return `${leading}${indent}${attr} = ${value}${eol}${rest}`;
 }
 
 /** Build a fresh nested block chain `a { b { leaf = value } }` for a missing path. */
@@ -128,8 +134,10 @@ function ensurePath(body: string, segs: string[], value: string, indent: string)
     }
   }
   const block = buildNestedChain(segs, value, indent);
-  const leading = body.startsWith("\n") ? "\n" : "";
-  const restBody = body.startsWith("\n") ? body.slice(1) : body;
+  // Same CRLF hazard as ensureLeafAttr above.
+  const eolMatch2 = /^\r?\n/.exec(body);
+  const leading = eolMatch2 ? eolMatch2[0] : "";
+  const restBody = eolMatch2 ? body.slice(eolMatch2[0].length) : body;
   return `${leading}${block}${restBody}`;
 }
 

@@ -48,6 +48,14 @@ jobs:
       - name: Verify claims
         run: npm run verify:claims
 
+      # Documentation drift. Bindings live in docs/doc-map.json. Two rules: every anchor
+      # must be present in every bound doc, and a change set that touches bound source must
+      # also touch the bound docs. fetch-depth: 0 above is what makes the range resolvable.
+      # This is the half of the doc gate that survives a fresh clone; the PreToolUse hook
+      # (scripts/doc-drift-hook.sh) only protects a machine that has wired it up.
+      - name: Doc drift
+        run: npm run docs:check -- --range origin/main..HEAD
+
       # 1) Secret scanning
       - name: Gitleaks
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e  # gitleaks/gitleaks-action@v3.0.0
@@ -108,11 +116,23 @@ jobs:
           SECURITY_GATE_CONTROL_CATALOG: "defaults/control-catalog.json"
           # Intentionally NOT setting SECURITY_GATE_EXCEPTIONS: an explicit override is
           # treated as a user project exceptions file. Leaving it unset lets the gate
-          # auto-load .github/security-exceptions-ci.json as the trusted CI self-scan file
-          # (isCiFile), which is the only file permitted to suppress HIGH/CRITICAL self-scan
-          # false positives unsigned. It holds the ciso-approved, expiring justifications for
-          # the tool's own N/A controls (no app runtime), SBOM/provenance at the npm-publish
-          # layer, and remaining detection-pattern examples.
+          # auto-load .github/security-exceptions-ci.json, which holds the ciso-approved,
+          # expiring justifications for the tool's own N/A controls (no app runtime),
+          # SBOM/provenance at the npm-publish layer, and detection-pattern examples.
+          #
+          # That file sits INSIDE the repository under scan, so its name is not a trust
+          # signal: trusting it by filename meant any pull request could add one and suppress
+          # every blocking finding (measured: 51 findings, 48 blocking, down to 0).
+          #
+          # It may suppress HIGH/CRITICAL ONLY when this key verifies its signature. Signing
+          # requires the secret, which a fork PR never sees, so a signature is an
+          # authenticated act of risk acceptance rather than a configuration flag. Unsigned,
+          # the file can hide LOW/MEDIUM noise and nothing more: HIGH and CRITICAL stay
+          # active and the gate blocks on them.
+          #
+          # Sign with `security-mcp sign-exceptions` and commit the result. Editing the file
+          # invalidates the signature, so re-sign after every change.
+          SECURITY_POLICY_HMAC_KEY: ${{ secrets.SECURITY_POLICY_HMAC_KEY }}
           SECURITY_GATE_SCANNERS: ".github/security-tools-ci.json"
           # Self-scan scope: exclude the tool's own intentional example/test/rule content
           # from its vulnerability scan. fixtures/ are deliberately-insecure test inputs,
@@ -125,5 +145,22 @@ jobs:
           # class as the REMEDIATION_MAP entries. None are shippable application code;
           # scanning them flags the tool's own definitions. This affects only this repo's
           # self-scan — it is not part of the published package or user gate runs.
-          SECURITY_GATE_IGNORE: "fixtures,skills,prompts,defaults,skills-manifest.json,.github/security-exceptions-ci.json,**/remediation-parts/**"
+          #
+          # src/tests holds the rule corpus: 522 deliberately-vulnerable/safe sample pairs
+          # that exist so every detection rule is proven to fire and to stay quiet. They are
+          # test data in the same sense fixtures/ is, and scanning them flags the samples the
+          # rules were written against.
+          # src/gate and .claude are here for the same reason, and used to be hardcoded
+          # inside the product (src/repo/search.ts, src/gate/checks/secrets.ts). There they
+          # excluded those paths from EVERY reviewed project, not just this one. Stating
+          # them here keeps this repo's self-scan quiet while every other project gets its
+          # src/gate/ and .claude/ trees scanned like any other source.
+          # .cache is the Trivy step's own working directory. Trivy runs earlier in this
+          # job and downloads a ~1.2GB vulnerability database into .cache/trivy/, which is
+          # then sitting in the workspace when the gate enumerates it. That single tree was
+          # enough to exhaust the content-search time budget for 200 detection queries, so
+          # the gate was scanning a scanner's cache instead of this repository and stopping
+          # early. It is another tool's build artifact, not source, and never belonged in
+          # scope.
+          SECURITY_GATE_IGNORE: "fixtures,skills,prompts,defaults,skills-manifest.json,.github/security-exceptions-ci.json,**/remediation-parts/**,src/gate,.claude,src/tests,.cache"
         run: npm run ci:pr-gate

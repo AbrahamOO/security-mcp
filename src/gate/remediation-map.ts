@@ -1,8 +1,11 @@
 // Remediation templates for security.generate_remediations.
 // Relocated out of src/mcp/server.ts: these entries embed intentional "before"
 // vulnerable-code examples (md5, SQL concatenation, sslmode=disable, ...) used to
-// teach fixes. Living under src/gate/ means the gate self-scan excludes them
-// (searchRepo ignores src/gate/**), so the examples no longer self-trigger checks.
+// teach fixes. This repo's own gate run excludes them through SECURITY_GATE_IGNORE
+// (see .github/workflows/security-gate.yml), so the examples do not self-trigger
+// checks. searchRepo no longer skips src/gate/** for everyone: that exclusion was
+// this project's self-scan preference, and applying it to every reviewed repository
+// left any project with a src/gate/ directory silently unscanned.
 
 export type RemediationTemplate = {
   pattern: string;
@@ -305,7 +308,11 @@ const BASE_REMEDIATION_MAP: Record<string, RemediationTemplate> = {
   // ---------------------------------------------------------------------------
   "AI_INVISIBLE_UNICODE_INJECTION": {
     pattern: "const prompt = `Summarize: ${userText}` // userText may contain hidden tag chars",
-    fix: "const clean = userText.replace(/[\\u200b-\\u200f\\u202a-\\u202e\\u2060-\\u2064\\uE0000-\\uE007F]/gu, '');\nconst prompt = `Summarize: ${clean}`;",
+    // The Unicode Tag block needs the braced form. Under /u, "\\uE0000" parses as \\uE000
+    // followed by a literal "0", so the class silently became \\uE000 plus the range
+    // '0'-'\\uE007' — which matched ordinary digits and letters. The shipped fix deleted
+    // almost all of the user's text and removed none of the tag characters it targets.
+    fix: "const clean = userText.replace(/[\\u200b-\\u200f\\u202a-\\u202e\\u2060-\\u2064]|[\\u{E0000}-\\u{E007F}]/gu, '');\nconst prompt = `Summarize: ${clean}`;",
     explanation: "Zero-width and Unicode tag characters (U+E0000 block) are invisible to reviewers but tokenized by the model, letting an attacker smuggle hidden instructions. Strip invisible/bidi/tag code points before building the prompt.",
     references: ["CWE-116", "OWASP LLM01:2025", "MITRE ATLAS AML.T0051"]
   },
@@ -401,6 +408,97 @@ const BASE_REMEDIATION_MAP: Record<string, RemediationTemplate> = {
     fix: "# Check the gate logs for the underlying error; file a bug if it reproduces",
     explanation: "One failing sub-check currently discards every other sub-check's result in this module. A crash here is not the same as a clean auth-hardening pass.",
     references: ["CWE-1188", "NIST 800-218 RV-1"]
+  },
+  "GATE_CHECK_CRASHED": {
+    pattern: "# A check module, or a rule inside one, threw instead of returning findings — that module's coverage is unknown for this run, not clean",
+    fix: "# Read the evidence for the module and error named in the finding, reproduce it locally, and file a bug; re-run the gate once fixed",
+    explanation: "Findings the failed rule would have produced are missing from this report. Absence of a finding from a crashed rule is not evidence that the vulnerability is absent, so a PASS that includes this finding is a partial result. Rules now settle independently, so the rest of the module still reported.",
+    references: ["CWE-1188", "NIST 800-218 RV-1"]
+  },
+  // ── Gate-level findings ────────────────────────────────────────────────────
+  // Emitted by the gate itself (policy.ts, baseline.ts, exceptions.ts) rather than
+  // by a check module. They had no templates because the rule/template parity claim
+  // only ever compared src/gate/checks/**, so `security.generate_remediations`
+  // returned nothing for a report containing a baseline regression or any
+  // exceptions-integrity finding — the findings operators are most likely to need
+  // guidance on, since each is a decision rather than a code change.
+  "BASELINE_REGRESSION": {
+    pattern: "# This run introduced findings that are not in the stored baseline",
+    fix: "# Triage each new finding, then re-baseline only after it is fixed or covered by a signed exception",
+    explanation: "A baseline records the findings that existed at a point in time so a change set is judged on what it adds. Regenerating the baseline to make a regression disappear accepts the risk silently and without an owner, expiry, or ticket.",
+    references: ["NIST 800-218 RV-1", "SOC 2 CC7.2"]
+  },
+  "CI_EXCEPTIONS_IN_LOCAL_SCAN": {
+    pattern: "# .github/security-exceptions-ci.json was loaded during a local (non-CI) run",
+    fix: "# Keep local risk acceptance in .mcp/exceptions/security-exceptions.json; leave the CI file to CI",
+    explanation: "The CI exceptions file records decisions taken for the CI self-scan. Loading it locally suppresses findings under justifications that were never reviewed for the local scope, and hides the difference between what CI enforces and what you just ran.",
+    references: ["NIST 800-53 CM-3", "SOC 2 CC8.1"]
+  },
+  "CONTROL_EVIDENCE_MISSING": {
+    pattern: "# A required control has no evidence artifact in this repository",
+    fix: "# Add the artifact the control expects and map it in defaults/evidence-map.json, or record a signed exception stating why the control does not apply",
+    explanation: "A control with no evidence is unverified, not satisfied. Either produce the artifact (threat model, pentest sign-off, IR playbook, SBOM) or state in an approved, expiring exception why this system does not implement it.",
+    references: ["NIST 800-53 CA-2", "SOC 2 CC4.1", "ISO 27001 A.5.35"]
+  },
+  "EVIDENCE_MAPPING_MISSING": {
+    pattern: "# A control in the catalog has no entry in the evidence map",
+    fix: "# Add the control id to defaults/evidence-map.json with the file globs that prove it",
+    explanation: "Without a mapping the gate cannot look for the control's evidence at all, so the control is neither satisfied nor reported as failing — it simply drops out of coverage.",
+    references: ["NIST 800-53 CA-7", "SOC 2 CC4.1"]
+  },
+  "EXCEPTIONS_FILE_UNSIGNED": {
+    pattern: "# The exceptions file carries no valid HMAC signature",
+    fix: "SECURITY_POLICY_HMAC_KEY=<key> security-mcp sign-exceptions   # then commit the signed file",
+    explanation: "The exceptions file lives inside the repository under scan, so its name and location prove nothing: any change to the repo can add or edit one. A signature made with a key the repository does not contain is what turns it from configuration into an authenticated act of risk acceptance. Unsigned, it may hide LOW/MEDIUM only.",
+    references: ["CWE-345", "NIST 800-53 CM-5", "SOC 2 CC8.1"]
+  },
+  "EXCEPTIONS_UNSIGNED_SUPPRESSION": {
+    pattern: "# An unsigned exceptions file suppressed findings in this run",
+    fix: "# Sign the file (security-mcp sign-exceptions) so the suppression is attributable, or resolve the findings instead of hiding them",
+    explanation: "This finding mirrors the highest severity that was hidden, so the report cannot look cleaner than the suppression it applied. Signing records who accepted the risk; without it the suppression has no accountable owner.",
+    references: ["CWE-345", "NIST 800-53 CM-5"]
+  },
+  "EXCEPTION_MISSING_TICKET": {
+    pattern: "# An exception entry has no tracking ticket, and the policy requires one",
+    fix: "# Add ticket, owner, approver and expiry to the entry, then re-sign the file",
+    explanation: "An exception without a ticket has no audit trail: no reviewer, no revisit date, and nothing linking the accepted risk to the decision that accepted it.",
+    references: ["SOC 2 CC3.2", "ISO 27001 A.5.36"]
+  },
+  "EXCEPTION_UNSIGNED_HIGH_BLOCKED": {
+    pattern: "# An unsigned exception tried to suppress a HIGH/CRITICAL finding and was refused",
+    fix: "# Fix the underlying finding, or sign the exceptions file so the acceptance is authenticated and attributable",
+    explanation: "Refusing the suppression is the intended behaviour, not an error: a fork or an untrusted change set cannot produce a valid signature, so it cannot silence blocking findings by editing a file it controls. The finding it tried to hide is still active.",
+    references: ["CWE-345", "NIST 800-53 CM-5", "SOC 2 CC8.1"]
+  },
+  "SECURITY_EXCEPTION_EXPIRED": {
+    pattern: "# An exception's expiry date has passed, so it no longer suppresses anything",
+    fix: "# Re-review the risk, then either fix the finding or re-approve with a new expiry and re-sign the file",
+    explanation: "Expiry is what stops a temporary acceptance becoming permanent. An expired entry is deliberately inert, which means the findings it used to hide are back in the report and blocking again.",
+    references: ["SOC 2 CC3.2", "ISO 27001 A.5.36", "NIST 800-53 CA-5"]
+  },
+  "SEARCH_RESULTS_TRUNCATED": {
+    pattern: "# One or more detection queries stopped at their match cap — the rules driven by them saw a prefix of the matching lines, not all of them",
+    fix: "# Scan in smaller slices: SECURITY_GATE_TARGETS=src/api then src/web, and SECURITY_GATE_IGNORE for vendored or generated trees",
+    explanation: "A capped search and an exhausted search return the same result, so a rule that filters its hits (keep the ones without a sanitizer on the line) or intersects two searches by filename can miss the match that mattered. Expected on large monorepos; treat it as reduced confidence in the absence of findings, not as a vulnerability and not as a clean result.",
+    references: ["CWE-1188", "NIST 800-218 RV-1"]
+  },
+  "SCAN_FILES_UNREADABLE": {
+    pattern: "# One or more files were enumerated as in scope and then could not be read, so no rule examined their contents",
+    fix: "# Resolve the cause (size cap, symlink leaving the workspace, non-regular file, permissions), or exclude the paths deliberately: SECURITY_GATE_IGNORE=path/to/tree",
+    explanation: "An unread file produces no matches, which is byte-for-byte the same result as a file that was read and was clean. The scope still lists it as scanned. Treat the named files as unexamined: the absence of findings in them is not evidence about their contents.",
+    references: ["CWE-1188", "NIST 800-218 RV-1"]
+  },
+  "DIFF_FILES_DROPPED": {
+    pattern: "# git listed a file as changed, but the gate could not find it on disk and scanned nothing in it",
+    fix: "# Run the gate from the repository root, or point it at the checkout git is reporting on:\n#   cd \"$(git rev-parse --show-toplevel)\" && security-mcp gate\n# In CI, drop `defaults.run.working-directory` for the gate step, or re-run over the full repo.",
+    explanation: "git emits paths relative to the repository root. A changed file that cannot be resolved is never handed to any rule, so the run reports on a smaller scope than the diff it claims to cover. A clean result for that scope says nothing about the dropped files.",
+    references: ["CWE-1188", "NIST 800-218 RV-1"]
+  },
+  "SEARCH_TIME_BUDGET_EXCEEDED": {
+    pattern: "# A detection query exhausted its wall-clock budget and stopped part-way through the repository",
+    fix: "# Narrow the run: SECURITY_GATE_TARGETS=src/api, and SECURITY_GATE_IGNORE for vendored or generated trees, then re-run",
+    explanation: "Unlike a per-query match cap, a time-budget stop means the files after the stopping point were never opened at all. The report describes a prefix of the repository. Re-run over a smaller scope rather than reading the result as complete.",
+    references: ["CWE-1188", "CWE-1333", "NIST 800-218 RV-1"]
   },
   "EVAL_UNAVAILABLE_BUSINESS_LOGIC": {
     pattern: "# An internal error aborted the business-logic check before any of its ~37 sub-checks (refund, inventory, race conditions, payments) could report — status is unknown, not confirmed clean",

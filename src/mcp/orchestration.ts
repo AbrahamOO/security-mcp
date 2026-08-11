@@ -27,7 +27,9 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { updateReviewStep } from "../review/store.js";
-import { getChain, verifyChain, computeFindingsHash } from "./audit-chain.js";
+import { getChain, verifyChain, computeFindingsHash, computePayloadHash } from "./audit-chain.js";
+import { deriveSkillSections } from "../agent-exec/agent-prompt.js";
+import { INJECTION_PATTERNS } from "./injection-patterns.js";
 import { enforceCapabilityFloor } from "./capability-enforcer.js";
 import { sanitizeErrorMessage } from "../gate/result.js";
 import { getWorkspaceRoot } from "../repo/workspace.js";
@@ -43,6 +45,7 @@ import type {
   StackContext,
   UpdateCheckResult
 } from "../types/agent-run.js";
+import { TERMINAL_AGENT_STATUSES } from "../types/agent-run.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -105,6 +108,36 @@ export const SKILL_MD_SECTIONS = [
   "§DETECTION-GAP",
   "§ZERO-MISS-MANDATE"
 ];
+
+// Run-directory files that are NOT agent findings. Both mergeAgentFindings and
+// verifySkillCoverage glob `*.json` out of the run directory, so without this every
+// bookkeeping artifact was parsed as if it were an agent's output:
+//   - attestation-chain.json was schema-rejected on every merge and pushed into
+//     agentsPartial as a phantom agent named "attestation-chain";
+//   - merged-findings.json was excluded from the merge but NOT from coverage, so a
+//     second merge fed its own skillMdSectionsCovered back into the coverage number.
+// Suffix rule covers report artifacts (compliance-report.json, pentest-report.json)
+// that agents write alongside their findings.
+const RESERVED_RUN_DIR_FILENAMES: ReadonlySet<string> = new Set([
+  "manifest.json",
+  "merged-findings.json",
+  "attestation-chain.json",
+  "threat-model.json",
+  "coverage-manifest.json",
+  "taint-map.json",
+  "execution-state.json",
+  "supervisor.json",
+  "queue.json"
+]);
+
+export function isReservedRunDirFile(filename: string): boolean {
+  return RESERVED_RUN_DIR_FILENAMES.has(filename) || /-report\.json$/.test(filename);
+}
+
+/** Candidate agent-findings files in a run directory: `*.json` minus reserved artifacts. */
+function findingsCandidates(entries: string[]): string[] {
+  return entries.filter((f) => f.endsWith(".json") && !isReservedRunDirFile(f));
+}
 
 // Minimum fraction of SKILL.md sections that must be covered across a run before the
 // gate is allowed to PASS. Enforces that agents actually did thorough work. Overridable
@@ -262,6 +295,150 @@ function defaultAgentRecord(): AgentRecord {
  * relevant technology is actually detected — this avoids spawning and loading
  * skill files for surfaces that don't exist in the project.
  */
+/**
+ * Specialists attached to a run when the signal that makes them relevant is present.
+ *
+ * These personas ship in `skills/` and were previously unreachable: no roster source
+ * named them, so `listBundledSkills()` counted them and no run could ever schedule one.
+ * They are not deleted, because each covers a real technique the leads do not. They are
+ * gated instead, because attaching fifty specialists to every run would multiply cost and
+ * wall clock on repositories where most of them have nothing to examine.
+ *
+ * `baseline` runs everywhere: those four apply to any repository with source control and
+ * instruction files, which is all of them. Every other key is a signal derived from the
+ * detected stack, so a pure-backend repository never pays for the mobile or AI sets.
+ *
+ * Adding a persona to `skills/` without adding it here is caught by
+ * `runPersonaReachabilityTests`, which fails on any persona no roster source can select.
+ */
+const SIGNAL_SPECIALISTS: Record<string, AgentName[]> = {
+  // Applies to every repository: history, instruction files, triage, and scoring.
+  baseline: [
+    "agentic-instruction-auditor", "git-history-secret-scanner",
+    "dread-scorer", "incident-responder"
+  ],
+  // Anything serving HTTP: request parsing, session handling, and abuse resistance.
+  web: [
+    "ssrf-detection-validator", "file-upload-attacker", "multipart-abuse-tester",
+    "json-ambiguity-tester", "unicode-homograph-tester", "parser-exhaustion-tester",
+    "webhook-security-tester", "bot-detection-specialist", "waf-rule-lifecycle-agent",
+    "advanced-dos-tester", "dos-resilience-tester"
+  ],
+  // Authentication surfaces: credential handling, session lifetime, and replay.
+  auth: [
+    "credential-stuffing-specialist", "session-timeout-tester", "step-up-auth-enforcer",
+    "token-reuse-detector", "anti-replay-tester", "oauth-pkce-specialist"
+  ],
+  // Cloud accounts and infrastructure as code: identity, blast radius, and egress.
+  cloud: [
+    "iac-security-auditor", "iam-privesc-graph-builder", "egress-policy-enforcer",
+    "zero-trust-architect", "kill-switch-engineer"
+  ],
+  // Container and orchestration surfaces.
+  container: ["container-hardening-auditor", "registry-mirror-enforcer"],
+  // Build and release pipelines: provenance, delivery, and artifact trust.
+  ci: [
+    "slsa-level3-enforcer", "slsa-provenance-enforcer",
+    "gitops-delivery-auditor", "binary-auth-validator"
+  ],
+  // Shipped applications: binary hardening, embedded web views, and device trust.
+  mobile: [
+    "mobile-binary-hardener", "mobile-webview-auditor",
+    "deep-link-fuzzer", "cert-pin-rotation-specialist", "device-integrity-aggregator"
+  ],
+  // Model and training-data supply chain.
+  ai: ["ai-model-supply-chain-agent"],
+  // Data stores and anything holding personal data: masking, rotation, and key lifetime.
+  data: [
+    "data-platform-auditor", "linddun-privacy-analyst", "secrets-mask-bypass-tester",
+    "rotation-validation-agent", "quantum-migration-planner"
+  ],
+  // Structured risk modelling. Extends the always-on threat-modeler lead, so it applies
+  // wherever that lead does, which is everywhere.
+  threatModel: ["trike-risk-modeler", "capec-code-mapper", "threat-infrastructure-analyst"],
+  // Control-framework mapping. Gated rather than universal: mapping a library with no
+  // deployment surface, no data, and no pipeline to CSA CCM produces findings nobody
+  // acts on, and every agent scheduled is wall clock a reviewer waits through.
+  compliance: [
+    "csa-ccm-mapper", "csf2-governance-mapper",
+    "samm-assessor", "compliance-lifecycle-tracker"
+  ]
+};
+
+/** The signals a stack context raises, in the closed set SIGNAL_SPECIALISTS is keyed by. */
+function signalsFor(ctx: StackContext): string[] {
+  const WEB_FRAMEWORKS = ["next", "react", "vue", "svelte", "angular", "express", "fastify", "django", "rails", "spring", "flask"];
+  const signals = ["baseline", "threatModel"];
+
+  // A system with regulated data, money, hosted infrastructure, or a release pipeline is
+  // one a control framework actually applies to.
+  const regulated = ctx.hasPII || ctx.hasPayments
+    || ctx.cloudProvider.some((p) => p !== "unknown") || ctx.ciPlatform.length > 0;
+  if (regulated) signals.push("compliance");
+
+  const hasWeb = ctx.frameworks.some((f) => WEB_FRAMEWORKS.some((w) => f.toLowerCase().includes(w)));
+  if (hasWeb) signals.push("web");
+  // Auth specialists are relevant wherever there is a login surface or a payment flow,
+  // and payment flows always carry one.
+  if (hasWeb || ctx.hasPayments) signals.push("auth");
+  if (ctx.cloudProvider.some((p) => p !== "unknown")) signals.push("cloud");
+  if (ctx.frameworks.some((f) => ["kubernetes", "docker", "helm"].includes(f.toLowerCase()))) signals.push("container");
+  if (ctx.ciPlatform.length > 0) signals.push("ci");
+  if (ctx.hasMobile) signals.push("mobile");
+  if (ctx.hasAI) signals.push("ai");
+  if (ctx.databases.length > 0 || ctx.hasPII) signals.push("data");
+
+  return signals;
+}
+
+/** Every specialist whose signal the detected stack raises. */
+export function specialistsFor(ctx: StackContext): AgentName[] {
+  const out = new Set<AgentName>();
+  for (const signal of signalsFor(ctx)) {
+    for (const name of SIGNAL_SPECIALISTS[signal] ?? []) out.add(name);
+  }
+  return [...out];
+}
+
+/** Every persona any roster source can select, across every stack permutation. */
+export function allSelectablePersonas(): AgentName[] {
+  const out = new Set<AgentName>();
+  for (const list of Object.values(SIGNAL_SPECIALISTS)) for (const n of list) out.add(n);
+  for (const cloud of [[], ["aws"], ["gcp"], ["azure"]] as StackContext["cloudProvider"][]) {
+    for (const frameworks of [[], ["kubernetes", "docker", "helm"], ["next", "express"]]) {
+      for (const hasAI of [false, true]) {
+        for (const hasMobile of [false, true]) {
+          const ctx: StackContext = {
+            languages: [], frameworks, databases: ["postgres"], cloudProvider: cloud,
+            paymentProcessor: [], hasAI, hasMobile, hasPII: true, hasPayments: true,
+            packageManagers: [], ciPlatform: ["github"]
+          };
+          for (const n of buildInitialAgentNames(ctx)) out.add(n);
+        }
+      }
+    }
+  }
+  return [...out];
+}
+
+/**
+ * The SKILL.md sections a given roster is capable of covering.
+ *
+ * Falls back to the full section list when the roster's personas cannot be read, so a
+ * missing persona file shrinks nothing: an unreadable roster must not quietly become an
+ * easier target than a readable one.
+ */
+export function coverageDenominatorFor(roster: AgentName[]): string[] {
+  const seen = new Set<string>();
+  for (const name of roster) {
+    const body = readBundledSkillBody(name);
+    if (body === null) return [...SKILL_MD_SECTIONS];
+    for (const s of deriveSkillSections(body)) seen.add(s);
+  }
+  const denominator = SKILL_MD_SECTIONS.filter((s) => seen.has(s));
+  return denominator.length > 0 ? denominator : [...SKILL_MD_SECTIONS];
+}
+
 export function buildInitialAgentNames(stackContext: StackContext): AgentName[] {
   const hasAWS   = stackContext.cloudProvider.includes("aws");
   const hasGCP   = stackContext.cloudProvider.includes("gcp");
@@ -317,6 +494,12 @@ export function buildInitialAgentNames(stackContext: StackContext): AgentName[] 
       "ios-security-auditor", "android-penetration-tester",
       "mobile-api-network-attacker"
     );
+  }
+
+  // Signal-gated specialists. Deduplicated because a persona may be named by a lead's
+  // roster above and by a signal set below.
+  for (const specialist of specialistsFor(stackContext)) {
+    if (!names.includes(specialist)) names.push(specialist);
   }
 
   return names;
@@ -415,8 +598,26 @@ export async function createAgentRun(args: z.infer<typeof CreateAgentRunSchema>)
   // A caller-supplied roster (security.fortify's scoped runs) is intersected against
   // the real agent universe so an invalid or out-of-band name can never poison the
   // manifest — only names buildInitialAgentNames would itself produce are honored.
-  const validAgentNames = new Set(buildInitialAgentNames(safeStackContext));
-  const filteredAgentNames = agentNames?.filter((n): n is AgentName => validAgentNames.has(n as AgentName));
+  // Validate an explicit roster against every EXECUTABLE agent, not against the
+  // stack-gated default roster. Intersecting with buildInitialAgentNames capped the
+  // reachable universe at ~39 of the ~84 named agents, so roughly 50 micro-specialists
+  // (incident-responder, capec-code-mapper, dread-scorer, ...) could never enter a
+  // manifest no matter what a caller asked for. The real constraint is "does a bundled
+  // SKILL.md exist for it", because that persona is what actually gets executed.
+  const executable = new Set(listBundledSkills());
+  const filteredAgentNames = agentNames?.filter((n): n is AgentName => executable.has(n));
+  const unknownAgentNames = agentNames?.filter((n) => !executable.has(n)) ?? [];
+  if (unknownAgentNames.length > 0) {
+    console.warn(JSON.stringify({
+      event: "AGENT_ROSTER_ENTRY_IGNORED",
+      timestamp: new Date().toISOString(),
+      ignored: unknownAgentNames.slice(0, 20),
+      reason: "no bundled SKILL.md — the agent has no persona to execute",
+      severity: "LOW"
+    }));
+  }
+
+  const agents = buildInitialAgents(safeStackContext, filteredAgentNames && filteredAgentNames.length > 0 ? filteredAgentNames : undefined);
 
   const manifest: AgentRunManifest = {
     agentRunId,
@@ -427,7 +628,9 @@ export async function createAgentRun(args: z.infer<typeof CreateAgentRunSchema>)
     internetPermitted,
     stackContext: safeStackContext,
     scope,
-    agents: buildInitialAgents(safeStackContext, filteredAgentNames && filteredAgentNames.length > 0 ? filteredAgentNames : undefined)
+    agents,
+    rosterSource: filteredAgentNames && filteredAgentNames.length > 0 ? "explicit" : "auto",
+    coverageDenominator: coverageDenominatorFor(Object.keys(agents) as AgentName[])
   };
 
   await writeManifest(manifest);
@@ -442,9 +645,22 @@ export const UpdateAgentStatusSchema = z.object({
   agentRunId: z.string().describe("Agent run ID from orchestration.create_agent_run."),
   // CWE-22: constrain agentName to the same safe-name pattern used in path operations
   agentName: z.string().regex(SAFE_AGENT_NAME_RE, "agentName must be alphanumeric with ._- separators").describe("Name of the agent updating its status."),
-  status: z.enum(["running", "completed", "completed_partial", "failed"]),
+  // completed_na = "this agent's domain does not exist in this codebase", an evidenced
+  // terminal verdict several skills mandate for themselves (ai-llm-redteam reports N/A
+  // immediately with no AI stack). Distinct from pending: the completion gate accepts
+  // completed_na and rejects pending.
+  status: z.enum(["running", "completed", "completed_partial", "completed_na", "failed"]),
   // CWE-22: findingsPath is stored in the manifest and may later be used as a path — restrict to safe relative path
-  findingsPath: z.string().regex(/^[a-zA-Z0-9][\w./,-]{0,255}$/, "findingsPath must be a safe relative path").optional().describe("Relative path to the agent findings JSON file."),
+  // CWE-22 without forbidding legitimate paths. The previous regex required an
+  // alphanumeric FIRST character, so a real path like ".mcp/agent-runs/<id>/x.json"
+  // could never be stored — on-disk manifests show the leading dot silently stripped to
+  // satisfy it, producing a path that resolves nowhere. Reject traversal and absolute
+  // paths explicitly instead of banning a leading dot.
+  findingsPath: z.string().min(1).max(256)
+    .refine((p) => !p.startsWith("/") && !/^[A-Za-z]:/.test(p), "findingsPath must be relative, not absolute")
+    .refine((p) => !p.split(/[\\/]/).includes(".."), "findingsPath must not contain '..' segments")
+    .refine((p) => /^[A-Za-z0-9._][A-Za-z0-9._/-]*$/.test(p), "findingsPath contains unsupported characters")
+    .optional().describe("Workspace-relative path to the agent findings JSON file."),
   summary: z.string().max(500).optional().describe("One-line outcome summary.")
 });
 
@@ -500,13 +716,19 @@ export async function updateAgentStatus(args: z.infer<typeof UpdateAgentStatusSc
 
   record.status = effectiveStatus;
   if (effectiveStatus === "running") record.startedAt = new Date().toISOString();
-  if (effectiveStatus === "completed" || effectiveStatus === "completed_partial" || effectiveStatus === "failed") {
+  if (TERMINAL_AGENT_STATUSES.includes(effectiveStatus)) {
     record.completedAt = new Date().toISOString();
   }
   if (findingsPath) record.findingsPath = findingsPath;
   if (summary) record.summary = summary;
 
-  // Advance phase when all phase-1 leads complete
+  // ── Phase advancement ────────────────────────────────────────────────────
+  // A roster is frequently a SUBSET of the full agent universe (security.fortify's
+  // CORE_TARGETED_TEAM is 9 agents and contains none of the phase-2 leads), so every
+  // lead lookup MUST be filtered to agents actually present in this manifest first.
+  // Reading `manifest.agents[n].status` unguarded threw a TypeError on the very first
+  // callback for any scoped roster, which aborted before writeManifest() and silently
+  // discarded the status update — the reason real runs sat at 0 completed agents.
   const phase1Leads: AgentName[] = [
     "threat-modeler", "appsec-code-auditor", "cloud-infra-specialist",
     "supply-chain-devsecops", "ai-llm-redteam", "mobile-security-specialist",
@@ -514,17 +736,23 @@ export async function updateAgentStatus(args: z.infer<typeof UpdateAgentStatusSc
   ];
   const phase2Leads: AgentName[] = ["pentest-team", "compliance-grc"];
 
-  const allPhase1Done = phase1Leads.every((n) => {
-    const s = manifest.agents[n].status;
-    return s === "completed" || s === "completed_partial" || s === "failed";
-  });
-  const allPhase2Done = phase2Leads.every((n) => {
-    const s = manifest.agents[n].status;
-    return s === "completed" || s === "completed_partial" || s === "failed";
-  });
+  const isTerminal = (n: AgentName): boolean => {
+    const s = manifest.agents[n]?.status;
+    return s !== undefined && TERMINAL_AGENT_STATUSES.includes(s);
+  };
+  // An EMPTY filtered list must not count as "all done" — otherwise a roster with no
+  // phase-2 leads would vacuously satisfy the gate and jump straight to phase 3.
+  const allDone = (leads: AgentName[]): boolean => {
+    const present = leads.filter((n) => manifest.agents[n] !== undefined);
+    return present.length > 0 && present.every(isTerminal);
+  };
 
-  if (manifest.phase === 1 && allPhase1Done) manifest.phase = 2;
-  if (manifest.phase === 2 && allPhase2Done) manifest.phase = 3;
+  // Phase 0 means "created, not started". Nothing previously moved a manifest out of
+  // it, so the phase === 1 transition below could never fire and every run on disk was
+  // stuck at phase 0. The first agent to report `running` starts phase 1.
+  if (manifest.phase === 0 && effectiveStatus === "running") manifest.phase = 1;
+  if (manifest.phase === 1 && allDone(phase1Leads)) manifest.phase = 2;
+  if (manifest.phase === 2 && allDone(phase2Leads)) manifest.phase = 3;
 
   await writeManifest(manifest);
   return { manifest };
@@ -572,7 +800,25 @@ const AgentFindingsFileSchema = z.object({
   summary: z.string().max(4000).optional(),
   findings: z.array(AgentFindingSchema).max(5000),
   remediatedCount: z.number().optional(),
-  openCount: z.number().optional()
+  openCount: z.number().optional(),
+  // Both fields are covered by the attested payload hash, so they must survive
+  // validation. Undeclared keys are stripped by zod, and the merge then recomputed the
+  // hash over an object missing them: every executor-written file failed as
+  // "payload-mismatch", its findings were discarded, and the run reported tampering that
+  // had not happened. Declaring them keeps the hashed object and the validated object
+  // the same object.
+  capability: z.object({
+    modelUsed: z.string().max(128).optional(),
+    capabilityTierUsed: z.string().max(32).optional(),
+    taskType: z.string().max(64).optional(),
+    toolsAvailable: z.array(z.string().max(64)).max(64).optional(),
+    toolsUsed: z.array(z.string().max(64)).max(64).optional()
+  }).passthrough().optional(),
+  naEvidence: z.object({
+    isNotApplicable: z.boolean().optional(),
+    signalsSearched: z.array(z.string().max(200)).max(50).optional(),
+    rationale: z.string().max(2000).optional()
+  }).passthrough().optional()
 });
 
 export const MergeAgentFindingsSchema = z.object({
@@ -588,7 +834,7 @@ export async function mergeAgentFindings(args: z.infer<typeof MergeAgentFindings
   let files: string[] = [];
   try {
     const entries = await readdir(dir);
-    files = entries.filter((f) => f.endsWith(".json") && f !== "manifest.json" && f !== "merged-findings.json");
+    files = findingsCandidates(entries);
   } catch {
     files = [];
   }
@@ -608,9 +854,17 @@ export async function mergeAgentFindings(args: z.infer<typeof MergeAgentFindings
   const chainResult = await verifyChain(agentRunId);
   const chain = await getChain(agentRunId);
   const attestedHashByAgent = new Map<string, string>();
+  const attestedPayloadByAgent = new Map<string, string | undefined>();
+  // A second attestation for the same agent must not silently override the first. Attesting
+  // a CRITICAL, then rewriting the file to an empty findings array and re-attesting, left
+  // both links on disk and a valid chain, and the merge reported neither a rejection nor a
+  // warning. Re-attestation is now recorded and treated as tampering.
+  const reattested: string[] = [];
   for (const link of chain.links) {
     if (link.agentName && link.agentName !== "genesis") {
-      attestedHashByAgent.set(link.agentName, link.findingsHash); // last attestation wins
+      if (attestedHashByAgent.has(link.agentName)) reattested.push(link.agentName);
+      attestedHashByAgent.set(link.agentName, link.findingsHash);
+      attestedPayloadByAgent.set(link.agentName, link.payloadHash);
     }
   }
   const chainHasAttestations = attestedHashByAgent.size > 0;
@@ -627,10 +881,12 @@ export async function mergeAgentFindings(args: z.infer<typeof MergeAgentFindings
   for (const file of files) {
     let parsed: AgentFindingsFile;
     let rawFindings: AgentFinding[];
+    let rawEnvelope: Record<string, unknown>;
     let agentName: string | undefined;
     try {
       const raw = await readFile(join(dir, file), "utf-8");
-      const rawObj = JSON.parse(raw) as { findings?: AgentFinding[]; agentName?: string };
+      const rawObj = JSON.parse(raw) as Record<string, unknown> & { findings?: AgentFinding[]; agentName?: string };
+      rawEnvelope = rawObj;
       // CWE-20: strict schema validation BEFORE the payload is trusted downstream.
       parsed = AgentFindingsFileSchema.parse(rawObj) as AgentFindingsFile;
       // Hash the raw (pre-zod) findings so the digest matches exactly what the
@@ -658,6 +914,35 @@ export async function mergeAgentFindings(args: z.infer<typeof MergeAgentFindings
       if (expected !== computeFindingsHash(rawFindings)) {
         rejectedAgents.push(`${label} (hash-mismatch)`);
         tamperDetected = true; // findings changed after the agent signed them
+        continue;
+      }
+      // findingsHash covers findings[] only. Everything else the file asserts about the
+      // agent's own work (section coverage, summary, capability, N/A evidence) sat outside
+      // the signature, so a file could be rewritten after attestation to claim 100% coverage
+      // and a clean summary with the chain still verifying. payloadHash closes that.
+      const expectedPayload = agentName ? attestedPayloadByAgent.get(agentName) : undefined;
+      if (expectedPayload !== undefined) {
+        // Every hashed field is read from the raw envelope, for the same reason
+        // `rawFindings` already is: the hash must cover exactly the bytes the agent
+        // signed. Sourcing any of them from the zod output re-introduces the mismatch,
+        // because validation is free to drop a key the schema does not know about.
+        const actualPayload = computePayloadHash({
+          agentName: parsed.agentName ?? "",
+          findings: rawFindings,
+          skillMdSectionsCovered: rawEnvelope["skillMdSectionsCovered"],
+          summary: rawEnvelope["summary"],
+          capability: rawEnvelope["capability"],
+          naEvidence: rawEnvelope["naEvidence"]
+        });
+        if (expectedPayload !== actualPayload) {
+          rejectedAgents.push(`${label} (payload-mismatch)`);
+          tamperDetected = true;
+          continue;
+        }
+      }
+      if (agentName && reattested.includes(agentName)) {
+        rejectedAgents.push(`${label} (re-attested)`);
+        tamperDetected = true;
         continue;
       }
       if (agentName) attestedAgents.push(agentName);
@@ -734,9 +1019,27 @@ export async function mergeAgentFindings(args: z.infer<typeof MergeAgentFindings
   // These are hard-fail signals that force the gate to FAIL, independent of severity.
   let thoroughnessFailed = false;
 
-  // (a) SKILL.md section coverage verification. Reuse verifySkillCoverage as the
-  //     single source of truth for coverage, then fail the gate below threshold.
-  const coverage = await verifySkillCoverage({ agentRunId });
+  // (a) SKILL.md section coverage.
+  //
+  //     Scored from `sectionsSeen`, which is built above from files that survived schema
+  //     validation, attestation, and the payload hash. It is deliberately NOT scored by
+  //     calling verifySkillCoverage, which reads every findings-shaped file in the run
+  //     directory: a single unattested JSON file naming 28 sections took an honest 4%
+  //     run to a 100% PASS with zero agent work. Coverage must be a property of work
+  //     that was accepted, not of files that are present.
+  //     Scored against what this run's roster can reach, recorded on the manifest at
+  //     creation. Scoring against every section the product defines counted sections
+  //     that live only in personas the run never scheduled, which put the floor out of
+  //     reach for any repository without a cloud, mobile, and AI surface all at once.
+  const denominator = manifest.coverageDenominator?.length
+    ? manifest.coverageDenominator
+    : [...SKILL_MD_SECTIONS];
+  const coveredSections = denominator.filter((s) => sectionsSeen.has(s));
+  const coverage = {
+    covered: coveredSections,
+    uncovered: denominator.filter((s) => !sectionsSeen.has(s)),
+    coveragePercent: Math.round((coveredSections.length / denominator.length) * 100)
+  };
   const requiredCoverage = minCoveragePct();
   if (coverage.coveragePercent < requiredCoverage) {
     thoroughnessFailed = true;
@@ -763,6 +1066,24 @@ export async function mergeAgentFindings(args: z.infer<typeof MergeAgentFindings
   if (missingLeads.length > 0) {
     thoroughnessFailed = true;
     warnings.push(`Required Phase-1 lead(s) did not complete: ${missingLeads.join(", ")}. Gate forced to FAIL.`);
+  }
+
+  // (b2) COMPLETION GATE. A run with unexecuted agents is not a completed review, and
+  //      must never be mergeable into a green gate. `completed_na` counts as executed
+  //      because it carries recorded evidence of why the domain is absent; `pending`
+  //      and `running` do not. This is the check that converts every historical run on
+  //      disk (266 of 280 slots still pending) from silently mergeable into an honest
+  //      failure.
+  const nonTerminalAgents = Object.entries(manifest.agents)
+    .filter(([, rec]) => rec.status === "pending" || rec.status === "running")
+    .map(([name]) => name);
+  if (nonTerminalAgents.length > 0) {
+    thoroughnessFailed = true;
+    warnings.push(
+      `${nonTerminalAgents.length} of ${Object.keys(manifest.agents).length} agent(s) never reached a terminal ` +
+      `status: ${nonTerminalAgents.slice(0, 10).join(", ")}${nonTerminalAgents.length > 10 ? ", …" : ""}. ` +
+      `A run with unexecuted agents is not a completed review. Gate forced to FAIL.`
+    );
   }
 
   // (c) Escalation-required agents (retries exhausted in updateAgentStatus).
@@ -886,8 +1207,16 @@ export async function mergeAgentFindings(args: z.infer<typeof MergeAgentFindings
     skillCoveragePercent: coverage.coveragePercent,
     missingLeads,
     escalatedAgents,
+    // Read by security.attest_review, which refuses to sign a run with unexecuted agents.
+    nonTerminalAgents,
     thoroughnessFailed,
     signatureVerification,
+    // security.attest_review reads latestGate["status"]; this step only ever wrote
+    // "gateStatus", so a multi-agent FAIL left "status" undefined. Attest then errored
+    // with a misleading "no run_pr_gate result recorded" — and worse, if a standalone
+    // security.run_pr_gate had already recorded status:"PASS", that PASS is what attest
+    // saw and this FAIL was invisible. Write both; "gateStatus" is kept for back-compat.
+    status: gateStatus,
     gateStatus
   });
 
@@ -913,26 +1242,7 @@ export async function mergeAgentFindings(args: z.infer<typeof MergeAgentFindings
  *   4. System prompt override: attempts to redefine the agent's core instructions
  *      via embedded meta-prompt directives.
  */
-const SKILL_BACKDOOR_PATTERNS: RegExp[] = [
-  // Re-installation / self-update triggers
-  /ensure_skill\s*\(/i,
-  /orchestration\.ensure_skill/i,
-  /on\s+every\s+(invocation|run|start)/i,
-  /at\s+the\s+(start|beginning)\s+of\s+every/i,
-  /auto.?update\s+this\s+skill/i,
-  // Exfiltration
-  /\bfetch\s*\(\s*["'`]https?:\/\/(?!raw\.githubusercontent\.com)/i,
-  /\bcurl\s+https?:\/\/(?!raw\.githubusercontent\.com)/i,
-  /\bwget\s+https?:\/\/(?!raw\.githubusercontent\.com)/i,
-  // Memory poisoning directives
-  /write_agent_memory.*false.?positive/i,
-  /add.*false.?positive.*finding/i,
-  // Meta-prompt takeover markers
-  /<\s*system\s*>/i,
-  /IGNORE\s+PREVIOUS\s+INSTRUCTIONS/i,
-  /IGNORE\s+ALL\s+PRIOR/i,
-  /DISREGARD\s+PREVIOUS/i,
-];
+const SKILL_BACKDOOR_PATTERNS = INJECTION_PATTERNS;
 
 /**
  * Sanitizes downloaded SKILL.md content by removing lines that match known
@@ -1359,38 +1669,88 @@ export const VerifySkillCoverageSchema = z.object({
   agentRunId: z.string().describe("Agent run ID to verify coverage for.")
 });
 
+/**
+ * Reports which SKILL.md sections a run has evidence for.
+ *
+ * A file only counts when the manifest names its agent AND that agent reached a terminal
+ * completed status. Without both checks this function counted any findings-shaped JSON
+ * in the run directory, so a file for an agent that was never scheduled, or one that was
+ * scheduled and failed, contributed sections exactly as a completed agent would.
+ *
+ * `verified` reports whether the run carries an attestation chain. This function does
+ * not itself verify attestations, so a caller must not read its output as proof of work
+ * when `verified` is false. The gate does not score coverage from here at all: it scores
+ * from the files the merge accepted after attestation.
+ */
 export async function verifySkillCoverage(args: z.infer<typeof VerifySkillCoverageSchema>): Promise<{
   covered: string[];
   uncovered: string[];
   coveragePercent: number;
   status: "PASS" | "WARN";
+  verified: boolean;
+  ignoredFiles: string[];
 }> {
   const dir = agentRunDir(args.agentRunId);
   const sectionsSeen = new Set<string>();
+  const ignoredFiles: string[] = [];
+
+  let manifest: AgentRunManifest | null = null;
+  try {
+    manifest = JSON.parse(await readFile(join(dir, "manifest.json"), "utf-8")) as AgentRunManifest;
+  } catch { /* no manifest — nothing can be corroborated */ }
 
   let files: string[] = [];
   try {
     const entries = await readdir(dir);
-    files = entries.filter((f) => f.endsWith(".json") && f !== "manifest.json");
+    files = findingsCandidates(entries);
   } catch { /* empty */ }
+
+  const TERMINAL_OK = new Set(["completed", "completed_partial"]);
 
   for (const file of files) {
     try {
       const raw = await readFile(join(dir, file), "utf-8");
       const parsed = JSON.parse(raw) as Partial<AgentFindingsFile>;
+      const name = parsed.agentName ?? file.replace(/\.json$/, "");
+      const record = manifest?.agents?.[name as AgentName];
+      if (!record || !TERMINAL_OK.has(String(record.status))) {
+        ignoredFiles.push(file);
+        continue;
+      }
       for (const s of (parsed.skillMdSectionsCovered ?? [])) sectionsSeen.add(s);
-    } catch { /* skip */ }
+    } catch {
+      ignoredFiles.push(file);
+    }
   }
 
-  const covered = SKILL_MD_SECTIONS.filter((s) => sectionsSeen.has(s));
-  const uncovered = SKILL_MD_SECTIONS.filter((s) => !sectionsSeen.has(s));
-  const coveragePercent = Math.round((covered.length / SKILL_MD_SECTIONS.length) * 100);
+  // Score against what this run's roster can actually cover, not the global section
+  // list: a repo with no cloud/AI/mobile surface never schedules the personas that own
+  // those sections, so a global denominator makes 100% unreachable by construction and
+  // fails every honest run. This mirrors the denominator mergeAgentFindings already uses
+  // so both paths agree. An unreadable roster falls back to the full list (see
+  // coverageDenominatorFor) rather than shrinking into an easier target.
+  const roster = Object.keys(manifest?.agents ?? {}) as AgentName[];
+  const denominator = roster.length > 0 ? coverageDenominatorFor(roster) : [...SKILL_MD_SECTIONS];
+
+  const covered = denominator.filter((s) => sectionsSeen.has(s));
+  const uncovered = denominator.filter((s) => !sectionsSeen.has(s));
+  const coveragePercent = Math.round((covered.length / denominator.length) * 100);
+
+  let verified = false;
+  try {
+    verified = (await verifyChain(args.agentRunId)).valid;
+  } catch { /* no chain — verified stays false */ }
 
   return {
     covered,
     uncovered,
     coveragePercent,
-    status: uncovered.length === 0 ? "PASS" : "WARN"
+    // The documented floor is minCoveragePct() (90% by default), not perfection.
+    // Requiring uncovered.length === 0 held every run to 100% and contradicted both
+    // the docstring above and the floor mergeAgentFindings enforces.
+    status: coveragePercent >= minCoveragePct() ? "PASS" : "WARN",
+    verified,
+    ignoredFiles
   };
 }
 

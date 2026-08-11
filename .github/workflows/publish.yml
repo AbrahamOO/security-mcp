@@ -24,10 +24,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # actions/checkout@v7.0.1
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # actions/checkout@v7.0.0
 
       - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # actions/setup-node@v7.0.0
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # actions/setup-node@v4
         with:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
@@ -70,13 +70,30 @@ jobs:
           # (package.json "files") and this is the one gate that actually scans them.
           # remediation-parts/ is the fix-template registry's own before/after examples,
           # same false-positive class as fixtures/.
-          SECURITY_GATE_IGNORE: "fixtures,**/remediation-parts/**"
+          # src/tests is the rule corpus: deliberately-vulnerable sample pairs, same class
+          # as fixtures/.
+          # src/gate and .claude are the detection engine's own patterns and this repo's
+          # agent-instruction files. They used to be excluded from inside the product, which
+          # silently excluded the same paths in every reviewed project; the exclusion is now
+          # stated here, where it applies to this repo alone.
+          SECURITY_GATE_IGNORE: "fixtures,**/remediation-parts/**,src/gate,.claude,src/tests"
           # Do NOT set SECURITY_GATE_EXCEPTIONS to the CI file: passing it via the env
           # override marks it isOverride, and unsigned override files are barred from
           # suppressing HIGH/CRITICAL. Leaving it unset lets the gate auto-load
-          # .github/security-exceptions-ci.json as the isCiFile, which IS allowed to
-          # suppress the self-scan false positives. (Verified: with the override the
-          # self-check FAILs on 554 self-scan CRIT/HIGH; without it, PASS.)
+          # .github/security-exceptions-ci.json.
+          #
+          # Auto-loading is no longer sufficient on its own. Being named
+          # .github/security-exceptions-ci.json used to grant that file permission to suppress
+          # HIGH/CRITICAL, but it lives inside the repo under scan, so any pull request could
+          # add one and suppress every blocking finding.
+          # Trust comes from a valid HMAC signature and nothing else (SECURITY_POLICY_HMAC_KEY
+          # below). A fork PR never sees the secret, so it cannot produce a valid signature.
+          # Sign with `security-mcp sign-exceptions` and commit the result.
+          # Without the secret the file is unsigned, and an unsigned file may only suppress
+          # LOW/MEDIUM noise. HIGH and CRITICAL stay active and the gate blocks on them. That
+          # is intended: threats are fixed or explicitly signed for, never suppressed by
+          # configuration.
+          SECURITY_POLICY_HMAC_KEY: ${{ secrets.SECURITY_POLICY_HMAC_KEY }}
           SECURITY_GATE_SCANNERS: ".github/security-tools-ci.json"
         run: node dist/ci/pr-gate.js
 
@@ -96,7 +113,44 @@ jobs:
           fi
           npm whoami
 
+      # Build the exact tarball that will be published, so the attestation below and the
+      # publish below cover the same bytes. `npm publish <tarball>` republishes this file
+      # rather than re-packing, which is what makes the attestation meaningful.
+      - name: Pack tarball
+        id: pack
+        run: echo "tarball=$(npm pack --silent)" >> "$GITHUB_OUTPUT"
+
+      # Cryptographic build attestation is NOT available for this package, and the reason is
+      # recorded here rather than left as an unexplained absence. Both mechanisms were tried
+      # against this repository and both are gated on source visibility:
+      #
+      #   npm publish --provenance
+      #     HTTP 422 "Unsupported GitHub Actions source repository visibility: private.
+      #     Only public source repositories are supported when publishing with provenance."
+      #
+      #   actions/attest-build-provenance
+      #     "Failed to persist attestation: Feature not available for user-owned private
+      #     repositories. To enable this feature, please make this repository public."
+      #
+      # The package is public; the source repository is private and user-owned. There is no
+      # widely verifiable provenance mechanism for that combination today.
+      #
+      # What consumers still get: npm records a sha512 integrity hash for every published
+      # tarball and every npm client verifies it on install, so the bytes cannot be altered
+      # after publication. The digest is printed below so it is pinned in this run's immutable
+      # log and can be compared against `npm view security-mcp dist.integrity`.
+      #
+      # To get real provenance, make the repository public and restore `--provenance` on the
+      # publish step below. Do not replace this with a step that fails open.
+      - name: Record artifact digest
+        run: |
+          echo "sha512: $(openssl dgst -sha512 -binary '${{ steps.pack.outputs.tarball }}' | openssl base64 -A)"
+          echo "sha256: $(shasum -a 256 '${{ steps.pack.outputs.tarball }}' | awk '{print $1}')"
+          echo "::warning::Published WITHOUT build provenance: the source repository is private and user-owned, which both npm provenance and GitHub Artifact Attestations refuse. Compare the sha512 above with 'npm view security-mcp dist.integrity'."
+
       - name: Publish
-        run: npm publish --access public --provenance
+        # Publishes the attested tarball itself. --access public is what makes the package
+        # public even though the source repository is private.
+        run: npm publish "${{ steps.pack.outputs.tarball }}" --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

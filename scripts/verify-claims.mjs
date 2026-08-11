@@ -62,15 +62,33 @@ async function verifyQuantity(claim) {
   if (!probeFn) return record(claim.id, false, `unknown probe "${claim.probe}"`);
   const raw = await probeFn(...(claim.probeArgs ?? []));
 
+  // Every numeric token in the verbatim, comma separators stripped. The probe value must
+  // EQUAL one of them.
+  //
+  // This used to be `verbatim.includes(String(value))`, i.e. "does the probe value appear
+  // anywhere inside the sentence". A substring test cannot detect an order-of-magnitude
+  // error, and it fails open on exactly the maintenance action that matters: edit the doc,
+  // edit the registry verbatim to match, both move together. Measured: with zero cloud rules
+  // on disk (total = 0), the claim "ships 1,002 rules" verified, because "1,002 rules"
+  // contains "0". Also passing were 400-vs-40, 910-vs-91, and 9000-vs-900.
+  const numericTokens = (verbatim.match(/\b[\d,]*\d\b/g) ?? []).map((t) => t.replace(/,/g, ""));
+
   const fields = claim.probeField === undefined ? [null] : [].concat(claim.probeField);
   for (const field of fields) {
     const value = field === null ? raw : raw[field];
     const asPlain = String(value);
-    const asComma = typeof value === "number" ? value.toLocaleString("en-US") : asPlain;
-    if (!verbatim.includes(asPlain) && !verbatim.includes(asComma)) {
+    if (typeof value === "number" || /^\d+$/.test(asPlain)) {
+      if (!numericTokens.includes(asPlain)) {
+        return record(
+          claim.id, false,
+          `probe "${claim.probe}"${field ? `.${field}` : ""} = ${asPlain}; verbatim asserts [${numericTokens.join(", ") || "no number"}] in "${claim.verbatim}"`
+        );
+      }
+    } else if (!verbatim.includes(asPlain)) {
+      // Non-numeric probe values (version strings, names) still use containment.
       return record(
         claim.id, false,
-        `probe "${claim.probe}"${field ? `.${field}` : ""} = ${asPlain} (or "${asComma}") not found inside verbatim "${claim.verbatim}"`
+        `probe "${claim.probe}"${field ? `.${field}` : ""} = "${asPlain}" not found inside verbatim "${claim.verbatim}"`
       );
     }
   }
@@ -137,20 +155,81 @@ async function verifyCoverage(claim) {
 // GUARANTEE
 // ---------------------------------------------------------------------------
 let delegatedRunCache = null;
+
+/**
+ * Run the delegated suite once and parse its TAP output into per-subtest results.
+ *
+ * This used to record `ok = (exit code === 0)` for every delegated claim without ever
+ * reading `delegatesTo.testFunction`. Five GUARANTEE claims were therefore one assertion
+ * ("the suite is green") wearing five names: deleting the registration for all five tests
+ * the claims named still produced exit 0, and all five still reported as verified. A claim
+ * that cannot fail is worse than no claim, because it is read as evidence.
+ *
+ * Node's node:test TAP output names each top-level test on an `ok N - <name>` line, so the
+ * registered test NAME is what we can match. Claims therefore also carry `testName` (the
+ * string passed to `test(...)`); when absent we fall back to matching the function name as a
+ * substring of the test names, and if that finds nothing we FAIL rather than pass.
+ */
 function runDelegatedSuite() {
   if (delegatedRunCache !== null) return delegatedRunCache;
+  let stdout = "";
+  let exitOk = true;
   try {
-    execFileSync(process.execPath, ["--test", "dist/tests/legacy.test.js"], { cwd: ROOT, stdio: "pipe" });
-    delegatedRunCache = { ok: true };
+    // Pin the reporter. Node 22 changed the `node --test` default from tap to spec, so
+    // relying on the default made every delegated claim fail to parse on Node 22+ while
+    // still passing on 20 — the claims reported unverified only on the CI runtime.
+    stdout = execFileSync(process.execPath, ["--test", "--test-reporter=tap", "dist/tests/legacy.test.js"], {
+      cwd: ROOT, stdio: "pipe", encoding: "utf8", maxBuffer: 64 * 1024 * 1024
+    });
   } catch (err) {
-    delegatedRunCache = { ok: false, detail: String(err.stderr ?? err.message ?? err).slice(0, 500) };
+    exitOk = false;
+    stdout = String(err.stdout ?? "") + String(err.stderr ?? "");
   }
+  // "ok 12 - name" / "not ok 12 - name"
+  const results = new Map();
+  for (const line of stdout.split("\n")) {
+    const m = /^(not ok|ok)\s+\d+\s+-\s+(.+?)\s*$/.exec(line.trim());
+    if (m) results.set(m[2], m[1] === "ok");
+  }
+  delegatedRunCache = { exitOk, results, raw: stdout.slice(-2000) };
   return delegatedRunCache;
 }
 
 async function verifyGuaranteeDelegated(claim) {
   const res = runDelegatedSuite();
-  record(claim.id, res.ok, res.ok ? undefined : `delegated suite (${claim.delegatesTo.file}) failed: ${res.detail}`);
+  const want = claim.delegatesTo?.testName;
+  const fn = claim.delegatesTo?.testFunction;
+
+  if (res.results.size === 0) {
+    return record(claim.id, false, `delegated suite (${claim.delegatesTo.file}) produced no parseable TAP results`);
+  }
+
+  let matched = null;
+  if (want && res.results.has(want)) {
+    matched = want;
+  } else if (fn) {
+    // Fallback: derive a search key from the function name, e.g.
+    // runCompletionGateTests -> "completion gate".
+    const key = fn.replace(/^run/, "").replace(/Tests$/, "").replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
+    for (const name of res.results.keys()) {
+      if (name.toLowerCase().includes(key)) { matched = name; break; }
+    }
+  }
+
+  if (!matched) {
+    // Fail CLOSED. A claim whose named test cannot be located is unverified, not verified.
+    return record(
+      claim.id, false,
+      `no test matching ${want ? `testName "${want}"` : `testFunction "${fn}"`} was found in the suite output — ` +
+      `the claim delegates to a test that does not exist or is not registered`
+    );
+  }
+
+  const passed = res.results.get(matched);
+  record(
+    claim.id, passed,
+    passed ? undefined : `delegated test "${matched}" FAILED in ${claim.delegatesTo.file}`
+  );
 }
 
 async function attemptEmptySeverityBlockUnsignedIsRejected() {

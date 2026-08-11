@@ -118,8 +118,14 @@ const SF_SHARE_STAGE_PATTERN =
   String.raw`AWS_KEY_ID\s*=\s*["']AKIA|AWS_SECRET_KEY\s*=\s*["']`;
 
 // 15. PII columns without masking policy (heuristic / LOW).
+// The type name must be a whole token that looks like a column type declaration.
+// Without the boundary, "CHAR" matched inside "chars"/"characters", "TEXT" inside
+// "context" and "NUMBER" inside "numbers", so an ordinary English sentence
+// containing one of the PII words and one of those substrings was read as a PII
+// column definition: this repository flagged a markdown line reading "Only allow
+// ASCII alphanumeric + standard email special chars".
 const SF_PII_COLUMN_PATTERN =
-  String.raw`\b(?:ssn|social_security|credit_card|card_number|cvv|passport|date_of_birth|dob|tax_id|email|phone_number)\b[^,;\n]*(?:VARCHAR|STRING|NUMBER|CHAR|TEXT)`;
+  String.raw`\b(?:ssn|social_security|credit_card|card_number|cvv|passport|date_of_birth|dob|tax_id|email|phone_number)\b[^,;\n]{0,60}\b(?:VARCHAR|STRING|NUMBER|NUMERIC|CHAR|TEXT|VARIANT)\b\s*(?:\(|,|;|$|NOT\s+NULL|DEFAULT|COMMENT|WITH\s+MASKING)`;
 // Detects an actual masking/row-access policy being defined or attached to a column —
 // deliberately excludes "GRANT APPLY MASKING POLICY …" so a privilege grant elsewhere in
 // the repo does not suppress the PII-without-masking heuristic.

@@ -632,8 +632,13 @@ async function checkCachePoisoningHeaders(): Promise<Finding[]> {
 // ---------------------------------------------------------------------------
 
 async function checkMissingSri(): Promise<Finding[]> {
+  // The `integrity=` exclusion is in the query, not only in the filter below.
+  // Searches stop at 200 matches: a page set with 200+ correctly protected external
+  // scripts would fill the result before the unprotected one was ever read, and this
+  // rule would report nothing. The lookahead sits right after `<script` so it covers
+  // the attribute appearing either side of `src`.
   const hits = await searchRepo({
-    query: String.raw`<script[^>]+src\s*=\s*['"]https?://(?!localhost|127\.)[^'"]+['"][^>]*>`,
+    query: String.raw`<script(?![^>]*integrity=)[^>]+src\s*=\s*['"]https?://(?!localhost|127\.)[^'"]+['"][^>]*>`,
     isRegex: true,
     maxMatches: 200
   });

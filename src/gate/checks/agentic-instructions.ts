@@ -335,20 +335,59 @@ function scanNewInstructionThreats(file: string, text: string, lines: string[], 
 // AGENT_SYMLINK_ESCAPE — a scanned instruction path that is a symlink resolving
 // OUTSIDE the repo (e.g. → ../../ sensitive host files). fg is run with
 // followSymbolicLinks:false, so we lstat each candidate and resolve its target.
-async function scanSymlinkEscape(file: string, acc: Acc): Promise<void> {
+async function isSymbolicLink(file: string): Promise<boolean> {
   try {
-    const { lstat, realpath } = await import("node:fs/promises");
-    const abs = path.resolve(getWorkspaceRoot(), file);
-    const st = await lstat(abs);
-    if (!st.isSymbolicLink()) return;
-    const target = await realpath(abs);
-    const root = getWorkspaceRoot();
-    const rootPrefix = root.endsWith(path.sep) ? root : root + path.sep;
-    if (target !== root && !target.startsWith(rootPrefix)) {
-      acc.symlinkEscape.push(`${file} -> ${target}`);
-    }
+    const { lstat } = await import("node:fs/promises");
+    return (await lstat(path.resolve(getWorkspaceRoot(), file))).isSymbolicLink();
   } catch {
-    /* unreadable / broken symlink — ignore */
+    return false;
+  }
+}
+
+async function scanSymlinkEscape(file: string, acc: Acc): Promise<void> {
+  const { lstat, realpath, readlink } = await import("node:fs/promises");
+  const rawRoot = getWorkspaceRoot();
+  // Compare resolved against resolved. realpath() resolves every symlink in the
+  // path, including ones ABOVE the workspace: on macOS a checkout under /var
+  // resolves to /private/var, and several CI images symlink /home. Comparing a
+  // resolved target against an unresolved root made every in-workspace symlink look
+  // like an escape, on machines where the repository's own path contains a link.
+  let root = rawRoot;
+  try {
+    root = await realpath(rawRoot);
+  } catch {
+    /* workspace root itself unreadable — fall back to the literal path */
+  }
+  const rootPrefix = root.endsWith(path.sep) ? root : root + path.sep;
+  const escapes = (target: string): boolean => target !== root && !target.startsWith(rootPrefix);
+
+  const abs = path.resolve(root, file);
+  let isLink = false;
+  try {
+    isLink = (await lstat(abs)).isSymbolicLink();
+  } catch {
+    return; // path vanished between glob and stat
+  }
+  if (!isLink) return;
+
+  try {
+    const target = await realpath(abs);
+    if (escapes(target)) acc.symlinkEscape.push(`${file} -> ${target}`);
+    return;
+  } catch {
+    // realpath throws when the link is broken. A broken link used to be dropped
+    // here, so `CLAUDE.md -> /etc/shadow` on a host where that path is absent (any
+    // container, any CI runner) read as no finding at all. The link still declares
+    // where it points, and a dangling link that escapes the workspace is a finding
+    // about the repository, not about the filesystem it happens to be checked out on.
+  }
+
+  try {
+    const raw = await readlink(abs);
+    const resolved = path.resolve(path.dirname(abs), raw);
+    if (escapes(resolved)) acc.symlinkEscape.push(`${file} -> ${raw} (broken link, resolves to ${resolved})`);
+  } catch {
+    /* unreadable link — nothing further can be determined */
   }
 }
 
@@ -713,9 +752,37 @@ export async function checkAgenticInstructions(_: { changedFiles: string[] }): P
     ignore: AGENTIC_IGNORE
   });
 
+  // Symlinked instruction files are invisible to the glob above. With
+  // followSymbolicLinks:false, fast-glob's onlyFiles filter uses the lstat entry, and
+  // a symlink is not a file — verified: a CLAUDE.md symlinked to /etc/hosts does not
+  // appear in the result at all. That made AGENT_SYMLINK_ESCAPE unreachable (its
+  // enumeration excluded exactly what it detects), and it let any repository hide an
+  // instruction file from EVERY rule in this module by committing it as a symlink:
+  // no override, no exfiltration, no tool-poisoning rule ever saw the content.
+  const entries = await fg(AGENTIC_GLOBS, {
+    dot: true,
+    onlyFiles: false,
+    followSymbolicLinks: false,
+    ignore: AGENTIC_IGNORE
+  });
+  const seen = new Set(files);
+  const candidates = [...files];
+  for (const entry of entries) {
+    if (seen.has(entry)) continue;
+    if (await isSymbolicLink(entry)) {
+      seen.add(entry);
+      candidates.push(entry);
+    }
+  }
+
   const acc = makeAcc();
 
-  for (const file of files) {
+  for (const file of candidates) {
+    // Before the read, not after: a link pointing outside the workspace cannot be
+    // read (readFileSafe refuses to leave the root), and skipping it on the read
+    // failure is what let an escaping link go unreported.
+    await scanSymlinkEscape(file, acc);
+
     let text = "";
     try {
       text = await readFileSafe(file);
@@ -729,7 +796,6 @@ export async function checkAgenticInstructions(_: { changedFiles: string[] }): P
     scanHidden(file, text, lines, acc);
     scanCredMem(file, text, acc);
     scanNewInstructionThreats(file, text, lines, acc);
-    await scanSymlinkEscape(file, acc);
   }
 
   // Opt-in remediation: only runs when SECURITY_AGENTIC_QUARANTINE is set.

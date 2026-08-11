@@ -3,6 +3,343 @@
 All notable changes to `security-mcp` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.7] - 2026-07-27
+
+### Detection engine (2026-07-27)
+
+The 49 check modules and the rule corpus, audited against hostile inputs. Every defect
+below was reproduced against the previous build and is now pinned by a test or a corpus
+case. Same shape as the trust-hardening pass: something unknown was reported as clean.
+
+- **Two directories of every reviewed project were exempt from scanning.** `searchRepo`
+  hardcoded `ignore: ["**/.claude/**", "src/gate/**"]` and the secret scanner hardcoded
+  `fixtures/`, `.claude/` and its own source path. These were this project's self-scan
+  preferences, but they applied to every workspace: a reviewed repository with an
+  api-gateway module under `src/gate/`, or the `.claude/` directory every Claude Code user
+  has, lost 16 finding ids including `SQL_INJECTION_CONCAT`, `CRYPTO_WEAK_HASH` and
+  `HARDCODED_CREDENTIALS`, and an AWS key committed under any `fixtures/` directory was
+  never secret-scanned. A repository that excludes itself by directory name is trust
+  granted by filename. Per-project exclusions now come only from `SECURITY_GATE_IGNORE`,
+  which the operator sets; this repo's own workflows set it.
+- **One failing rule discarded 40 others and reported a clean module.** `injection-deep`
+  and `vibe-coding` ran their rules under `Promise.all` inside `catch { return [] }`.
+  `checkPerlEvalInjection` carried a query the ReDoS guard rejects, so in any Perl
+  repository that one throw emptied the entire module — indistinguishable from no
+  injection vulnerabilities. Rules now settle independently (`settleRules` in
+  `result.ts`), a rule that throws is reported as `GATE_CHECK_CRASHED`, and the rejected
+  Perl pattern was rewritten.
+- **The Server Action and API route authorization rules were suppressible by a comment.**
+  Both tested their "has auth" and "intentionally public" regexes against the whole file,
+  so a comment containing the word *webhook*, or an unrelated `const getToken = () => null`
+  stub, cleared every handler in the file. Two unauthenticated public endpoints that delete
+  rows passed the gate. Both rules now judge each exported handler over its own body
+  (`authz-scope.ts`), require the verifier in call position, and accept a webhook only when
+  it verifies the provider signature. A file mixing one authorized and one unauthorized
+  action is now caught; previously the authorized one cleared the other.
+- **A single-line file stalled the gate for six and a half minutes.** The account
+  enumeration query used three unbounded `.*` runs in one alternative: 6 s against a 64 KB
+  minified bundle, 390 s at 256 KB, with the whole gate at 412 s. Bounded to `{0,40}`, the
+  same file now costs 680 ms and the full gate 20 s. A test asserts the budget so the class
+  cannot regress.
+- **The rule corpus could vanish and the suite would still pass.** `runRuleCorpusTests`
+  returned success on zero cases as "bootstrap-safe", so an empty corpus directory, a
+  renamed export in every corpus file, or a build regression leaving one file of 37 all
+  reported a green run. It now requires the compiled set to match the authored set, every
+  file to export a non-empty `cases` array (with the two documented empty modules listed by
+  name), and a committed floor of 522 cases.
+- **Two rules read this project's own security documentation as vulnerabilities.**
+  `DLP_SERVER_HEADER_DISCLOSURE` matched the bare string `X-Powered-By` anywhere, so a
+  checklist line stating that the header is *suppressed* was reported as the header being
+  exposed; its only accepted mitigation was `app.disable('x-powered-by')`, so every Express
+  app using helmet — which removes the header for you — was flagged as well. It now
+  requires the header to actually be set (and ignores lines about removing it), plus a
+  second signal for the real common case: an Express app with no suppression anywhere,
+  since Express sets the header by default. `SNOWFLAKE_PII_NO_MASKING_POLICY` matched a
+  PII word followed by an unbounded type name, and `CHAR` matches inside "chars" — so the
+  sentence "Only allow ASCII alphanumeric + standard email special chars" was read as an
+  unmasked PII column. The type name must now be a whole token in a column declaration.
+- **An instruction file committed as a symlink was invisible to every agentic rule.**
+  `fg({ onlyFiles: true, followSymbolicLinks: false })` drops symlinks — fast-glob filters
+  on the lstat entry, and a symlink is not a file — so a `CLAUDE.md` symlinked anywhere
+  never reached the scan loop. Every rule in the module (instruction override,
+  exfiltration, tool poisoning, credential harvest) silently skipped it, and
+  `AGENT_SYMLINK_ESCAPE` could never fire at all: its enumeration excluded exactly what it
+  detects. Symlinked candidates are now enumerated, their content is scanned like any
+  other instruction file, and the escape check runs *before* the read so a link pointing
+  outside the workspace is reported even though it cannot be read. Two further defects in
+  that check: a broken link was swallowed by `realpath()` (so `CLAUDE.md -> /etc/shadow` on
+  a host without that file produced nothing — it now falls back to `readlink`), and the
+  resolved target was compared against an *unresolved* workspace root, so on macOS
+  (`/var` → `/private/var`) every purely internal symlink was reported as an escape.
+- **Two rules were defeated by ordinary bulk, and the truncation ledger is what found
+  them.** `SUPPLY_LOCKFILE_OFFREGISTRY_RESOLVED` collected every `resolved:` line in a
+  lockfile and filtered for off-registry hosts afterwards. Searches stop at 200 matches and
+  the first 200 lines of any real lockfile are ordinary `registry.npmjs.org` entries, so the
+  redirected package this rule exists to catch — the whole point of the rule — was never
+  read in any project with 200+ dependencies. Measured: 600 benign entries plus one
+  attacker host returned 200 hits, none of them the attacker's. `WEB_MISSING_SRI` had the
+  same shape: 300 scripts with integrity hashes filled the cap ahead of the one without.
+  Both now exclude the benign form in the query itself, so the cap can only be reached by
+  matches that are already findings.
+- **A search that stopped at its cap looked identical to one that finished.** Every query
+  ends at `maxMatches` and nothing recorded that it had. A rule that filters its hits — keep
+  the lines without a sanitizer — can have the match that mattered sitting at position 201,
+  and the gate reported that as clean. `searchRepo` now keeps a truncation ledger and the
+  gate emits `SEARCH_RESULTS_TRUNCATED` (MEDIUM) naming the capped queries. Existence probes
+  (cap 5) are excluded: they got their answer.
+- **`SECRET_MANAGER_NOT_DETECTED` fired at HIGH on every repository without cloud
+  infrastructure.** The evidence patterns recognised a cloud provider's SDK or Terraform
+  resource and nothing else, so a CLI, a library, or any project whose secrets live in a CI
+  platform's encrypted store was told at HIGH that it had no secret manager. GitHub Actions
+  secrets, Kubernetes `secretKeyRef` / External Secrets / Sealed Secrets, SOPS, Infisical,
+  Akeyless and Conjur now count as evidence. The true positive — a config module reading
+  plain environment variables with nothing managing them — still fires.
+- **Nine gate-level findings had no remediation template, and the coverage claim could not
+  see them.** The rule/template parity probe read `src/gate/checks/**` only, so
+  `BASELINE_REGRESSION`, `GATE_CHECK_CRASHED`, `SEARCH_RESULTS_TRUNCATED` and every
+  exceptions-integrity finding resolved to nothing in `security.generate_remediations`
+  while the claim still measured 100%. Templates written, probe extended to the gate's own
+  modules: **911 templates, 100% (911/911)**.
+- **This repo's own secret-manager control was being satisfied by its test corpus.**
+  `src/tests/corpus/**` holds 522 deliberately-vulnerable and deliberately-safe sample
+  pairs, and the self-scan read them as repository content: they produced 303 of the
+  self-scan's 556 findings, and the `secretsmanager`/`vault` strings inside three of them
+  were the only evidence satisfying `SECRET_MANAGER_NOT_DETECTED`. The corpus is test data
+  in the same sense `fixtures/` is, so it moved into `SECURITY_GATE_IGNORE` alongside it.
+  With the fixture evidence gone the control now reports honestly, and it needs a real
+  decision — a signed exception recording that this CLI holds no runtime secrets — rather
+  than a pass borrowed from sample data.
+- **Fourteen rules missed the form the vulnerability is usually written in.** LDAP and
+  XPath injection could not fire on an ESM import; `client.search()` was claimed as
+  Elasticsearch injection when it was an ldapjs call, which also masked `LDAP_INJECTION`;
+  `merge({}, req.body)` never matched because the pattern consumed its own parenthesis;
+  writing *through* `__proto__` was missed while replacing it was caught;
+  a `$where` clause assembled by string concatenation from a request value missed
+  because only template-literal interpolation was covered; `sharp(Buffer.from(svg))` missed because the character class stopped at the
+  inner parenthesis; `velocityEngine.getTemplate(request.getParameter(...))` missed because
+  the engine name had to be followed immediately by `(`; a ReDoS-prone regex bound to a
+  const and used on the next line missed because matching is line-by-line; an API key or
+  session token placed into a URL was missed while reading one from a URL was caught; a
+  reset token persisted without an expiry column and a refresh endpoint echoing the same
+  token back were both missed. All fixed, each with a true-positive/true-negative corpus
+  case (507 to 522 cases, `tpRate=1.00`, `fpRate=0.00`).
+
+### Trust hardening (2026-07-26)
+
+Six defects, one shape: something unknown or untrusted was treated as good. Each fix was
+verified by reproducing the original attack against the patched build.
+
+- **The CI exceptions file was trusted by its filename.** `.github/security-exceptions-ci.json`
+  lives inside the repository being scanned, so any pull request could add one and suppress
+  every blocking finding (measured: 51 findings, 48 blocking, down to 0). The lone warning was
+  fixed at MEDIUM so it never blocked, and the HIGH warning was suppressed *in CI*, the only
+  place the gate gates. Trust now requires either a valid HMAC signature, or an out-of-band
+  `SECURITY_TRUST_CI_EXCEPTIONS=1` set by the workflow **and** the file being unmodified by the
+  change set under review. A missing change set is refused rather than assumed safe.
+  `EXCEPTIONS_UNSIGNED_SUPPRESSION` now mirrors the highest severity it hid, and
+  `CI_EXCEPTIONS_IN_LOCAL_SCAN` fires in CI too. New `security-mcp sign-exceptions` command,
+  because "sign it" was previously advice with no way to act on it.
+- **The attested hash covered only `findings[]`.** Section coverage, summary, and the
+  capability record sat outside the signature, so a file could be rewritten after attestation
+  to claim full coverage and a clean summary with the chain still verifying (measured: 4% to
+  100%, gate FAIL to PASS, no secret required). New `payloadHash` covers the whole attestable
+  envelope and is itself inside the chain payload. Hashing is now canonical (recursively
+  sorted keys), which also fixes honest attestations being rejected as `hash-mismatch`
+  because zod reorders keys — that bug was silently discarding real CRITICAL findings.
+  Re-attesting the same agent is now recorded as tampering rather than last-write-wins.
+- **`run_pr_gate` erased the multi-agent completion evidence.** It wrote the same review step
+  key as the merge, and the step was replaced wholesale, so `attest_review` signed runs whose
+  agents never executed. This was the documented order of operations. Verdicts are now
+  monotonic: a recorded FAIL cannot be silently replaced by a PASS, failure evidence is
+  carried forward rather than dropped by omission, and a refused downgrade is recorded.
+- **Self-verification could not fail.** Delegated GUARANTEE claims passed on the suite's exit
+  code without ever reading `testFunction`, so deleting every test the claims named still
+  produced 35/35. QUANTITY claims used substring matching, so zero cloud rules on disk still
+  verified "1,002 rules" (because the sentence contains "0"); 400-vs-40, 910-vs-91 and
+  9000-vs-900 also passed. Delegation now parses TAP and requires the named test to be present
+  and passing, failing closed when it cannot be found. QUANTITY now requires exact numeric
+  equality against a token in the verbatim. `guarantee-agent-executor-attestation-roundtrip`
+  delegated to a test with zero assertions about attestation; it now has a real one.
+- **Auto-remediation corrupted valid Terraform.** A CRLF file's block body starts with `\r`,
+  so the newline check failed and attributes were glued to the opening brace, turning a valid
+  file into a parse error. Both insertion paths now match the document's own line ending.
+  Writes are atomic (sibling temp plus rename) with a one-shot `.orig` backup, replacing an
+  in-place truncate on user infrastructure code. Every rewrite is checked by a structural
+  guard that is independent of the regex rules that produced it, covering glued attributes,
+  brace balance, duplicate resource addresses, and truncation; a rewrite that fails is
+  reported and not written. A single unwritable file no longer aborts the sweep.
+- **The installer destroyed any config it could not parse.** `readJsonSafe` returned `{}` for
+  both "absent" and "unparseable", and the writer serialized that empty object over the file,
+  so a trailing comma in `~/.claude/settings.json` silently deleted the user's model,
+  permissions, and hooks while reporting "updated". Absent and unparseable are now distinct:
+  JSONC (comments, trailing commas) parses correctly, and a genuinely unreadable file aborts
+  that writer with its contents untouched. Writes are atomic with a `.bak`. The Codex TOML
+  header regex now tolerates a trailing comment, which previously caused a duplicate table
+  that made the entire config unloadable; `doctor`'s matching regex was aligned.
+
+### Full-repo adversarial QA pass (2026-07-25)
+
+Nine specialists audited the whole codebase, not just the recent diff. Every finding below was
+reproduced before it was fixed, and each fix has a regression assertion in the new
+`runQaRegressionTests` suite. The persona and method are in `.claude/agents/mcp-qa-adversary.md`.
+
+Fixed:
+
+- **`security.logout` cleared the authentication lockout for an unauthenticated caller.** It is
+  reachable without authenticating and is in `CHILD_SAFE_TOOLS`, so interleaving logout with
+  guesses defeated the exponential backoff entirely (CWE-307). Measured at 60 guesses in 26 ms with
+  no backoff ever applied. The lockout counters now clear only for a session that actually
+  authenticated (`src/mcp/auth.ts`).
+- **`writeReport` reported `signed: true` from a zero-byte HMAC key.** `Buffer.from(key, "hex")`
+  silently returns an empty buffer for any non-hex value, so a natural non-hex `SECURITY_ATTEST_KEY`
+  produced a MAC that anyone could forge without knowing the key. Now uses the key string directly,
+  as all four other HMAC sites in the repo already did (`src/mcp/reports.ts`).
+- **`model-router.ts` and `learning.ts` resolved state against `process.cwd()`, not the workspace
+  root.** Same defect class that made `audit-chain.ts` report correctly-attested agents as
+  unattested. The workspace budget policy was never read, so the circuit breaker ran on the 5 USD
+  default, and spend and pattern state were written to the wrong tree.
+- **Concurrent `saveStore` calls discarded 23 of 24 outcomes.** The temp filenames were fixed rather
+  than random, so every caller after the first failed with `ENOENT` (`src/mcp/learning.ts`).
+- **`readFileSafe` hung forever on a FIFO.** `stat()` reports size 0 for a FIFO, so the size guard
+  passed and `readFile` then blocked with no timeout. Now refuses anything that is not a regular
+  file (`src/repo/fs.ts`).
+- **`createReviewAttestation` and `verifyAttestationHmac` did not validate `runId`.** Every other
+  export in the module does. A traversing `runId` wrote attacker-named JSON outside the workspace
+  root (CWE-22, `src/review/store.ts`).
+- **README claimed 41 MCP tools; the server registers 46.** The README contradicted itself 36 lines
+  later, and the unregistered-number scan could not catch it because `tools` is not in its unit list.
+- **A source file in any directory named `docs`, or with `readme` anywhere in its path, skipped 40 of
+  41 check modules.** The change-type classifier matched `/docs/` and `README` as path substrings
+  rather than matching a documentation extension, and the docs tier runs only the secrets check.
+  Identical code containing `eval(req.query.q)` produced 47 findings at `src/api/handler.ts` and zero
+  at `src/docs/handler.ts` (`src/gate/policy.ts`).
+- **The adapter registry accepted execution-affecting fields from the repo under review.** A
+  committed `.mcp/agent-clis/agent-clis.json` could point `detect.extraSearchGlobs` at a script in
+  that repo, which adapter detection then executed, reachable from `orchestration.executor_status` or
+  `security.fortify` with no agent run and no LLM in the loop. The same file could grant `Task` and
+  `Bash`, select `bypassPermissions`, empty the banned-argument list, and widen
+  `auth.childCredentialEnv` so one child received every provider's credentials. In-workspace
+  overrides are now restricted to tuning that cannot change what is executed, with what privileges,
+  or with whose secrets; rejected fields are logged as `ADAPTER_OVERRIDE_FIELDS_REJECTED`
+  (`src/agent-exec/adapter.ts`).
+- **The injection detector missed the exact directive in this repo's own malicious fixture.**
+  "Ignore all previous instructions" defeated `IGNORE\s+PREVIOUS` because of the quantifier between
+  the verb and the adjective. `orchestration.ts` uses this same list to strip lines from a downloaded
+  SKILL.md before it becomes an agent persona, so a miss was a persona backdoor rather than a missing
+  warning banner. Replaced the fixed phrases with one bounded combinatorial pattern
+  (`src/mcp/injection-patterns.ts`).
+- **`skills-manifest.json` is read at runtime but was absent from the published tarball.**
+  `buildQueue` resolves it from the package root, so `orchestration.start_agent_run` would have
+  thrown `ENOENT` on any global install. Not yet live, because the executor is unpublished; it would
+  have broken on the next publish (`package.json` `files`).
+
+### Documentation, diagrams, and drift detection
+
+- **New `docs/DATA_FLOW.md`.** A trust-boundary data-flow diagram, which did not previously exist,
+  enumerating every outbound call site in `src/` with what crosses each edge.
+- **Corrected the README trust-boundary claims.** "Your code never leaves your machine to a third
+  party by default" was false for the normal case: running the server inside an AI client sends file
+  contents to that client's model provider on the first `repo.read_file`. The section now separates
+  what security-mcp uploads (nothing) from what reaches a model provider through the host client and
+  through an explicit agent run.
+- **`docs/ARCHITECTURE.md` gained the `src/agent-exec/` subsystem and a fourth mermaid diagram.** The
+  executor had shipped while the architecture doc did not mention it at all. Also corrected the
+  capability-enforcement section, which claimed orchestration records no model or tool metadata.
+- **`docs/WIKI.md` gained an operator reference for the five executor tools** and their environment
+  variables.
+- **New doc-drift gate.** `npm run docs:check` (`scripts/check-doc-drift.mjs`) enforces the bindings
+  in `docs/doc-map.json`: every anchor must appear in every bound doc, and a change set touching
+  bound source must also touch its bound docs. Wired into `security-gate.yml` and available as a
+  blocking pre-commit hook (`scripts/doc-drift-hook.sh`). It failed on its first run with nine real
+  issues.
+
+### Agents that actually execute
+
+The orchestrator previously wrote a manifest of pending agents and returned prose asking
+the calling assistant to spawn them. It now runs them itself, on the LLM CLIs already
+installed on the machine, with no API key. Across the 13 pre-existing runs on disk, 266 of
+280 agent slots had never left `pending` and every run was stuck at `phase: 0`.
+
+- **A local-CLI executor.** `orchestration.start_agent_run` spawns a detached supervisor
+  that drives every agent in the roster to a terminal state and survives the end of the
+  MCP session. Adapters are declarative data (`defaults/agent-clis.json`), mirroring the
+  existing scanner-config pattern, so a CLI flag change is a JSON edit rather than a code
+  change. `claude` 2.1.92, `codex` 0.146.0-alpha.3.1, and `copilot` 1.0.75 are verified
+  end to end; other adapters ship with a populated `_unverified[]` surfaced at runtime.
+- **All detected providers run concurrently**, each with its own AIMD rate limiter and
+  circuit breaker, so throttling on one does not stall the others and the quota cost is
+  split across plans rather than falling on one.
+- **Detection searches beyond `PATH`** — well-known paths, npm and pnpm global roots
+  across every installed Node version, and editor extension bundles. Codex ships inside
+  the ChatGPT VS Code extension and is invisible to a `PATH`-only scan.
+- **A deterministic pre-pass** runs the scanners once and builds a repository map shared
+  by the whole roster. Unavailable scanners are named, so "not run" never reads as "clean".
+- **Scheduling derives from `skills-manifest.json`**, which already carries `phase` for all
+  91 skills and `subAgents` for the 11 leads. Sub-agents wait for their lead; Phase 2 waits
+  for all of Phase 1, per `pentest-team`'s stated contract.
+- **`completed_na` is a new terminal status**: an evidenced verdict that an agent's domain
+  is absent, recording which signals were searched. Distinct from `pending` everywhere.
+- **Cross-provider corroboration.** Every CRITICAL and HIGH finding is independently
+  re-checked by the other providers, labelled `corroborated` / `disputed` / `unconfirmed`.
+- **A ReAct fallback** lets a completion-only CLI still work, with the resulting quality
+  ceiling recorded as degradation rather than hidden.
+
+### The completion gate: a run cannot be reported done while agents are pending
+
+- `orchestration.assert_run_complete` **throws** rather than returning, so a caller cannot
+  read past it.
+- `mergeAgentFindings` forces the gate to FAIL and records every non-terminal agent by name.
+- `security.attest_review` refuses to sign when that list is non-empty.
+- The only bypass is `SECURITY_ATTEST_ALLOW_INCOMPLETE=1`, which stamps the artifact.
+
+### Fixed
+
+- **`update_agent_status` crashed on any scoped roster.** The phase gate read
+  `manifest.agents["pentest-team"].status` unguarded, and `.every()` invokes its callback
+  on the first element immediately, so every status update on a 9-agent `CORE_TARGETED_TEAM`
+  run threw a `TypeError` before `writeManifest` and was silently discarded. This is why
+  scoped runs showed zero completed agents and contained nothing but a manifest.
+- **`manifest.phase` could never leave 0.** Nothing anywhere assigned `phase = 1`, so the
+  1→2 transition could never fire. The first agent reporting `running` now starts phase 1.
+- **`findingsPath` rejected its own paths.** The validation regex required an alphanumeric
+  first character, so `.mcp/agent-runs/<id>/x.json` was unstorable; manifests on disk show
+  the leading dot stripped to satisfy it. Traversal and absolute paths are now rejected
+  explicitly instead.
+- **Merge and attest disagreed on a key.** `mergeAgentFindings` wrote `gateStatus` while
+  `attest_review` read `status`, so a multi-agent FAIL was invisible to attestation if a
+  standalone gate run had already recorded a PASS. Both are now written.
+- **Bookkeeping artifacts were parsed as agent findings.** The run-directory glob excluded
+  only two filenames, so `attestation-chain.json` was schema-rejected on every merge and
+  reported as a phantom partial agent, and `merged-findings.json` fed its own coverage back
+  on a second merge.
+- **Roughly 50 of ~84 agents were unreachable.** Explicit rosters were intersected against
+  the stack-gated default list, so micro-specialists such as `incident-responder` and
+  `capec-code-mapper` could never enter a manifest. Validation is now against the agents
+  that actually have a bundled persona to execute.
+- **The attestation chain resolved against `process.cwd()`**, unlike every other writer,
+  so it could land outside the workspace the merge step reads. Its atomic write also used
+  `os.tmpdir()`, which throws `EXDEV` when the workspace is on another filesystem.
+- **`security.generate_compliance_report` wrote no file.** It returned markdown and
+  persisted nothing, which is why every report on disk had been hand-authored by an LLM
+  with incompatible schemas and invented midnight timestamps. Reports now persist to
+  `.mcp/reports/` as schema-versioned artifacts with a real clock and a SHA-256 digest.
+- **Prompt-injection patterns were duplicated byte-for-byte** between `server.ts` and
+  `orchestration.ts`; hardening one while the other drifted would leave a live bypass.
+
+### Security
+
+- Four-layer recursion guard: an env depth marker set by the parent, per-adapter isolation
+  flags, sub-agent tools never grantable in any mode, and a server-side child tool profile
+  under which orchestration tools are not registered at all.
+- Per-adapter child credential passthrough. A blanket strip would break Copilot, whose
+  headless auth precedence is `COPILOT_GITHUB_TOKEN` > `GH_TOKEN` > `GITHUB_TOKEN`, so each
+  adapter declares exactly what its children may receive. A Claude child never sees a
+  GitHub token; no child sees the parent's HMAC or attestation keys.
+- Execution provenance on every findings file, plus per-agent transcripts, so a reviewer
+  can open the session behind any finding.
+- New `docs/LIMITATIONS.md` states what the tool does not do, cannot do, or does less well
+  than it appears.
+
 ## [1.3.6] - 2026-07-14
 
 ### Hardening: truth-and-integrity pass (enterprise-grade foundation, phase 1)

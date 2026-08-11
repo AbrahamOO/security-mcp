@@ -48,19 +48,29 @@ export async function remediationTemplateCount() {
 }
 
 /**
- * Distinct finding ids the check modules can emit, from source (not dist) since
- * this is a static-literal scan, not a runtime call. Excludes the 3 known
- * runtime-templated ids (NUCLEI_*, SEMGREP_*, CHECKOV_*) which aren't string
- * literals and can't be enumerated without executing the scanner.
+ * Distinct finding ids the gate can emit, from source (not dist) since this is a
+ * static-literal scan, not a runtime call. Excludes the 3 known runtime-templated
+ * ids (NUCLEI_*, SEMGREP_*, CHECKOV_*) which aren't string literals and can't be
+ * enumerated without executing the scanner.
+ *
+ * Covers src/gate/checks/** AND the gate's own modules (policy.ts, baseline.ts,
+ * exceptions.ts). This probe used to read the check modules only, so the ids the
+ * gate itself emits — BASELINE_REGRESSION, every exceptions-integrity finding,
+ * GATE_CHECK_CRASHED — were outside the coverage claim entirely: nine of them had no
+ * remediation template and the claim still measured 100%. They are findings a report
+ * can contain, so they are findings the claim has to count.
  */
 export function ruleIds() {
-  const dir = join(ROOT, "src/gate/checks");
   const ids = new Set();
-  for (const file of readdirSync(dir)) {
-    if (!file.endsWith(".ts")) continue;
-    const text = readText(`src/gate/checks/${file}`);
-    for (const m of text.matchAll(/id:\s*"([A-Z][A-Z0-9_]+)"/g)) ids.add(m[1]);
-  }
+  const collect = (relDir) => {
+    for (const file of readdirSync(join(ROOT, relDir))) {
+      if (!file.endsWith(".ts")) continue;
+      const text = readText(`${relDir}/${file}`);
+      for (const m of text.matchAll(/id:\s*"([A-Z][A-Z0-9_]+)"/g)) ids.add(m[1]);
+    }
+  };
+  collect("src/gate/checks");
+  collect("src/gate");
   return ids;
 }
 
@@ -99,18 +109,27 @@ export function controlCatalogCount() {
 }
 
 /**
- * Maximum agents buildInitialAgentNames() can name in one run — every
- * conditional branch (cloud, AI, mobile) enabled. This is the "39 named
- * agents" ceiling the README states, not the AgentName type's full universe
- * (which includes agents outside the spawn tree).
+ * Maximum agents buildInitialAgentNames() can name in one run: every conditional
+ * branch enabled. This is the static-spawn-tree ceiling the README states, not the
+ * AgentName type's full universe (which includes agents outside the spawn tree).
+ *
+ * Every signal set must be populated. Leaving languages/frameworks/ciPlatform empty
+ * skipped the web branch (11 agents) and the CI branch (4), so this probe returned 74
+ * while the real ceiling is 89, and verify:claims confirmed the README against a number
+ * the probe itself was under-measuring. A probe that reproduces the documented figure
+ * rather than measuring the system verifies nothing.
  */
 export async function maxAgentCount() {
   const mod = await import(join(ROOT, "dist/mcp/orchestration.js"));
   const names = mod.buildInitialAgentNames({
-    languages: [], frameworks: ["kubernetes"], databases: [],
-    cloudProvider: ["aws", "gcp", "azure"], paymentProcessor: [],
+    languages: ["typescript", "python", "go", "java"],
+    frameworks: ["kubernetes", "react", "express", "django", "spring"],
+    databases: ["postgres", "mongodb", "redis"],
+    cloudProvider: ["aws", "gcp", "azure"],
+    paymentProcessor: ["stripe"],
     hasAI: true, hasMobile: true, hasPII: true, hasPayments: true,
-    packageManagers: [], ciPlatform: []
+    packageManagers: ["npm", "pip"],
+    ciPlatform: ["github-actions", "gitlab-ci"]
   });
   return new Set(names).size;
 }

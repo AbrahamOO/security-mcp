@@ -1,0 +1,99 @@
+{
+  "$comment": "Bindings from source paths to the docs that must describe them. Enforced by scripts/check-doc-drift.mjs (npm run docs:check). Two rules: (1) every anchor must appear in every bound doc, always; (2) if a change set touches a bound source path, it must also touch the bound docs. Rule 2 is scoped to the current change set, so a doc is never flagged for an edit made three commits ago. Advisory bindings warn but never block.",
+  "version": 1,
+  "bindings": [
+    {
+      "id": "agent-exec",
+      "source": "src/agent-exec/",
+      "docs": ["docs/ARCHITECTURE.md", "docs/DATA_FLOW.md", "docs/LIMITATIONS.md"],
+      "anchors": ["agent-exec", "start_agent_run", "executor_status"],
+      "why": "The local-CLI agent execution engine spawns child processes with credential passthrough. A reader who cannot find it in ARCHITECTURE.md will not know it exists."
+    },
+    {
+      "id": "mcp-tools",
+      "source": "src/mcp/server.ts",
+      "docs": ["README.md"],
+      "anchors": ["security.start_review", "repo.read_file"],
+      "why": "server.ts is the registered MCP tool surface and README carries the tool table. Adding or removing a tool changes that table."
+    },
+    {
+      "id": "executor-tools",
+      "source": "src/agent-exec/tools.ts",
+      "docs": ["docs/WIKI.md"],
+      "anchors": ["orchestration.start_agent_run", "orchestration.executor_status"],
+      "why": "WIKI.md is the operator reference. The five executor tools have a call order that must be followed, and an operator who cannot find it will drive the run wrong."
+    },
+    {
+      "id": "network-egress",
+      "source": "src/gate/threat-intel.ts",
+      "docs": ["docs/DATA_FLOW.md", "README.md"],
+      "anchors": ["CISA KEV", "EPSS"],
+      "why": "Every outbound call is a trust-boundary crossing and must be enumerated in DATA_FLOW.md."
+    },
+    {
+      "id": "webhook-egress",
+      "source": "src/mcp/reports.ts",
+      "docs": ["docs/DATA_FLOW.md"],
+      "anchors": ["SECURITY_ATTEST_KEY"],
+      "why": "Report persistence writes signed artifacts to .mcp/reports/. The key handling belongs in the data-flow doc."
+    },
+    {
+      "id": "gate-core",
+      "source": "src/gate/policy.ts",
+      "docs": ["docs/ARCHITECTURE.md"],
+      "anchors": ["runAllChecks"],
+      "why": "The gate pipeline diagram in ARCHITECTURE.md is drawn from policy.ts. A pipeline change invalidates the diagram."
+    },
+    {
+      "id": "attestation",
+      "source": "src/mcp/audit-chain.ts",
+      "docs": ["docs/ARCHITECTURE.md", "docs/DATA_FLOW.md"],
+      "anchors": ["audit-chain"],
+      "why": "What an unsigned chain does and does not guarantee is the single most over-readable claim in this project."
+    },
+    {
+      "id": "cloud-controls",
+      "source": "src/gate/cloud-controls/",
+      "docs": ["docs/ARCHITECTURE.md"],
+      "anchors": ["cloud-controls"],
+      "why": "This engine writes to user IaC files. Behaviour changes must be documented before they ship."
+    },
+    {
+      "id": "control-catalog",
+      "source": "src/gate/catalog.ts",
+      "docs": ["docs/ARCHITECTURE.md"],
+      "anchors": ["control-catalog.json"],
+      "why": "The catalog answers a different question from the pattern checks — is a required control present — and it is what the compliance frameworks map to. It shipped undocumented: ARCHITECTURE.md did not mention it until 2026-07-27 because no binding required it to."
+    },
+    {
+      "id": "evidence-coverage",
+      "source": "src/gate/evidence.ts",
+      "docs": ["docs/ARCHITECTURE.md"],
+      "anchors": ["CONTROL_EVIDENCE_MISSING"],
+      "why": "Evidence resolution decides whether a required control is reported satisfied or missing, driven by an operator-editable glob map. A reader who cannot find how that map is consulted cannot tell a real 'satisfied' from an unmapped one."
+    },
+    {
+      "id": "authz-scope",
+      "source": "src/gate/checks/authz-scope.ts",
+      "docs": ["docs/ARCHITECTURE.md"],
+      "anchors": ["authz-scope"],
+      "why": "This is the only place in the gate that isolates a function body rather than matching whole files, and it is what makes two authorization rules non-suppressible by unrelated text. A change here changes what those rules can be evaded by, which the detection-method section must keep describing."
+    },
+    {
+      "id": "cloud-controls-operator-ref",
+      "source": "src/gate/cloud-controls/",
+      "docs": ["docs/WIKI.md"],
+      "anchors": ["cloud-controls"],
+      "advisory": true,
+      "why": "WIKI.md is the operator reference and has no cloud-controls chapter at all, despite this being a 1,002-rule engine that auto-writes to user infrastructure files. Advisory rather than blocking because writing that chapter is its own piece of work, not a doc-sync edit. Tracked debt, not silent debt."
+    },
+    {
+      "id": "diagram-art",
+      "source": "src/",
+      "docs": ["assets/diagrams/system-overview.svg"],
+      "anchors": [],
+      "advisory": true,
+      "why": "The five SVGs are hand-rendered and embedded in README via absolute main-branch URLs, so a branch edit is invisible until merge. There is no renderer in the repo. Advisory so the staleness is tracked debt rather than silent debt."
+    }
+  ]
+}

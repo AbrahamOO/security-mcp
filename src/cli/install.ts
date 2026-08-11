@@ -4,7 +4,8 @@
  * Auto-detects installed editors and writes MCP server config + Claude Code skill.
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync, renameSync, unlinkSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { homedir, platform } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -58,11 +59,71 @@ function getVsCodeUserDir(): string {
   return join(homedir(), ".config", "Code", "User");
 }
 
+/**
+ * Strip comments and trailing commas so JSONC parses.
+ *
+ * `~/.claude/settings.json` and `.vscode/mcp.json` are both officially JSONC: VS Code
+ * documents comments in `mcp.json`, and a hand-edited settings file routinely has a
+ * trailing comma. Treating those as unparseable is what turned a stray comma into total
+ * config loss.
+ */
+function stripJsonc(text: string): string {
+  let out = "";
+  let inStr = false, inLine = false, inBlock = false, prev = "";
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i] as string;
+    const next = text[i + 1];
+    if (inLine) { if (ch === "\n") { inLine = false; out += ch; } continue; }
+    if (inBlock) { if (ch === "*" && next === "/") { inBlock = false; i++; } continue; }
+    if (inStr) {
+      out += ch;
+      if (ch === '"' && prev !== "\\") inStr = false;
+      prev = prev === "\\" && ch === "\\" ? "" : ch;
+      continue;
+    }
+    if (ch === '"') { inStr = true; out += ch; prev = ch; continue; }
+    if (ch === "/" && next === "/") { inLine = true; i++; continue; }
+    if (ch === "/" && next === "*") { inBlock = true; i++; continue; }
+    out += ch;
+    prev = ch;
+  }
+  // Trailing commas before } or ]
+  return out.replace(/,(\s*[}\]])/g, "$1");
+}
+
+/** Thrown when a config file exists but cannot be understood. Never silently discarded. */
+export class UnparseableConfigError extends Error {
+  constructor(public readonly filePath: string, cause: unknown) {
+    super(`"${filePath}" exists but is not valid JSON/JSONC: ${cause instanceof Error ? cause.message : String(cause)}`);
+    this.name = "UnparseableConfigError";
+  }
+}
+
+/**
+ * Read an existing config, distinguishing ABSENT from UNPARSEABLE.
+ *
+ * This previously returned `{}` for both. The caller then serialized that empty object over
+ * the user's file, so a single trailing comma in `~/.claude/settings.json` silently deleted
+ * their model, permissions, and hooks, reported "updated", and exited 0. Absence means
+ * "start fresh". Failure to parse means "stop", because the alternative is deriving a
+ * destructive write from a failed read.
+ */
 function readJsonSafe(filePath: string): Record<string, unknown> {
+  let raw: string;
   try {
-    return JSON.parse(readFileSync(filePath, "utf-8")) as Record<string, unknown>;
+    raw = readFileSync(filePath, "utf-8");
   } catch {
-    return {};
+    return {}; // genuinely absent — this is the only safe empty case
+  }
+  if (raw.trim() === "") return {};
+  try {
+    return JSON.parse(raw) as Record<string, unknown>;
+  } catch (strictErr) {
+    try {
+      return JSON.parse(stripJsonc(raw)) as Record<string, unknown>;
+    } catch {
+      throw new UnparseableConfigError(filePath, strictErr);
+    }
   }
 }
 
@@ -91,9 +152,34 @@ export function writeJsonServers(
   const content = JSON.stringify(existing, null, 2) + "\n";
   if (!dryRun) {
     mkdirSync(dirname(configPath), { recursive: true });
-    writeFileSync(configPath, content, "utf-8");
+    writeConfigSafely(configPath, content);
   }
   return configPath;
+}
+
+/**
+ * Back up once, then write atomically.
+ *
+ * The previous implementation was a bare `writeFileSync` onto the live path, so an
+ * interrupt or a full disk truncated the user's editor config with nothing to restore from.
+ */
+export function writeConfigSafely(configPath: string, content: string): void {
+  if (existsSync(configPath)) {
+    const backup = `${configPath}.bak`;
+    // First write only: never clobber an existing .bak, which would replace the last known
+    // good copy with an already-modified one.
+    if (!existsSync(backup)) {
+      try { copyFileSync(configPath, backup); } catch { /* best effort, never block the write */ }
+    }
+  }
+  const tmp = `${configPath}.tmp-${randomBytes(6).toString("hex")}`;
+  writeFileSync(tmp, content, "utf-8");
+  try {
+    renameSync(tmp, configPath);
+  } catch (e) {
+    try { unlinkSync(tmp); } catch { /* ignore */ }
+    throw e;
+  }
 }
 
 // Encode a JS string[] as a TOML array of basic strings.
@@ -115,7 +201,12 @@ function buildCodexBlock(useGlobalBinary: boolean): string {
 export function writeCodexTomlConfig(configPath: string, dryRun: boolean, useGlobalBinary: boolean): string {
   const existing = existsSync(configPath) ? readFileSync(configPath, "utf-8") : "";
   const block = buildCodexBlock(useGlobalBinary);
-  const headerRe = /^\[mcp_servers\.security-mcp\][ \t]*$/m;
+  // A trailing comment is valid TOML after a table header. Requiring only whitespace meant
+  // `[mcp_servers.security-mcp]   # installed 2026-01` did not match, the writer took the
+  // "absent" branch, and appended a SECOND table. TOML rejects a duplicated table, so the
+  // whole config became unloadable — every Codex setting, not just the MCP entry — and
+  // re-running the installer could not repair it.
+  const headerRe = /^\[mcp_servers\.security-mcp\][ \t]*(#.*)?$/m;
   const m = headerRe.exec(existing);
 
   let next: string;
@@ -368,6 +459,13 @@ export async function runInstall(opts: InstallOptions): Promise<void> {
       process.stdout.write(`  ${dryRun ? "[dry-run] would update" : "updated"}: ${written}\n`);
     } catch (err) {
       process.stdout.write(`  [error] ${err instanceof Error ? err.message : String(err)}\n`);
+      if (err instanceof UnparseableConfigError) {
+        process.stdout.write(
+          "          Your file was NOT modified. Fix the syntax error and re-run, or move the\n" +
+          "          file aside to start fresh. This installer will not overwrite a config it\n" +
+          "          cannot read.\n"
+        );
+      }
     }
   }
 

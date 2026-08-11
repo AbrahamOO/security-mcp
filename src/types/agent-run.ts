@@ -102,9 +102,32 @@ export type AgentName =
   | "threat-infrastructure-analyst"
   | "slsa-level3-enforcer"
   | "quantum-migration-planner"
-  | "zero-trust-architect";
+  | "zero-trust-architect"
+  // Personas that shipped in skills/ without ever being added here. Absent from this
+  // union, no roster source could name them and no run could schedule them, while
+  // listBundledSkills() still counted them toward the advertised persona total.
+  | "agentic-instruction-auditor"
+  | "container-hardening-auditor"
+  | "data-platform-auditor"
+  | "gitops-delivery-auditor"
+  | "iac-security-auditor";
 
-export type AgentStatus = "pending" | "running" | "completed" | "completed_partial" | "failed";
+/**
+ * `completed_na` is a TERMINAL state meaning "this agent determined its domain does
+ * not exist in this codebase". Several skills define it themselves — ai-llm-redteam's
+ * SKILL.md says "If no AI/LLM stack detected, reports N/A immediately". It is NOT
+ * skipping: it requires recorded evidence (which signals were searched, what matched)
+ * in AgentRecord.naEvidence, and the completion gate accepts it while rejecting
+ * `pending`. This is what lets a full roster finish without burning an advanced-tier
+ * session proving a Rails app has no Kubernetes.
+ */
+export type AgentStatus =
+  | "pending" | "running" | "completed" | "completed_partial" | "completed_na" | "failed";
+
+/** Statuses that mean the agent will not run again without explicit re-dispatch. */
+export const TERMINAL_AGENT_STATUSES: readonly AgentStatus[] = [
+  "completed", "completed_partial", "completed_na", "failed"
+];
 
 // ---------------------------------------------------------------------------
 // Stack context — built by orchestrator at startup
@@ -146,6 +169,55 @@ export type AgentRecord = {
    * set, mergeAgentFindings forces the gate to FAIL. Optional/backward-compatible.
    */
   escalationRequired?: boolean;
+  /**
+   * Provenance for an executor-driven agent: which CLI, which model, what it was
+   * allowed to do, and what degraded. This is what makes "did this agent actually
+   * run, and at what capability" answerable by a reviewer rather than a matter of
+   * trust. Absent for host-driven (LLM-spawned) agents.
+   */
+  execution?: AgentExecutionRecord;
+  /**
+   * Evidence backing a `completed_na` verdict. Required for that status to be
+   * treated as terminal — an unevidenced N/A is indistinguishable from skipping.
+   */
+  naEvidence?: {
+    signalsSearched: string[];
+    matched: string[];
+    rationale: string;
+  };
+};
+
+/** Per-agent execution provenance recorded by the agent executor. */
+export type AgentExecutionRecord = {
+  adapterId: string;
+  adapterVersion: string | null;
+  adapterClass: "A" | "B";
+  binaryPath: string;
+  model: string;
+  capabilityTier: "light" | "standard" | "advanced";
+  taskType: string;
+  effort?: string;
+  sandbox?: string;
+  toolsAllowed: string[];
+  toolsDenied: string[];
+  startedAt: string;
+  endedAt: string;
+  durationMs: number;
+  exitCode: number | null;
+  sessionId?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  /**
+   * Cost as reported by the CLI. On a subscription plan this is an API-EQUIVALENT
+   * figure, not money charged, and must never be presented as spend.
+   */
+  notionalCostUsd?: number;
+  costIsNotional: boolean;
+  /** Transcript/log paths a reviewer can open directly. */
+  transcriptPaths: string[];
+  permissionDenials: string[];
+  iterations?: number;
+  degradationReasons: string[];
 };
 
 // ---------------------------------------------------------------------------
@@ -169,6 +241,26 @@ export type AgentRunManifest = {
     headRef: string;
   };
   agents: Record<AgentName, AgentRecord>;
+  /**
+   * "auto" = roster derived from stack detection; "explicit" = caller supplied it.
+   * Provenance so a reviewer can tell a deliberately scoped run from a full sweep.
+   */
+  rosterSource?: "auto" | "explicit";
+  /**
+   * The SKILL.md sections this run's roster is capable of covering, computed at
+   * creation from the union of the rostered personas' own sections.
+   *
+   * Coverage was previously scored against every section the product defines, including
+   * sections that only exist in personas the run never scheduled. A repository with no
+   * cloud, mobile, or AI surface therefore could not reach the floor no matter how well
+   * its agents performed, and the only way to PASS was to fabricate coverage. Scoring
+   * against what the roster can reach measures the agents; scoring against the global
+   * list measured the stack.
+   *
+   * Recorded on the manifest so a reviewer can see the denominator rather than infer it,
+   * and so a deliberately narrow roster is visible as a narrow denominator.
+   */
+  coverageDenominator?: string[];
 };
 
 // ---------------------------------------------------------------------------

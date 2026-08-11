@@ -24,6 +24,49 @@ export type Finding = {
   slaAssignedAt?: string;
 };
 
+/**
+ * Runs a check module's rules so one failing rule costs one rule, not the module.
+ *
+ * `Promise.all` rejects on the first failure and abandons every other result, so a
+ * module that wrapped it in `try { ... } catch { return [] }` reported "no findings"
+ * — indistinguishable from a clean repository — whenever any single rule threw. Two
+ * modules did exactly that, and one of them (injection-deep) carried a query that
+ * throws in any Perl repository, silently disabling 40 unrelated rules there.
+ *
+ * Rules that succeed are kept. Rules that throw are reported as GATE_CHECK_CRASHED,
+ * the same id policy.ts emits when a whole module rejects, so the coverage gap
+ * reaches the gate result instead of a console warning.
+ */
+export async function settleRules(
+  moduleName: string,
+  rules: Array<Promise<Finding | Finding[] | null>>
+): Promise<Finding[]> {
+  const settled = await Promise.allSettled(rules);
+  const findings: Finding[] = [];
+  const failures: string[] = [];
+  for (const r of settled) {
+    if (r.status === "fulfilled") {
+      if (Array.isArray(r.value)) findings.push(...r.value);
+      else if (r.value) findings.push(r.value);
+    } else {
+      failures.push(sanitizeErrorMessage(r.reason instanceof Error ? r.reason.message : String(r.reason)));
+    }
+  }
+  if (failures.length > 0) {
+    findings.push({
+      id: "GATE_CHECK_CRASHED",
+      title: "Security check module crashed — coverage gap",
+      severity: "HIGH",
+      evidence: [`Check module: ${moduleName}`, ...[...new Set(failures)].slice(0, 5).map((f) => `Error: ${f}`)],
+      requiredActions: [
+        `${failures.length} rule(s) in the ${moduleName} module threw and produced no result. The remaining rules ran, so this report is partial: absence of a finding from a failed rule is not evidence that the vulnerability is absent.`,
+        "Check the gate logs for the underlying error and file a bug if it reproduces."
+      ]
+    });
+  }
+  return findings;
+}
+
 export type SuppressedFinding = {
   finding: Finding;
   exceptionId: string;

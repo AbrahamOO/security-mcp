@@ -37,7 +37,7 @@
       "detect": {
         "target": "terraform",
         "resourceType": "azurerm_storage_account",
-        "require": "min_tls_version\\s*=\\s*\"TLS1_2\""
+        "require": "min_tls_version\\s*=\\s*\"TLS1_[2-9]\""
       },
       "remediate": {
         "strategy": "set-attr",
@@ -430,7 +430,7 @@
       "detect": {
         "target": "terraform",
         "resourceType": "azurerm_app_service",
-        "require": "min_tls_version\\s*=\\s*\"1.2\""
+        "require": "min_tls_version\\s*=\\s*\"1\\.[2-9]\""
       },
       "remediate": {
         "strategy": "set-attr",
@@ -453,7 +453,7 @@
       "detect": {
         "target": "terraform",
         "resourceType": "azurerm_linux_web_app",
-        "require": "minimum_tls_version\\s*=\\s*\"1.2\""
+        "require": "minimum_tls_version\\s*=\\s*\"1\\.[2-9]\""
       },
       "remediate": {
         "strategy": "set-attr",
@@ -770,7 +770,7 @@
       "detect": {
         "target": "terraform",
         "resourceType": "azurerm_function_app",
-        "require": "min_tls_version\\s*=\\s*\"1.2\""
+        "require": "min_tls_version\\s*=\\s*\"1\\.[2-9]\""
       },
       "remediate": {
         "strategy": "set-attr",
@@ -882,7 +882,7 @@
       "detect": {
         "target": "terraform",
         "resourceType": "azurerm_redis_cache",
-        "require": "minimum_tls_version\\s*=\\s*\"1.2\""
+        "require": "minimum_tls_version\\s*=\\s*\"1\\.[2-9]\""
       },
       "remediate": {
         "strategy": "set-attr",
@@ -1198,7 +1198,7 @@
       "detect": {
         "target": "terraform",
         "resourceType": "azurerm_eventhub_namespace",
-        "require": "minimum_tls_version\\s*=\\s*\"1.2\""
+        "require": "minimum_tls_version\\s*=\\s*\"1\\.[2-9]\""
       },
       "remediate": {
         "strategy": "set-attr",
@@ -1221,7 +1221,7 @@
       "detect": {
         "target": "terraform",
         "resourceType": "azurerm_servicebus_namespace",
-        "require": "minimum_tls_version\\s*=\\s*\"1.2\""
+        "require": "minimum_tls_version\\s*=\\s*\"1\\.[2-9]\""
       },
       "remediate": {
         "strategy": "set-attr",
@@ -1244,7 +1244,7 @@
       "detect": {
         "target": "terraform",
         "resourceType": "azurerm_cosmosdb_account",
-        "require": "minimal_tls_version\\s*=\\s*\"Tls12\""
+        "require": "minimal_tls_version\\s*=\\s*\"Tls1[2-9]\""
       },
       "remediate": {
         "strategy": "set-attr",
@@ -1309,7 +1309,7 @@
       "detect": {
         "target": "terraform",
         "resourceType": "azurerm_mssql_server",
-        "require": "minimum_tls_version\\s*=\\s*\"1.2\""
+        "require": "minimum_tls_version\\s*=\\s*\"1\\.[2-9]\""
       },
       "remediate": {
         "strategy": "set-attr",
@@ -1708,7 +1708,7 @@
       "detect": {
         "target": "bicep",
         "resourceType": "Microsoft.Storage/storageAccounts",
-        "require": "minimumTlsVersion\\s*:\\s*'TLS1_2'"
+        "require": "minimumTlsVersion\\s*:\\s*'TLS1_[2-9]'"
       },
       "remediate": {
         "strategy": "manual",
@@ -2024,7 +2024,7 @@
       "detect": {
         "target": "bicep",
         "resourceType": "Microsoft.Web/sites",
-        "require": "minTlsVersion\\s*:\\s*'1.2'"
+        "require": "minTlsVersion\\s*:\\s*'1\\.[2-9]'"
       },
       "remediate": {
         "strategy": "manual",
@@ -2087,7 +2087,7 @@
       "detect": {
         "target": "bicep",
         "resourceType": "Microsoft.DocumentDB/databaseAccounts",
-        "require": "minimalTlsVersion\\s*:\\s*'Tls12'"
+        "require": "minimalTlsVersion\\s*:\\s*'Tls1[2-9]'"
       },
       "remediate": {
         "strategy": "manual",
@@ -2150,7 +2150,7 @@
       "detect": {
         "target": "bicep",
         "resourceType": "Microsoft.Sql/servers",
-        "require": "minimalTlsVersion\\s*:\\s*'1.2'"
+        "require": "minimalTlsVersion\\s*:\\s*'1\\.[2-9]'"
       },
       "remediate": {
         "strategy": "manual",
@@ -2192,7 +2192,7 @@
       "detect": {
         "target": "bicep",
         "resourceType": "Microsoft.ServiceBus/namespaces",
-        "require": "minimumTlsVersion\\s*:\\s*'1.2'"
+        "require": "minimumTlsVersion\\s*:\\s*'1\\.[2-9]'"
       },
       "remediate": {
         "strategy": "manual",
@@ -2213,7 +2213,7 @@
       "detect": {
         "target": "bicep",
         "resourceType": "Microsoft.EventHub/namespaces",
-        "require": "minimumTlsVersion\\s*:\\s*'1.2'"
+        "require": "minimumTlsVersion\\s*:\\s*'1\\.[2-9]'"
       },
       "remediate": {
         "strategy": "manual",
@@ -2234,7 +2234,7 @@
       "detect": {
         "target": "bicep",
         "resourceType": "Microsoft.Cache/Redis",
-        "require": "minimumTlsVersion\\s*:\\s*'1.2'"
+        "require": "minimumTlsVersion\\s*:\\s*'1\\.[2-9]'"
       },
       "remediate": {
         "strategy": "manual",
@@ -2625,7 +2625,10 @@
     {
       "ruleId": "BICEP_PG_FLEX_NO_PUBLIC",
       "threat": "A Bicep PostgreSQL flexible server with public network access is reachable from the internet.",
-      "frameworks": ["CIS Azure Foundations Benchmark 4.3", "Microsoft Cloud Security Benchmark NS-2"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 4.3",
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
       "severity": "HIGH",
       "title": "Bicep PostgreSQL flexible server must disable public network access",
       "detect": {
@@ -2644,7 +2647,9 @@
     {
       "ruleId": "BICEP_MYSQL_FLEX_NO_PUBLIC",
       "threat": "A Bicep MySQL flexible server with public network access is reachable from the internet.",
-      "frameworks": ["Microsoft Cloud Security Benchmark NS-2"],
+      "frameworks": [
+        "Microsoft Cloud Security Benchmark NS-2"
+      ],
       "severity": "HIGH",
       "title": "Bicep MySQL flexible server must disable public network access",
       "detect": {
@@ -2663,7 +2668,9 @@
     {
       "ruleId": "BICEP_AKS_DISK_ENCRYPTION",
       "threat": "A Bicep AKS cluster without a disk encryption set uses platform-managed keys only, leaving no customer-controlled key revocation for node disks.",
-      "frameworks": ["Microsoft Cloud Security Benchmark DP-5"],
+      "frameworks": [
+        "Microsoft Cloud Security Benchmark DP-5"
+      ],
       "severity": "MEDIUM",
       "title": "Bicep AKS cluster should use a disk encryption set",
       "detect": {
@@ -2682,7 +2689,9 @@
     {
       "ruleId": "BICEP_VM_ENCRYPTION_AT_HOST",
       "threat": "A Bicep VM without encryption-at-host writes its temp disk and cache to the Azure host unencrypted, exposing data to a host-level compromise.",
-      "frameworks": ["Microsoft Cloud Security Benchmark DP-4"],
+      "frameworks": [
+        "Microsoft Cloud Security Benchmark DP-4"
+      ],
       "severity": "MEDIUM",
       "title": "Bicep VM should enable encryption at host",
       "detect": {
@@ -2701,7 +2710,9 @@
     {
       "ruleId": "BICEP_STORAGE_NETWORK_DENY",
       "threat": "A Bicep storage account whose network ACLs default to Allow is reachable from any network, regardless of private endpoints.",
-      "frameworks": ["CIS Azure Foundations Benchmark 3.7"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 3.7"
+      ],
       "severity": "MEDIUM",
       "title": "Bicep storage account network ACLs must default to Deny",
       "detect": {
@@ -2720,7 +2731,9 @@
     {
       "ruleId": "BICEP_KEYVAULT_RBAC",
       "threat": "A Bicep Key Vault using legacy access policies instead of RBAC spreads authorization across per-vault policy lists that are easy to over-grant and hard to audit centrally.",
-      "frameworks": ["CIS Azure Foundations Benchmark 8.x"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.x"
+      ],
       "severity": "LOW",
       "title": "Bicep Key Vault should use RBAC authorization",
       "detect": {
@@ -2739,7 +2752,9 @@
     {
       "ruleId": "BICEP_AKS_HOST_ENCRYPTION",
       "threat": "A Bicep AKS node pool without host encryption writes node temp disk and cache to the Azure host unencrypted.",
-      "frameworks": ["Microsoft Cloud Security Benchmark DP-4"],
+      "frameworks": [
+        "Microsoft Cloud Security Benchmark DP-4"
+      ],
       "severity": "MEDIUM",
       "title": "Bicep AKS node pool should enable host encryption",
       "detect": {
@@ -2758,7 +2773,9 @@
     {
       "ruleId": "BICEP_SERVICEBUS_LOCAL_AUTH",
       "threat": "A Bicep Service Bus namespace with local auth enabled lets a leaked SAS key bypass Entra ID/RBAC.",
-      "frameworks": ["Microsoft Cloud Security Benchmark IM-1"],
+      "frameworks": [
+        "Microsoft Cloud Security Benchmark IM-1"
+      ],
       "severity": "MEDIUM",
       "title": "Bicep Service Bus namespace should disable local auth",
       "detect": {
@@ -2777,7 +2794,9 @@
     {
       "ruleId": "BICEP_EVENTHUB_LOCAL_AUTH",
       "threat": "A Bicep Event Hub namespace with local auth enabled lets a leaked SAS key bypass Entra ID/RBAC.",
-      "frameworks": ["Microsoft Cloud Security Benchmark IM-1"],
+      "frameworks": [
+        "Microsoft Cloud Security Benchmark IM-1"
+      ],
       "severity": "MEDIUM",
       "title": "Bicep Event Hub namespace should disable local auth",
       "detect": {
@@ -2796,7 +2815,9 @@
     {
       "ruleId": "BICEP_STORAGE_SAS_EXPIRY",
       "threat": "A Bicep storage account without a SAS expiration policy can mint unbounded-lifetime SAS tokens; one leaked token is standing access.",
-      "frameworks": ["Microsoft Cloud Security Benchmark IM-8"],
+      "frameworks": [
+        "Microsoft Cloud Security Benchmark IM-8"
+      ],
       "severity": "LOW",
       "title": "Bicep storage account should set a SAS expiration policy",
       "detect": {
@@ -2815,7 +2836,9 @@
     {
       "ruleId": "BICEP_APP_CONFIG_LOCAL_AUTH",
       "threat": "A Bicep App Configuration store with local auth enabled lets a leaked access key bypass Entra ID/RBAC.",
-      "frameworks": ["Microsoft Cloud Security Benchmark IM-1"],
+      "frameworks": [
+        "Microsoft Cloud Security Benchmark IM-1"
+      ],
       "severity": "MEDIUM",
       "title": "Bicep App Configuration should disable local auth",
       "detect": {
@@ -2834,7 +2857,9 @@
     {
       "ruleId": "BICEP_KEYVAULT_NETWORK_DENY",
       "threat": "A Bicep Key Vault whose network ACLs default to Allow is reachable from any network, one leaked token from secret exfiltration.",
-      "frameworks": ["CIS Azure Foundations Benchmark 8.x"],
+      "frameworks": [
+        "CIS Azure Foundations Benchmark 8.x"
+      ],
       "severity": "MEDIUM",
       "title": "Bicep Key Vault network ACLs must default to Deny",
       "detect": {
@@ -3478,7 +3503,7 @@
       "detect": {
         "target": "terraform",
         "resourceType": "azurerm_windows_web_app",
-        "require": "minimum_tls_version\\s*=\\s*\"1.2\""
+        "require": "minimum_tls_version\\s*=\\s*\"1\\.[2-9]\""
       },
       "remediate": {
         "strategy": "manual",
@@ -3524,7 +3549,7 @@
       "detect": {
         "target": "terraform",
         "resourceType": "azurerm_linux_function_app",
-        "require": "minimum_tls_version\\s*=\\s*\"1.2\""
+        "require": "minimum_tls_version\\s*=\\s*\"1\\.[2-9]\""
       },
       "remediate": {
         "strategy": "manual",
@@ -4232,7 +4257,7 @@
       "detect": {
         "target": "terraform",
         "resourceType": "azurerm_iothub",
-        "require": "min_tls_version\\s*=\\s*\"1.2\""
+        "require": "min_tls_version\\s*=\\s*\"1\\.[2-9]\""
       },
       "remediate": {
         "strategy": "set-attr",
@@ -5110,7 +5135,7 @@
       "detect": {
         "target": "bicep",
         "resourceType": "Microsoft.Devices/IotHubs",
-        "require": "minTlsVersion\\s*:\\s*'1.2'"
+        "require": "minTlsVersion\\s*:\\s*'1\\.[2-9]'"
       },
       "remediate": {
         "strategy": "manual",
@@ -5604,7 +5629,7 @@
       "detect": {
         "target": "terraform",
         "resourceType": "azurerm_mssql_managed_instance",
-        "require": "minimum_tls_version\\s*=\\s*\"1.2\""
+        "require": "minimum_tls_version\\s*=\\s*\"1\\.[2-9]\""
       },
       "remediate": {
         "strategy": "set-attr",
@@ -6748,7 +6773,7 @@
       "detect": {
         "target": "terraform",
         "resourceType": "azurerm_linux_web_app",
-        "require": "scm_minimum_tls_version\\s*=\\s*\"1.2\""
+        "require": "scm_minimum_tls_version\\s*=\\s*\"1\\.[2-9]\""
       },
       "remediate": {
         "strategy": "manual",
@@ -6792,7 +6817,7 @@
       "detect": {
         "target": "terraform",
         "resourceType": "azurerm_windows_web_app",
-        "require": "scm_minimum_tls_version\\s*=\\s*\"1.2\""
+        "require": "scm_minimum_tls_version\\s*=\\s*\"1\\.[2-9]\""
       },
       "remediate": {
         "strategy": "manual",
@@ -6860,7 +6885,7 @@
       "detect": {
         "target": "terraform",
         "resourceType": "azurerm_linux_function_app",
-        "require": "scm_minimum_tls_version\\s*=\\s*\"1.2\""
+        "require": "scm_minimum_tls_version\\s*=\\s*\"1\\.[2-9]\""
       },
       "remediate": {
         "strategy": "manual",
@@ -6930,7 +6955,7 @@
       "detect": {
         "target": "terraform",
         "resourceType": "azurerm_windows_function_app",
-        "require": "minimum_tls_version\\s*=\\s*\"1.2\""
+        "require": "minimum_tls_version\\s*=\\s*\"1\\.[2-9]\""
       },
       "remediate": {
         "strategy": "manual",

@@ -216,10 +216,20 @@ const KNOWN_PRIVATE_REGISTRY_HOSTS = /(?:\.jfrog\.io|pkg\.github\.com|npm\.pkg\.
 const RESOLVED_URL_RE = /"?resolved"?\s*:?\s*"?(https?:\/\/([^/"\s]+))/i;
 
 async function checkLockfileOffRegistryResolved(): Promise<Finding | null> {
-  // Every `resolved` line across supported lockfiles.
-  const hits = (await allSearch(String.raw`"?resolved"?\s*:?\s*"?https?://`)).filter((h) =>
-    LOCKFILE_RE.test(h.file)
-  );
+  // Select off-registry `resolved` lines IN THE QUERY, not afterwards.
+  //
+  // This used to fetch every `resolved` line and filter the official-registry ones
+  // out in code. Searches stop at 200 matches, and in any real lockfile the first 200
+  // `resolved` lines are ordinary registry.npmjs.org entries — so the redirected
+  // entry this rule exists to catch, sitting at dependency 900 of 1,200, was never
+  // examined. The rule reported nothing and the gate read that as a clean lockfile.
+  // Excluding the official hosts up front means the cap can only be reached by 200
+  // genuinely off-registry entries, which is a finding either way.
+  const hits = (
+    await allSearch(
+      String.raw`"?resolved"?\s*:?\s*"?https?://(?!registry\.npmjs\.org[/"]|registry\.yarnpkg\.com[/"])`
+    )
+  ).filter((h) => LOCKFILE_RE.test(h.file));
   if (hits.length === 0) return null;
 
   const offending: Hit[] = [];

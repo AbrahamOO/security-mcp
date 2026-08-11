@@ -260,5 +260,57 @@ export const cases: RuleCase[] = [
       content: `export function registerAdminRoutes(router) {\n  router.get("/admin/users", requireAdminRole, listUsers);\n}\n`
     },
     note: "Positive's route path '/admin/users' matches the /admin alternative (admin followed immediately by another slash) with no requireAdmin/isAdmin/adminAuth/role-based token on the line. Negative inserts requireAdminRole as middleware on the same line: it contains 'Admin' immediately followed by 'Role', matching the admin.*role alternative, so the finding is suppressed."
+  },
+  {
+    ruleId: "API_KEY_IN_URL",
+    check: "auth-deep",
+    positive: {
+      file: "src/clients/inventory.ts",
+      content: `export async function fetchItems() {\n  const res = await fetch(\`https://api.example.com/v1/items?api_key=\${process.env.API_KEY}\`);\n  return res.json();\n}\n`
+    },
+    negative: {
+      file: "src/clients/inventory.ts",
+      content: `export async function fetchItems() {\n  const res = await fetch("https://api.example.com/v1/items", {\n    headers: { Authorization: \`Bearer \${process.env.API_KEY}\` },\n  });\n  return res.json();\n}\n`
+    },
+    note: "Only the receiving side (req.query.api_key) was covered. A key placed in a URL this service CALLS leaks identically — into the upstream's access logs and every proxy in between — and is the more common form in application code. Negative moves the same key to the Authorization header."
+  },
+  {
+    ruleId: "SESSION_TOKEN_IN_URL",
+    check: "auth-deep",
+    positive: {
+      file: "src/routes/post-login.ts",
+      content: `export function afterLogin(req, res) {\n  res.redirect(\`/dashboard?session_token=\${req.session.id}\`);\n}\n`
+    },
+    negative: {
+      file: "src/routes/post-login.ts",
+      content: `export function afterLogin(req, res) {\n  res.cookie("session", req.session.id, { httpOnly: true, secure: true, sameSite: "lax" });\n  res.redirect("/dashboard");\n}\n`
+    },
+    note: "Reading a session id from the query string was covered; writing one into a URL was not. A token in a redirect target lands in browser history and in the Referer header of every subsequent outbound link. Negative carries the session in an httpOnly cookie instead."
+  },
+  {
+    ruleId: "PASSWORD_RESET_NO_EXPIRY",
+    check: "auth-deep",
+    positive: {
+      file: "src/routes/reset.ts",
+      content: `app.post("/password-reset", async (req, res) => {\n  const token = crypto.randomBytes(32).toString("hex");\n  await db.resetToken.create({ data: { token, userId: user.id } });\n  await sendResetEmail(user.email, token);\n});\n`
+    },
+    negative: {
+      file: "src/routes/reset.ts",
+      content: `app.post("/password-reset", async (req, res) => {\n  const token = crypto.randomBytes(32).toString("hex");\n  await db.resetToken.create({\n    data: { token, userId: user.id, expiresAt: new Date(Date.now() + 3600_000) },\n  });\n  await sendResetEmail(user.email, token);\n});\n`
+    },
+    note: "Only the verify side was covered, so a token PERSISTED with no expiry column — where the bug is usually written — produced nothing. The negative sets expiresAt on a different line from the matched one, which is why this rule judges a window around the hit rather than the matched line alone."
+  },
+  {
+    ruleId: "REFRESH_TOKEN_NOT_ROTATED",
+    check: "auth-deep",
+    positive: {
+      file: "src/routes/refresh.ts",
+      content: `app.post("/refresh", async (req, res) => {\n  const rt = await db.refreshToken.findUnique({ where: { token: req.body.refresh_token } });\n  if (!rt) return res.status(401).end();\n  const access_token = jwt.sign({ sub: rt.userId }, SECRET, { expiresIn: "15m" });\n  res.json({ access_token, refresh_token: rt.token });\n});\n`
+    },
+    negative: {
+      file: "src/routes/refresh.ts",
+      content: `app.post("/refresh", async (req, res) => {\n  const rt = await db.refreshToken.findUnique({ where: { token: req.body.refresh_token } });\n  if (!rt) return res.status(401).end();\n  await db.refreshToken.delete({ where: { id: rt.id } });\n  const next = await issueRefreshToken(rt.userId);\n  const access_token = jwt.sign({ sub: rt.userId }, SECRET, { expiresIn: "15m" });\n  res.json({ access_token, refresh_token: next.token });\n});\n`
+    },
+    note: "The most literal form of 'not rotated' — handing the same stored token back in the response — matched nothing, because the old pattern required a token-minting call on the line and only the access token is minted here. Negative deletes the presented token and issues a new one before responding."
   }
 ];

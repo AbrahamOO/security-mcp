@@ -100,11 +100,18 @@ const CAPABILITY_TIER_RANK: Record<CapabilityTier, number> = {
 // `allowed-tools`, the agent MUST have had them available to do real work. An
 // auditor/grep-less agent is the canonical "silently degraded" failure this catches.
 // This is intentionally a small, high-signal set — not every tool in every skill.
+//
+// Bash is deliberately NOT in this set. Every shipped SKILL.md declares it, but no
+// adapter grants it: resolveTools() builds the grant from cfg.tools.readOnly/write/
+// network, and "Bash" appears in none of them. Withholding shell from an agent that
+// reads an untrusted repo is the intended posture, not a degradation — so enforcing
+// it here could never be satisfied and forced every run to FAIL on a floor the
+// orchestrator itself refuses to meet. Read/Grep/Glob are the evidence-gathering
+// tools the adapters actually grant, and are what this floor can meaningfully check.
 const SECURITY_CRITICAL_TOOLS: ReadonlySet<string> = new Set([
   "Read",
   "Grep",
-  "Glob",
-  "Bash"
+  "Glob"
 ]);
 
 // High-risk leads (borrowed from orchestration.HIGH_RISK_LEADS semantics): a
@@ -148,7 +155,7 @@ const CLEAN_ATTESTATION_RE =
  * then this static map is the source of truth; once recorded, prefer the recorded
  * value so the enforcer checks the real routing decision, not an inferred one.
  */
-const AGENT_TASK_TYPE: Partial<Record<AgentName, TaskType>> = {
+export const AGENT_TASK_TYPE: Partial<Record<AgentName, TaskType>> = {
   // ── Threat modelling leads/sub-agents → threat_model (protected/advanced) ──
   "threat-modeler": "threat_model",
   "stride-pasta-analyst": "threat_model",
@@ -230,7 +237,7 @@ const AGENT_TASK_TYPE: Partial<Record<AgentName, TaskType>> = {
  * (advanced tier) for any unmapped agent — we prefer to OVER-require capability for
  * an unknown security agent rather than let it slip below the floor unnoticed.
  */
-function taskTypeForAgent(agent: AgentName): TaskType {
+export function taskTypeForAgent(agent: AgentName): TaskType {
   return AGENT_TASK_TYPE[agent] ?? "code_review";
 }
 

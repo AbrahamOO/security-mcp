@@ -64,6 +64,21 @@ export function signExceptionsFile(exceptions: unknown[], key: string): string {
   return createHmac("sha256", key).update(canonical, "utf-8").digest("hex");
 }
 
+/**
+ * Sign the exceptions in a raw file body, returning the signature and the normalized file.
+ *
+ * Signing MUST go through the same zod parse the verifier uses. `ExceptionFileSchema` applies
+ * `.default([])` to `finding_ids` and `control_ids`, so the post-parse array differs from the
+ * raw array whenever a key was omitted. Signing the raw array produced a signature that
+ * `loadSecurityExceptions` then rejected as tampering, which would have looked like an attack
+ * rather than a bug. One code path, one canonical form.
+ */
+export function signExceptionsFileBody(raw: string, key: string): { hmacSha256: string; normalized: Record<string, unknown> } {
+  const parsed = ExceptionFileSchema.parse(JSON.parse(raw));
+  const hmacSha256 = signExceptionsFile(parsed.exceptions as unknown[], key);
+  return { hmacSha256, normalized: { ...parsed, hmacSha256 } as unknown as Record<string, unknown> };
+}
+
 const EXCEPTIONS_HMAC_MIN_KEY_BYTES = 32;
 
 function getExceptionsHmacKey(): string | null {
@@ -95,31 +110,36 @@ async function readExceptionsJson(): Promise<{ raw: string; isCiFile: boolean; i
   // Project-level CI exceptions file (suppresses self-scan false positives)
   try {
     const raw = await readFile(join(getWorkspaceRoot(), ".github", "security-exceptions-ci.json"), "utf-8");
-    // Fix 4: warn when CI exceptions are loaded outside CI context
+    // This warning fires WHENEVER the CI self-scan file is loaded, in CI and out of it.
+    // It used to be suppressed when CI/GITHUB_ACTIONS was set, which silenced the loudest
+    // signal about blanket suppression in the one environment where the gate actually gates.
+    // Severity differs by context; the record does not.
     const isCI = !!(process.env["CI"] || process.env["GITHUB_ACTIONS"]);
-    if (!isCI) {
-      const count = (() => {
-        try {
-          const parsed = JSON.parse(raw) as { exceptions?: unknown[] };
-          return Array.isArray(parsed.exceptions) ? parsed.exceptions.length : 0;
-        } catch {
-          return 0;
-        }
-      })();
-      warnings.push({
-        id: "CI_EXCEPTIONS_IN_LOCAL_SCAN",
-        title: "CI self-scan exceptions applied to local scan",
-        severity: "HIGH",
-        evidence: [
-          "CI exceptions file: .github/security-exceptions-ci.json",
-          `Suppressed controls: ${count}`,
-          "CI env var not set — this appears to be a local scan"
-        ],
-        requiredActions: [
-          `CI self-scan exceptions (.github/security-exceptions-ci.json) are being applied to a local scan. This suppresses ${count} controls. Set SECURITY_GATE_EXCEPTIONS to point to your project's exceptions file.`
-        ]
-      });
-    }
+    const count = (() => {
+      try {
+        const parsed = JSON.parse(raw) as { exceptions?: unknown[] };
+        return Array.isArray(parsed.exceptions) ? parsed.exceptions.length : 0;
+      } catch {
+        return 0;
+      }
+    })();
+    warnings.push({
+      id: "CI_EXCEPTIONS_IN_LOCAL_SCAN",
+      title: isCI
+        ? "CI self-scan exceptions are in effect"
+        : "CI self-scan exceptions applied to local scan",
+      severity: isCI ? "MEDIUM" : "HIGH",
+      evidence: [
+        `CI exceptions file: ${CI_EXCEPTIONS_PATH}`,
+        `Suppressed controls: ${count}`,
+        isCI
+          ? "Running in CI. Unsigned, this file may only suppress LOW/MEDIUM findings; HIGH and CRITICAL suppression requires a valid signature."
+          : "CI env var not set — this appears to be a local scan"
+      ],
+      requiredActions: [
+        `CI self-scan exceptions (${CI_EXCEPTIONS_PATH}) suppress ${count} controls. Sign the file, or set SECURITY_GATE_EXCEPTIONS to point at your project's own exceptions file.`
+      ]
+    });
     return { raw, isCiFile: true, isOverride: false, source: ".github/security-exceptions-ci.json", warnings };
   } catch { /* not present — continue */ }
 
@@ -210,9 +230,41 @@ export async function loadSecurityExceptions(): Promise<{ exceptions: SecurityEx
   };
 }
 
+/** Path of the CI self-scan exceptions file, relative to the workspace root. */
+export const CI_EXCEPTIONS_PATH = ".github/security-exceptions-ci.json";
+
+/**
+ * Whether an exceptions file may suppress HIGH/CRITICAL findings.
+ *
+ * A signature, and nothing else. Not a filename, not an environment variable, not a promise
+ * from the workflow.
+ *
+ * The original rule trusted `.github/security-exceptions-ci.json` on its name. That file
+ * lives inside the repository being scanned, so any pull request could add one and suppress
+ * every blocking finding (measured: 51 findings, 48 blocking, down to 0). Replacing that with
+ * a workflow environment variable was no better in principle: it still let an UNSIGNED file
+ * hide real HIGH and CRITICAL findings, which is suppressing threats by configuration.
+ *
+ * Signing is different in kind. It requires the HMAC key, so it is an authenticated,
+ * attributable act of risk acceptance by a key holder, over a specific set of exceptions that
+ * carry an owner, an approver, and an expiry. Editing the file invalidates the signature. A
+ * fork PR never sees the key and therefore can never produce one.
+ *
+ * Unsigned files still suppress LOW and MEDIUM noise. They may not hide anything that blocks.
+ */
+function exceptionsMaySuppressBlocking(integrity: ExceptionsIntegrity): { trusted: boolean; reason: string } {
+  if (integrity.verified) {
+    return { trusted: true, reason: "exceptions file carries a valid HMAC signature" };
+  }
+  return {
+    trusted: false,
+    reason: "exceptions file is unsigned — sign it with `security-mcp sign-exceptions` to accept these risks explicitly"
+  };
+}
+
 export async function applySecurityExceptions(
   findings: Finding[],
-  opts?: { requireTicket?: boolean }
+  opts?: { requireTicket?: boolean; changedFiles?: string[] }
 ): Promise<{
   findings: Finding[];
   suppressed: SuppressedFinding[];
@@ -226,6 +278,7 @@ export async function applySecurityExceptions(
   const exceptionFindings: Finding[] = [];
   const activeControlExceptionIds = new Set<string>();
   const HIGH_SEVERITIES = new Set(["HIGH", "CRITICAL"]);
+  const ciTrust = exceptionsMaySuppressBlocking(integrity);
 
   for (const entry of exceptions) {
     const expiresAt = new Date(entry.expires_on);
@@ -278,16 +331,18 @@ export async function applySecurityExceptions(
     // HIGH/CRITICAL findings (it may still suppress LOW/MEDIUM noise). This makes the
     // dangerous bypass — silently hiding a HIGH/CRITICAL by editing an unsigned file —
     // fail by default on the override, default (defaults/...), and project (.mcp/...) paths.
-    //   Exemption: the named CI self-scan file `.github/security-exceptions-ci.json` (isCiFile)
-    //   is the project suppressing its OWN intentional test fixtures; its use is already
-    //   surfaced loudly (CI_EXCEPTIONS_IN_LOCAL_SCAN + EXCEPTIONS_UNSIGNED_SUPPRESSION), so it
-    //   stays allowed to avoid breaking self-scan workflows. Sign it to remove the exemption.
+    //   CI self-scan file: previously exempt on the strength of its FILENAME. That file lives
+    //   in the repo under scan, so the exemption meant any pull request could add
+    //   .github/security-exceptions-ci.json and suppress every blocking finding (measured:
+    //   51 findings, 48 blocking, down to 0). The exemption now requires an out-of-band
+    //   workflow opt-in AND the file being unmodified by this change set. See
+    //   ciExceptionsTrusted().
     //   Break-glass: SECURITY_ALLOW_UNSIGNED_HIGH_SUPPRESSION=1 restores the legacy behavior
     //   on all paths (use only for scanning intentionally-vulnerable fixtures).
     const allowUnsignedHigh =
       process.env["SECURITY_ALLOW_UNSIGNED_HIGH_SUPPRESSION"] === "1" ||
       process.env["SECURITY_ALLOW_UNSIGNED_HIGH_SUPPRESSION"] === "true";
-    if (!integrity.verified && !allowUnsignedHigh && !integrity.isCiFile && HIGH_SEVERITIES.has(finding.severity)) {
+    if (!integrity.verified && !allowUnsignedHigh && !ciTrust.trusted && HIGH_SEVERITIES.has(finding.severity)) {
       active.push(finding);
       exceptionFindings.push({
         id: "EXCEPTION_UNSIGNED_HIGH_BLOCKED",
@@ -320,14 +375,27 @@ export async function applySecurityExceptions(
   // suppression actually BLOCK, set SECURITY_REQUIRE_SIGNED_EXCEPTIONS=1 (fail-closed).
   if (!integrity.verified && suppressed.length > 0) {
     const highHidden = suppressed.filter((s) => HIGH_SEVERITIES.has(s.finding.severity));
+    // Severity is PROPORTIONAL to what was hidden, rather than a fixed MEDIUM. A fixed
+    // MEDIUM meant that suppressing a CRITICAL produced a non-blocking warning, so the
+    // loudest possible event in this system was also one of the quietest.
+    //
+    // There is no cap and no exemption. If an unsigned file hid a CRITICAL, this is a
+    // CRITICAL and the gate blocks. Threats are not suppressed by configuration; they are
+    // either fixed, or accepted by a key holder who signs for them.
+    let hiddenMax: Finding["severity"] = "MEDIUM";
+    if (suppressed.some((s) => s.finding.severity === "CRITICAL")) hiddenMax = "CRITICAL";
+    else if (highHidden.length > 0) hiddenMax = "HIGH";
+    const ciTrustNote = ciTrust.reason;
     exceptionFindings.push({
       id: "EXCEPTIONS_UNSIGNED_SUPPRESSION",
       title: `${suppressed.length} finding(s) suppressed by an unsigned exceptions file`,
-      severity: "MEDIUM",
+      severity: hiddenMax,
       evidence: [
         `Source: ${integrity.source}${integrity.isOverride ? " (SECURITY_GATE_EXCEPTIONS override)" : ""}${integrity.isCiFile ? " (CI self-scan)" : ""}`,
         "File is not integrity-protected (no verified hmacSha256) — its suppressions are not tamper-evident.",
         `Total suppressed: ${suppressed.length}; HIGH/CRITICAL hidden: ${highHidden.length}`,
+        `Severity of this finding mirrors the highest severity suppressed (${hiddenMax}).`,
+        `Signature status: ${ciTrustNote}`,
         ...(highHidden.length > 0 ? [`Hidden HIGH/CRITICAL: ${highHidden.map((s) => `${s.finding.id} (${s.finding.severity})`).slice(0, 20).join(", ")}`] : [])
       ],
       requiredActions: [

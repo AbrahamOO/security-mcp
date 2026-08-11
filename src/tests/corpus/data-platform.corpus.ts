@@ -260,5 +260,18 @@ export const cases: RuleCase[] = [
       content: `CREATE SECURITY INTEGRATION ext_saml TYPE = SAML2 ENABLED = TRUE NETWORK_POLICY = corp_ip_policy SAML2_ISSUER = 'https://idp.example.com';\n`
     },
     note: "Negative attaches NETWORK_POLICY = corp_ip_policy to the same integration statement, exactly what requiredActions asks for."
+  },
+  {
+    ruleId: "SNOWFLAKE_PII_NO_MASKING_POLICY",
+    check: "data-platform",
+    positive: {
+      file: "sql/customers.sql",
+      content: `CREATE TABLE customers (\n  id NUMBER(38,0),\n  email VARCHAR(255),\n  ssn VARCHAR(11)\n);\n`
+    },
+    negative: {
+      file: "sql/customers.sql",
+      content: `CREATE MASKING POLICY email_mask AS (val VARCHAR) RETURNS VARCHAR ->\n  CASE WHEN CURRENT_ROLE() IN ('PII_READER') THEN val ELSE '***' END;\n\nCREATE TABLE customers (\n  id NUMBER(38,0),\n  email VARCHAR(255) WITH MASKING POLICY email_mask,\n  ssn VARCHAR(11)\n);\n`
+    },
+    note: "The type name now has to be a whole token followed by a type-declaration character. Without that, CHAR matched inside \"chars\" and TEXT inside \"context\", so an English sentence containing a PII word and either substring was read as a PII column definition."
   }
 ];

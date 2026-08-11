@@ -316,6 +316,27 @@ export async function readReviewRun(runId: string): Promise<ReviewRun> {
   return JSON.parse(raw) as ReviewRun;
 }
 
+/**
+ * Detail keys that record a FAILING verdict. If a step already carries one of these, a later
+ * write to the same step must not silently drop it.
+ *
+ * This exists because `security.run_pr_gate` and the multi-agent merge wrote the same step
+ * key, and this function replaced `run.steps[step]` wholesale. The merge would record
+ * `{status:"FAIL", nonTerminalAgents:[...7 agents...], thoroughnessFailed:true}`, the
+ * standalone gate would then overwrite it with its own `{status:"PASS", ...}`, and
+ * `security.attest_review` — which reads exactly those keys — would sign a run whose agents
+ * never executed. That was the documented order of operations, not an edge case.
+ */
+const STICKY_FAILURE_KEYS = ["nonTerminalAgents", "thoroughnessFailed", "tamperDetected", "rejectedAgents"] as const;
+
+function hasRecordedFailure(details: Record<string, unknown> | undefined): boolean {
+  if (!details) return false;
+  return STICKY_FAILURE_KEYS.some((k) => {
+    const v = details[k];
+    return Array.isArray(v) ? v.length > 0 : v === true;
+  });
+}
+
 export async function updateReviewStep(
   runId: string,
   step: string,
@@ -323,10 +344,38 @@ export async function updateReviewStep(
   details?: Record<string, unknown>
 ): Promise<ReviewRun> {
   const run = await readReviewRun(runId);
+  const prior = run.steps[step];
+  const priorDetails = prior?.details as Record<string, unknown> | undefined;
+
+  // The PASS/FAIL verdict lives in details.status, not in the lifecycle status above.
+  // It is MONOTONIC: a step may go from PASS to FAIL, never silently from FAIL back to PASS.
+  // A later, narrower check does not get to erase an earlier, broader failure.
+  const priorFailed = priorDetails?.["status"] === "FAIL" || hasRecordedFailure(priorDetails);
+
+  // Merge details rather than replacing them, and carry forward the failure evidence that
+  // attest_review depends on, so a subsequent writer cannot drop it by omission.
+  const mergedDetails: Record<string, unknown> = { ...(priorDetails ?? {}), ...(details ?? {}) };
+  for (const k of STICKY_FAILURE_KEYS) {
+    const priorVal = priorDetails?.[k];
+    const stillFailing = Array.isArray(priorVal) ? priorVal.length > 0 : priorVal === true;
+    if (stillFailing && details && !(k in details)) mergedDetails[k] = priorVal;
+  }
+  if (priorFailed && details?.["status"] === "PASS") {
+    const evidence = STICKY_FAILURE_KEYS.filter((k) => {
+      const v = mergedDetails[k];
+      return Array.isArray(v) ? v.length > 0 : v === true;
+    });
+    mergedDetails["status"] = "FAIL";
+    mergedDetails["gateStatus"] = "FAIL";
+    mergedDetails["verdictDowngradeRefused"] =
+      `A PASS was written over a recorded FAIL for step "${step}". The FAIL stands. `
+      + `Evidence: ${evidence.length > 0 ? evidence.join(", ") : "prior details.status was FAIL"}.`;
+  }
+
   run.steps[step] = {
     status,
     updatedAt: new Date().toISOString(),
-    details
+    details: Object.keys(mergedDetails).length > 0 ? mergedDetails : details
   };
   run.updatedAt = new Date().toISOString();
   await writeJson(reviewPath(run.id), run);
@@ -343,6 +392,7 @@ export async function createReviewAttestation(
   payload: Record<string, unknown>,
   signatureKey?: string
 ): Promise<{ path: string; sha256: string; hmacSha256?: string }> {
+  assertRunId(runId); // CWE-22: runId becomes a filename component; every other export validates it
   if (signatureKey !== undefined && Buffer.byteLength(signatureKey, "utf-8") < HMAC_MIN_KEY_BYTES) {
     throw new Error(
       `HMAC signature key is too short (${Buffer.byteLength(signatureKey, "utf-8")} bytes). ` +
@@ -381,7 +431,7 @@ export async function verifyAttestationHmac(
   runId: string,
   signatureKey: string
 ): Promise<{ valid: boolean; reason?: string }> {
-
+  assertRunId(runId); // CWE-22: same reason as createReviewAttestation
   if (Buffer.byteLength(signatureKey, "utf-8") < HMAC_MIN_KEY_BYTES) {
     return { valid: false, reason: "Signature key too short — cannot verify." };
   }

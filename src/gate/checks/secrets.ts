@@ -321,19 +321,23 @@ const TEMPLATE_FILE_RE =
 export async function checkSecrets(_: { changedFiles: string[] }): Promise<Finding[]> {
   const findings: Finding[] = [];
 
-  const IGNORE_LIST = [
-    "**/node_modules/**",
-    "**/.git/**",
-    "**/dist/**",
-    "**/fixtures/**",
-    "**/.mcp/reviews/**",
-    "**/.mcp/reports/**",
-    "**/.claude/**",
-    // Exclude detection source — contains regex patterns that match their own rules
-    "src/gate/checks/secrets.ts"
-  ];
+  // scopedFg already merges the always-ignore set (node_modules, .git, dist, .mcp)
+  // and the operator's SECURITY_GATE_IGNORE paths, so this module adds nothing.
+  //
+  // It used to hardcode "**/fixtures/**", "**/.claude/**" and its own source path so
+  // the tool's self-scan stayed quiet. Those applied to every reviewed project: a real
+  // AWS key committed under any directory named fixtures/ — or a token pasted into a
+  // project's .claude/settings.json — was never secret-scanned, and the gate reported
+  // no secret findings. A repository that excludes itself from a secret scan by having
+  // a particular directory name is trust granted by filename. Per-project exclusions
+  // belong in SECURITY_GATE_IGNORE, which the operator sets, not the repo under review.
+  const IGNORE_LIST: string[] = [];
 
-  const files = await fg(["**/*.*", "**/.*"], {
+  // "**/*" (not "**/*.*") — the dotted form silently excludes every extensionless
+  // file. SSH private keys (id_rsa, id_ed25519), Dockerfile, Makefile, Jenkinsfile,
+  // Procfile and bare "credentials" all have no dot, so this module could not see them
+  // at all. src/repo/search.ts:91 already carries this fix; it was never propagated.
+  const files = await fg(["**/*"], {
     dot: true,
     onlyFiles: true,
     ignore: IGNORE_LIST

@@ -1,0 +1,419 @@
+{
+  "version": "1.0.0",
+  "selection": {
+    "overrideEnv": "SECURITY_AGENT_CLI",
+    "order": ["claude", "codex", "copilot", "cursor-agent", "opencode", "goose", "aider", "gemini", "ollama"],
+    "fallback": "generic"
+  },
+  "adapters": {
+    "claude": {
+      "label": "Claude Code (headless)",
+      "class": "A",
+      "notes": "VERIFIED against 2.1.92. NEVER add --bare: its help states auth becomes strictly ANTHROPIC_API_KEY and OAuth/keychain are never read, which breaks subscription auth. --setting-sources user is REQUIRED and mirrors codex --ignore-user-config and copilot --no-custom-instructions: the child runs with cwd set to the repository under review, so without it a committed .claude/settings.json supplies hooks that run on the host before the first model call.",
+      "_unverified": [],
+      "detect": {
+        "binaries": ["claude"],
+        "versionArgs": ["--version"],
+        "versionRegex": "^(\\d+\\.\\d+\\.\\d+)",
+        "minVersion": "2.0.0",
+        "extraSearchGlobs": ["~/.local/bin/claude", "/opt/homebrew/bin/claude", "/usr/local/bin/claude"]
+      },
+      "auth": {
+        "mode": "probe",
+        "zeroCost": true,
+        "probeArgv": ["auth", "status", "--json"],
+        "probeParse": {
+          "format": "json",
+          "loggedInPath": "loggedIn",
+          "expect": true,
+          "detailPaths": { "authMethod": "authMethod", "subscriptionType": "subscriptionType", "apiProvider": "apiProvider" }
+        },
+        "envVars": [],
+        "childCredentialEnv": []
+      },
+      "models": {
+        "flag": "--model",
+        "flagStyle": "separate",
+        "default": "sonnet",
+        "contextTokens": 200000,
+        "tiers": { "advanced": "opus", "standard": "sonnet", "light": "haiku" },
+        "effortFlag": "--effort",
+        "effortTiers": { "advanced": "high", "standard": "medium", "light": "low" }
+      },
+      "prompt": { "delivery": "stdin", "maxArgvBytes": 131072 },
+      "systemPrompt": { "mode": "append", "appendFlag": "--append-system-prompt", "flag": "--system-prompt" },
+      "invoke": {
+        "argv": [
+          "-p",
+          "--output-format", "json",
+          "--model", "{model}",
+          "--add-dir", "{workspaceRoot}",
+          "--no-session-persistence",
+          "--disable-slash-commands",
+          "--strict-mcp-config",
+          "--setting-sources", "user"
+        ],
+        "optionalGroups": {
+          "systemPrompt": ["--append-system-prompt", "{systemPrompt}"],
+          "effort": ["--effort", "{effort}"],
+          "permission": ["--permission-mode", "{sandbox}"],
+          "allowedTools": ["--allowedTools", "{allowedTools}"],
+          "disallowedTools": ["--disallowedTools", "{disallowedTools}"],
+          "jsonSchema": ["--json-schema", "{jsonSchema}"],
+          "budget": ["--max-budget-usd", "{maxBudgetUsd}"],
+          "sessionId": ["--session-id", "{sessionId}"]
+        },
+        "cwd": "{workspaceRoot}",
+        "env": {}
+      },
+      "structuredOutput": { "mode": "jsonSchemaFlag", "flag": "--json-schema", "schemaDelivery": "argv", "resultIsString": true, "resultPath": "structured_output" },
+      "outputParse": { "format": "json", "resultPath": "result", "isErrorPath": "is_error", "errorPath": "result" },
+      "usage": {
+        "inputTokensPath": "usage.input_tokens",
+        "outputTokensPath": "usage.output_tokens",
+        "cacheReadPath": "usage.cache_read_input_tokens",
+        "costUsdPath": "total_cost_usd",
+        "sessionIdPath": "session_id",
+        "durationMsPath": "duration_ms",
+        "permissionDenialsPath": "permission_denials",
+        "modelUsagePath": "modelUsage"
+      },
+      "tools": {
+        "supportsFileTools": true,
+        "allowFlag": "--allowedTools",
+        "denyFlag": "--disallowedTools",
+        "separator": "space",
+        "readOnly": ["Read", "Glob", "Grep"],
+        "write": ["Edit", "Write", "MultiEdit"],
+        "network": ["WebSearch", "WebFetch"],
+        "forbidden": ["Task", "Agent"]
+      },
+      "permission": {
+        "flag": "--permission-mode",
+        "auditValue": "default",
+        "applyValue": "acceptEdits",
+        "addDirFlag": "--add-dir",
+        "bannedArgs": ["--bare", "--dangerously-skip-permissions", "--allow-dangerously-skip-permissions", "bypassPermissions"]
+      },
+      "recursionGuard": {
+        "env": { "SECURITY_MCP_AGENT_DEPTH": "1", "SECURITY_MCP_NO_SPAWN": "1" },
+        "denyTools": ["Task", "Agent"],
+        "isolationArgs": ["--strict-mcp-config", "--disable-slash-commands", "--no-session-persistence"]
+      },
+      "limits": {
+        "timeoutMs": 1800000,
+        "maxConcurrent": 3,
+        "budgetFlag": "--max-budget-usd",
+        "budgetPerAgentUsd": 2.5,
+        "maxOutputBytes": 33554432
+      },
+      "rateLimit": {
+        "exitCodes": [],
+        "stderrPatterns": ["rate.?limit", "\\b429\\b", "usage limit", "overloaded", "please try again later"],
+        "jsonErrorPatterns": ["rate_limit_error", "overloaded_error"],
+        "backoff": { "baseMs": 30000, "maxMs": 900000, "factor": 2, "jitter": 0.25 }
+      }
+    },
+
+    "codex": {
+      "label": "OpenAI Codex CLI",
+      "class": "A",
+      "notes": "VERIFIED against 0.146.0-alpha.3.1 (ships inside the ChatGPT VS Code extension, not on PATH). --output-last-message plus --output-schema means harvest needs no stdout parsing. --ignore-user-config is the isolation flag: a user's ~/.codex/config.toml can register arbitrary MCP servers and enable multi_agent.",
+      "_unverified": ["usage.inputTokensPath", "usage.outputTokensPath"],
+      "detect": {
+        "binaries": ["codex"],
+        "versionArgs": ["--version"],
+        "versionRegex": "codex-cli (\\d+\\.\\d+\\.\\d+)",
+        "extraSearchGlobs": [
+          "~/.vscode/extensions/openai.chatgpt-*/bin/*/codex",
+          "~/.cursor/extensions/openai.chatgpt-*/bin/*/codex",
+          "~/.codex/bin/codex"
+        ]
+      },
+      "auth": {
+        "mode": "probe",
+        "zeroCost": true,
+        "probeArgv": ["login", "status"],
+        "probeParse": { "format": "text", "expect": "(?i)logged in" },
+        "envVars": ["OPENAI_API_KEY"],
+        "childCredentialEnv": []
+      },
+      "models": {
+        "flag": "-m",
+        "flagStyle": "separate",
+        "contextTokens": 200000,
+        "tiers": {},
+        "effortFlag": null,
+        "effortTiers": { "advanced": "high", "standard": "medium", "light": "low" }
+      },
+      "prompt": { "delivery": "stdin", "maxArgvBytes": 131072 },
+      "systemPrompt": { "mode": "prepend", "prependTemplate": "{systemPrompt}\n\n---\n\n{prompt}" },
+      "invoke": {
+        "argv": [
+          "exec",
+          "--json",
+          "--cd", "{workspaceRoot}",
+          "--skip-git-repo-check",
+          "--ephemeral",
+          "--ignore-user-config",
+          "--ignore-rules",
+          "--color", "never",
+          "--output-last-message", "{outputFile}"
+        ],
+        "optionalGroups": {
+          "model": ["-m", "{model}"],
+          "sandbox": ["-s", "{sandbox}"],
+          "effort": ["-c", "model_reasoning_effort={effort}"],
+          "jsonSchema": ["--output-schema", "{jsonSchemaFile}"]
+        },
+        "cwd": "{workspaceRoot}",
+        "env": {}
+      },
+      "structuredOutput": {
+        "mode": "jsonSchemaFlag",
+        "flag": "--output-schema",
+        "schemaDelivery": "file",
+        "resultIsString": false,
+        "outputFileFlag": "--output-last-message"
+      },
+      "outputParse": {
+        "format": "jsonl",
+        "jsonlSelector": { "path": "type", "equals": "item.completed" },
+        "resultPath": "item.text",
+        "errorPath": "error"
+      },
+      "usage": { "inputTokensPath": "usage.input_tokens", "outputTokensPath": "usage.output_tokens" },
+      "tools": {
+        "supportsFileTools": true,
+        "separator": "comma",
+        "readOnly": [],
+        "write": [],
+        "network": [],
+        "forbidden": []
+      },
+      "permission": {
+        "flag": "-s",
+        "auditValue": "read-only",
+        "applyValue": "workspace-write",
+        "addDirFlag": "--add-dir",
+        "bannedArgs": ["--dangerously-bypass-approvals-and-sandbox", "--dangerously-bypass-hook-trust", "danger-full-access"]
+      },
+      "recursionGuard": {
+        "env": { "SECURITY_MCP_AGENT_DEPTH": "1", "SECURITY_MCP_NO_SPAWN": "1" },
+        "denyTools": [],
+        "isolationArgs": ["--ignore-user-config", "--ephemeral", "--ignore-rules"]
+      },
+      "limits": { "timeoutMs": 1800000, "maxConcurrent": 3, "maxOutputBytes": 33554432 },
+      "rateLimit": {
+        "exitCodes": [],
+        "stderrPatterns": ["rate limit", "\\b429\\b", "quota", "insufficient_quota"],
+        "jsonErrorPatterns": ["rate_limit", "quota_exceeded"],
+        "backoff": { "baseMs": 30000, "maxMs": 900000, "factor": 2, "jitter": 0.25 }
+      }
+    },
+
+    "copilot": {
+      "label": "GitHub Copilot CLI",
+      "class": "A",
+      "notes": "VERIFIED against 1.0.75. --allow-all-tools is REQUIRED for non-interactive mode, so least privilege comes from --available-tools/--excluded-tools/--deny-tool plus --add-dir and --deny-url, never from --allow-all or --allow-all-paths. --no-custom-instructions matters: AGENTS.md is attacker-controllable in a repo under review. No login-status subcommand exists, so auth is presence-based and reported as degraded. Do NOT pass --session-id: despite its help text it RESUMES an existing session and hard-fails with \"No session or task matched\" for a fresh UUID. Answers arrive as fenced JSON in assistant.message events, not a dedicated result field.",
+      "_unverified": ["auth.probeParse", "usage", "outputParse.resultPath"],
+      "detect": {
+        "binaries": ["copilot"],
+        "versionArgs": ["--version"],
+        "versionRegex": "GitHub Copilot CLI (\\d+\\.\\d+\\.\\d+)",
+        "extraSearchGlobs": [
+          "/opt/homebrew/bin/copilot",
+          "/usr/local/bin/copilot",
+          "~/Library/Application Support/Code/User/globalStorage/github.copilot-chat/copilotCli/copilot"
+        ]
+      },
+      "auth": {
+        "mode": "env",
+        "zeroCost": true,
+        "probeArgv": [],
+        "envVars": ["COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"],
+        "childCredentialEnv": ["COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"]
+      },
+      "models": {
+        "flag": "--model",
+        "flagStyle": "separate",
+        "default": "auto",
+        "contextTokens": 128000,
+        "tiers": {},
+        "effortFlag": "--effort",
+        "_effortNote": "Intentionally EMPTY. --effort exists but is rejected with 'Model \"auto\" does not support reasoning effort configuration' unless a specific reasoning-capable model is pinned via models.tiers. Populate tiers first, then effortTiers.",
+        "effortTiers": {}
+      },
+      "prompt": { "delivery": "stdin", "maxArgvBytes": 131072 },
+      "systemPrompt": { "mode": "prepend", "prependTemplate": "{systemPrompt}\n\n---\n\n{prompt}" },
+      "invoke": {
+        "argv": [
+          "-p", "{prompt}",
+          "--output-format", "json",
+          "--allow-all-tools",
+          "--no-ask-user",
+          "--no-custom-instructions",
+          "--disable-builtin-mcps",
+          "--no-remote",
+          "--no-remote-export",
+          "--disallow-temp-dir",
+          "--no-color",
+          "--no-auto-update",
+          "-C", "{workspaceRoot}",
+          "--add-dir", "{workspaceRoot}",
+          "--log-dir", "{logDir}"
+        ],
+        "optionalGroups": {
+          "model": ["--model", "{model}"],
+          "effort": ["--effort", "{effort}"],
+          "availableTools": ["--available-tools", "{availableTools}"],
+          "excludedTools": ["--excluded-tools", "{excludedTools}"],
+          "denyTools": ["--deny-tool", "{disallowedTools}"],
+          "denyUrls": ["--deny-url", "{denyUrls}"],
+          "secretEnv": ["--secret-env-vars", "{secretEnvVars}"],
+          "credits": ["--max-ai-credits", "{maxCredits}"],
+          "transcript": ["--share", "{transcriptFile}"]
+        },
+        "cwd": "{workspaceRoot}",
+        "env": {}
+      },
+      "structuredOutput": { "mode": "none", "resultIsString": true },
+      "outputParse": {
+        "format": "jsonl",
+        "jsonlSelector": { "path": "type", "equals": "assistant.message" },
+        "resultPath": "data.content",
+        "errorPath": "data.error"
+      },
+      "usage": { "modelPath": "data.model" },
+      "tools": {
+        "supportsFileTools": true,
+        "availableFlag": "--available-tools",
+        "excludedFlag": "--excluded-tools",
+        "denyFlag": "--deny-tool",
+        "separator": "comma",
+        "_toolNote": "Names verified by asking the CLI to enumerate its tools. They are NOT the generic read/write/search names other adapters use.",
+        "readOnly": ["view", "grep", "glob"],
+        "write": ["create", "edit"],
+        "network": ["web_fetch", "web_search", "fetch_copilot_cli_documentation"],
+        "forbidden": ["task", "read_agent", "list_agents", "write_agent", "bash", "read_bash", "stop_bash", "list_bash", "sql", "session_store_sql"]
+      },
+      "permission": {
+        "flag": null,
+        "addDirFlag": "--add-dir",
+        "denyUrlFlag": "--deny-url",
+        "secretEnvVarsFlag": "--secret-env-vars",
+        "bannedArgs": ["--allow-all", "--allow-all-paths", "--allow-all-urls", "--autopilot"]
+      },
+      "recursionGuard": {
+        "env": { "SECURITY_MCP_AGENT_DEPTH": "1", "SECURITY_MCP_NO_SPAWN": "1" },
+        "denyTools": ["task", "read_agent", "list_agents", "write_agent"],
+        "isolationArgs": ["--no-custom-instructions", "--disable-builtin-mcps", "--no-remote", "--no-remote-export"]
+      },
+      "limits": { "timeoutMs": 1800000, "maxConcurrent": 3, "maxOutputBytes": 33554432 },
+      "rateLimit": {
+        "exitCodes": [],
+        "stderrPatterns": ["rate.?limit", "\\b429\\b", "quota", "credits? exhausted", "insufficient"],
+        "jsonErrorPatterns": ["rate_limit", "quota_exceeded"],
+        "backoff": { "baseMs": 30000, "maxMs": 900000, "factor": 2, "jitter": 0.25 }
+      }
+    },
+
+    "gemini": {
+      "label": "Google Gemini CLI",
+      "class": "B",
+      "notes": "NOT INSTALLED on the development machine — every field is a best-effort guess. Shipped as class B conservatively. Modern gemini-cli builds DO have a tool loop; if `gemini --help` shows file tools, flip \"class\" to \"A\" and fill tools/permission. No code change needed.",
+      "_unverified": ["invoke.argv", "auth", "models.tiers", "outputParse", "usage"],
+      "detect": { "binaries": ["gemini"], "versionArgs": ["--version"], "versionRegex": "(\\d+\\.\\d+\\.\\d+)", "extraSearchGlobs": [] },
+      "auth": { "mode": "env", "zeroCost": true, "envVars": ["GEMINI_API_KEY", "GOOGLE_API_KEY"], "childCredentialEnv": ["GEMINI_API_KEY", "GOOGLE_API_KEY"] },
+      "models": {
+        "flag": "-m",
+        "contextTokens": 1000000,
+        "default": "gemini-2.5-flash",
+        "tiers": { "advanced": "gemini-2.5-pro", "standard": "gemini-2.5-flash", "light": "gemini-2.5-flash-lite" }
+      },
+      "prompt": { "delivery": "stdin" },
+      "systemPrompt": { "mode": "prepend", "prependTemplate": "{systemPrompt}\n\n---\n\n{prompt}" },
+      "invoke": { "argv": ["-m", "{model}", "-p", ""], "cwd": "{workspaceRoot}", "env": {} },
+      "structuredOutput": { "mode": "none" },
+      "outputParse": { "format": "text", "stripPrefixes": ["Loaded cached credentials."] },
+      "usage": {},
+      "tools": { "supportsFileTools": false },
+      "recursionGuard": { "env": { "SECURITY_MCP_AGENT_DEPTH": "1", "SECURITY_MCP_NO_SPAWN": "1" } },
+      "limits": { "timeoutMs": 300000, "maxConcurrent": 2, "maxOutputBytes": 8388608 },
+      "rateLimit": {
+        "stderrPatterns": ["\\b429\\b", "RESOURCE_EXHAUSTED", "quota"],
+        "backoff": { "baseMs": 20000, "maxMs": 600000, "factor": 2, "jitter": 0.25 }
+      },
+      "react": {
+        "maxIterations": 30,
+        "contextTokens": 200000,
+        "reserveOutputTokens": 4096,
+        "observationBudgetChars": 40000,
+        "maxNudges": 2,
+        "toolsEnabled": ["read_file", "search", "glob", "list_dir", "done"]
+      }
+    },
+
+    "ollama": {
+      "label": "Ollama (local, completion-only)",
+      "class": "B",
+      "notes": "Definitively class B: no tools, no loop, no system-prompt flag, no usage accounting. Server-driven ReAct is mandatory and quality is LOW. Prefer driving a local model through `codex --oss --local-provider ollama`, which supplies a real agent loop.",
+      "_unverified": ["models.tiers"],
+      "detect": { "binaries": ["ollama"], "versionArgs": ["--version"], "versionRegex": "(\\d+\\.\\d+\\.\\d+)", "extraSearchGlobs": [] },
+      "auth": { "mode": "none", "zeroCost": true, "envVars": [], "childCredentialEnv": [] },
+      "models": {
+        "flag": null,
+        "flagStyle": "positional",
+        "default": "qwen2.5-coder:7b",
+        "contextTokens": 32768,
+        "tiers": { "advanced": "qwen2.5-coder:32b", "standard": "qwen2.5-coder:14b", "light": "qwen2.5-coder:7b" }
+      },
+      "prompt": { "delivery": "stdin" },
+      "systemPrompt": { "mode": "prepend", "prependTemplate": "{systemPrompt}\n\n---\n\n{prompt}" },
+      "invoke": { "argv": ["run", "{model}"], "cwd": "{workspaceRoot}", "env": {} },
+      "structuredOutput": { "mode": "none" },
+      "outputParse": { "format": "text" },
+      "usage": {},
+      "tools": { "supportsFileTools": false },
+      "recursionGuard": { "env": { "SECURITY_MCP_AGENT_DEPTH": "1", "SECURITY_MCP_NO_SPAWN": "1" } },
+      "limits": { "timeoutMs": 600000, "maxConcurrent": 1, "maxOutputBytes": 4194304 },
+      "rateLimit": { "stderrPatterns": [], "backoff": { "baseMs": 5000, "maxMs": 60000, "factor": 2, "jitter": 0.2 } },
+      "react": {
+        "maxIterations": 24,
+        "contextTokens": 32768,
+        "reserveOutputTokens": 1024,
+        "observationBudgetChars": 12000,
+        "maxNudges": 3,
+        "toolsEnabled": ["read_file", "search", "glob", "list_dir", "done"]
+      }
+    },
+
+    "generic": {
+      "label": "User-supplied CLI",
+      "class": "B",
+      "notes": "Bound when SECURITY_AGENT_CLI names a binary this registry does not know. Everything comes from a project override file. Conservative defaults: no tools, ReAct loop, single concurrency.",
+      "_unverified": ["invoke.argv", "outputParse", "models"],
+      "detect": { "binaries": [], "versionArgs": ["--version"], "versionRegex": "(.*)", "extraSearchGlobs": [] },
+      "auth": { "mode": "none", "zeroCost": true, "envVars": [], "childCredentialEnv": [] },
+      "models": { "flag": null, "contextTokens": 8192, "tiers": {} },
+      "prompt": { "delivery": "stdin" },
+      "systemPrompt": { "mode": "prepend", "prependTemplate": "{systemPrompt}\n\n---\n\n{prompt}" },
+      "invoke": { "argv": [], "cwd": "{workspaceRoot}", "env": {} },
+      "structuredOutput": { "mode": "none" },
+      "outputParse": { "format": "text" },
+      "usage": {},
+      "tools": { "supportsFileTools": false },
+      "recursionGuard": { "env": { "SECURITY_MCP_AGENT_DEPTH": "1", "SECURITY_MCP_NO_SPAWN": "1" } },
+      "limits": { "timeoutMs": 600000, "maxConcurrent": 1, "maxOutputBytes": 4194304 },
+      "rateLimit": { "stderrPatterns": ["\\b429\\b", "rate.?limit"], "backoff": { "baseMs": 15000, "maxMs": 300000, "factor": 2, "jitter": 0.25 } },
+      "react": {
+        "maxIterations": 20,
+        "contextTokens": 8192,
+        "reserveOutputTokens": 1024,
+        "observationBudgetChars": 6000,
+        "maxNudges": 3,
+        "toolsEnabled": ["read_file", "search", "glob", "done"]
+      }
+    }
+  }
+}

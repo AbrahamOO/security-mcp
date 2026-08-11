@@ -47,10 +47,11 @@
  *   Express/Fastify route, or a Next.js route handler). Anything a leaked secret
  *   in the client tree = shipped to every visitor's browser.
  */
-import { Finding } from "../result.js";
+import { Finding, sanitizeErrorMessage, settleRules } from "../result.js";
 import { searchRepo } from "../../repo/search.js";
 import { scopedFg as fg } from "../scan-scope.js";
 import { readFileSafe } from "../../repo/fs.js";
+import { exportedHandlers, handlerIsAuthorized, fileIsAuthorized } from "./authz-scope.js";
 
 type Hit = { file: string; line: number; preview: string };
 
@@ -465,11 +466,10 @@ async function checkFirebaseRulesPublic(): Promise<Finding | null> {
 // Reads user input or does a DB call — i.e. the handler actually does something.
 const HANDLER_DOES_WORK_RE =
   /req\.(?:body|query|params)|request\.(?:json|formData)\s*\(|searchParams|params\.[A-Za-z]|\.(?:from|select|insert|update|delete|findMany|findUnique|findFirst|create|query|aggregate)\s*\(|prisma\.|supabase\.|db\./;
-// Any recognised server-side auth/identity verifier.
-const HANDLER_HAS_AUTH_RE =
-  /getServerSession|auth\s*\(|verifyToken|requireAuth|getUser\s*\(|jwt\.verify|clerk|withApiAuth|getToken|authenticate|getAuth\s*\(|currentUser|createServerClient[\s\S]{0,200}auth|supabase[\s\S]{0,60}auth\.getUser|next-auth/i;
-// A handler explicitly marked public is intentional — don't flag it.
-const HANDLER_PUBLIC_MARK_RE = /\/\/\s*PUBLIC(?:\s+ROUTE)?|public\s*:\s*true|allowUnauthenticated|webhook/i;
+// The auth verifier and the "intentionally public" mark are evaluated per exported
+// handler over that handler's own body (authz-scope.ts). Whole-file matching let an
+// unrelated identifier or the word "webhook" anywhere in the file clear every
+// handler in it.
 
 async function checkApiRouteNoServerAuthz(): Promise<Finding | null> {
   try {
@@ -490,9 +490,21 @@ async function checkApiRouteNoServerAuthz(): Promise<Finding | null> {
         continue;
       }
       if (!HANDLER_DOES_WORK_RE.test(content)) continue; // trivial handler — skip
-      if (HANDLER_HAS_AUTH_RE.test(content)) continue; // has an auth verifier — ok
-      if (HANDLER_PUBLIC_MARK_RE.test(content)) continue; // intentionally public
-      offenders.push(`${file}: reads request input / hits the DB but has no server-side auth check`);
+
+      const routes = exportedHandlers(content).filter((h) => HANDLER_DOES_WORK_RE.test(h.region));
+      if (routes.length > 0) {
+        for (const route of routes) {
+          if (handlerIsAuthorized(route)) continue;
+          offenders.push(
+            `${file}: ${route.name}() reads request input / hits the DB but has no server-side auth check`
+          );
+          if (offenders.length >= 15) break;
+        }
+      } else if (!fileIsAuthorized(content)) {
+        // Express-style file with no exported handler to scope to — keep the
+        // whole-file judgement rather than dropping the detection.
+        offenders.push(`${file}: reads request input / hits the DB but has no server-side auth check`);
+      }
       if (offenders.length >= 15) break;
     }
 
@@ -1147,7 +1159,11 @@ async function checkPromptInjectionUnsafeChain(): Promise<Finding | null> {
 
 export async function checkVibeCoding(_: { changedFiles: string[] }): Promise<Finding[]> {
   try {
-    const results = await Promise.all([
+    // settleRules, not Promise.all: the comment above claimed this entry point
+    // tolerated individual rule failures, but Promise.all rejects on the first one
+    // and the catch below returned [] — every rule's result discarded, reported as
+    // a clean repository.
+    return await settleRules("vibe-coding", [
       checkSupabaseServiceRoleInClient(),
       checkPublicEnvHoldsSecret(),
       checkProviderKeyInFrontend(),
@@ -1165,8 +1181,21 @@ export async function checkVibeCoding(_: { changedFiles: string[] }): Promise<Fi
       checkHallucinatedOrUnvettedDep(),
       checkPromptInjectionUnsafeChain(),
     ]);
-    return results.filter((f): f is Finding => f !== null);
-  } catch {
-    return [];
+  } catch (err) {
+    // Reaching here means the module itself could not run. Report the gap rather
+    // than returning [], which is read as "none of these mistakes are present".
+    return [{
+      id: "GATE_CHECK_CRASHED",
+      title: "Security check module crashed — coverage gap",
+      severity: "HIGH",
+      evidence: [
+        "Check module: vibe-coding",
+        `Error: ${sanitizeErrorMessage(err instanceof Error ? err.message : String(err))}`
+      ],
+      requiredActions: [
+        "The vibe-coding module threw before any rule completed. No findings were produced, which is a coverage gap, not a clean result.",
+        "Check the gate logs for the underlying error and file a bug if it reproduces."
+      ]
+    }];
   }
 }
