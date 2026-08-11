@@ -58,8 +58,12 @@ async function fetchWithTimeout(url: string, timeoutMs = 10_000): Promise<Respon
 }
 
 /**
- * Fetches the CISA Known Exploited Vulnerabilities catalog.
- * Returns a Set of CVE IDs. Returns empty set on failure.
+ * Fetches the CISA Known Exploited Vulnerabilities catalog and returns the CVE IDs.
+ *
+ * Throws when the catalog could not be retrieved. An empty set means the catalog was
+ * read and matched nothing; a throw means exploit status is unknown. Collapsing those
+ * two into one value let an unreachable endpoint report as "no actively exploited CVEs",
+ * and made EVAL_UNAVAILABLE_THREAT_INTEL unreachable.
  */
 export async function fetchCisaKev(cacheDir: string): Promise<Set<string>> {
   await ensureDir(cacheDir);
@@ -71,8 +75,7 @@ export async function fetchCisaKev(cacheDir: string): Promise<Set<string>> {
   try {
     const res = await fetchWithTimeout(CISA_KEV_URL, 10_000);
     if (!res.ok) {
-      console.warn(`[threat-intel] CISA KEV fetch failed: HTTP ${res.status}`);
-      return new Set();
+      throw new Error(`CISA KEV fetch failed: HTTP ${res.status}`);
     }
     const json = (await res.json()) as any;
     const vulns: string[] = Array.isArray(json?.vulnerabilities)
@@ -84,13 +87,16 @@ export async function fetchCisaKev(cacheDir: string): Promise<Set<string>> {
     return new Set(vulns);
   } catch (err) {
     console.warn(`[threat-intel] CISA KEV fetch error: ${String(err)}`);
-    return new Set();
+    throw err instanceof Error ? err : new Error(String(err));
   }
 }
 
 /**
- * Fetches EPSS scores for a list of CVE IDs.
- * Batches up to 100 CVEs per request. Returns a Map of CVE → score.
+ * Fetches EPSS scores for a list of CVE IDs, batching up to 100 per request.
+ *
+ * Throws when any batch could not be scored, so the caller never receives a partial map
+ * that reads as a complete one. A CVE absent from a successful response scored nothing;
+ * a CVE absent because the request failed is unknown, and those are not the same.
  */
 export async function fetchEpssScores(
   cveIds: string[],
@@ -124,18 +130,21 @@ export async function fetchEpssScores(
           await new Promise((r) => setTimeout(r, 2000));
           continue;
         }
-        if (!res.ok) break;
+        // A batch that could not be scored leaves those CVEs unknown, not low-risk.
+        // Breaking here returned a partial map that the caller could not distinguish
+        // from a complete one, so every unscored CVE silently became score 0.
+        if (!res.ok) throw new Error(`EPSS fetch failed: HTTP ${res.status}`);
         const json = (await res.json()) as any;
         if (Array.isArray(json?.data)) {
           for (const item of json.data as Array<{ cve?: string; epss?: string }>) {
             if (item.cve && item.epss !== undefined) {
-              result.set(item.cve, parseFloat(item.epss));
+              result.set(item.cve, Number.parseFloat(item.epss));
             }
           }
         }
         break;
-      } catch {
-        break;
+      } catch (err) {
+        throw err instanceof Error ? err : new Error(String(err));
       }
     }
   }

@@ -54,12 +54,12 @@ export async function executorStatus(args: z.infer<typeof ExecutorStatusSchema>)
   // A run that will fail the capability floor should be knowable BEFORE committing
   // hours to it, not discovered from the gate result afterwards.
   const willGatePass = allClassB
-    ? "no — Class B execution reports capabilityTierUsed=light, below the advanced floor every protected task requires. Set SECURITY_ACCEPT_DEGRADED_EXECUTION=1 to override (recorded as non-compliant)."
+    ? "no — Class B execution reports capabilityTierUsed=light, below the advanced floor every protected task requires. There is no override: install an agentic CLI (claude, codex, or copilot) to clear the floor."
     : usable.length === 0 ? "no — nothing can execute"
       : "possible — depends on findings";
 
   const quality = usable.length === 0 ? "NONE — no usable provider"
-    : allClassB ? "LOW — server-driven ReAct over a completion-only CLI. Useful for smoke-testing the pipeline; not a competent security review."
+    : allClassB ? "LOW — single completion over a completion-only CLI, with no tools and no file access. Useful for smoke-testing the pipeline; not a competent security review."
       : anyDegraded ? "GOOD — agentic CLI with file tools; some capabilities degraded (see per-provider 'degraded')."
         : "FULL — agentic CLI with file tools, tiered models, and sandboxed execution.";
 

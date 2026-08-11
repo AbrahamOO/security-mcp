@@ -2,7 +2,7 @@
 name: senior-security-engineer
 description: Activates a Senior Security Engineer that actively fortifies your code, APIs, mobile apps, cloud infra (AWS/GCP/Azure), and AI/LLMs. 90% fixing -- writes the secure code, sets the policies, enforces controls. 10% advisory. Built on OWASP, MITRE ATT&CK, NIST 800-53, PCI DSS 4.0, SOC 2, and 20+ frameworks. No security background needed. Triggers on "fortify", "lock down", "secure/harden my forms/login/API/account", "production/enterprise grade". On any such ask, call security.fortify first.
 user-invocable: true
-allowed-tools: Read, Grep, Glob, Bash, WebSearch, WebFetch
+allowed-tools: Read, Grep, Glob, Bash, Edit, Write, WebSearch, WebFetch
 ---
 
 Last updated: 2026-07-16

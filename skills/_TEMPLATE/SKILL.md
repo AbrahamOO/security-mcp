@@ -100,7 +100,7 @@ Every finding must include:
 
 ## BEYOND SKILL.MD — MANDATORY EXPANSIONS
 
-List 6-8 specific edge cases and emerging threats beyond the standard SKILL.md mandate. Pattern:
+List at least 6-8 specific edge cases, and keep going past eight while new ones keep appearing and emerging threats beyond the standard SKILL.md mandate. Pattern:
 - **[Topic]:** [Specific scenario with concrete test or detection method]
 - Each expansion must name a specific CVE, framework, attack technique, or research paper
 - Must include at least 2 post-quantum or AI-era threats
@@ -116,7 +116,10 @@ List 6-8 specific edge cases and emerging threats beyond the standard SKILL.md m
 
 ## §EDGE-CASE-MATRIX
 
-The 5 attack cases in this domain that automated scanners and naive manual review universally miss. MANDATORY checks — do not skip.
+The attack cases in this domain that automated scanners and naive manual review universally
+miss. MANDATORY checks, and the five rows below are the floor rather than the list: keep
+adding rows until a full pass over the domain produces nothing new. A matrix that stops at
+five because the template had five rows is a quota, not an analysis.
 
 | # | Edge Case | Why Scanners Miss It | Concrete Test |
 |---|-----------|----------------------|---------------|

@@ -18,7 +18,7 @@ import { runPrGate } from "../gate/policy.js";
 import { REMEDIATION_MAP, type RemediationTemplate } from "../gate/remediation-map.js";
 import { sanitizeErrorMessage } from "../gate/result.js";
 import { readFileSafe } from "../repo/fs.js";
-import { searchRepo } from "../repo/search.js";
+import { searchRepo, assertSafeCallerRegex } from "../repo/search.js";
 import { createReviewAttestation, createReviewRun, readReviewRun, updateReviewStep } from "../review/store.js";
 import {
   createAgentRun, CreateAgentRunSchema,
@@ -211,8 +211,15 @@ function safeTool(
       // filesystem paths; sanitizeErrorMessage strips them so the MCP caller never
       // sees the server's directory layout. (Previously the raw err.message was
       // returned despite this comment.)
+      //
+      // isError marks this as a protocol-level failure. Without it every thrown error
+      // was returned as an ordinary successful response: a refused attestation, a
+      // blocked path traversal, and an incomplete-run assertion all looked like
+      // successes to the caller. assert_run_complete does throw, exactly as its
+      // description says, and this catch was quietly converting that throw into a
+      // success, so the completion gate did not gate.
       const msg = err instanceof Error ? err.message : "An internal error occurred";
-      return asTextResponse(`[security-mcp error] ${sanitizeErrorMessage(msg)}`);
+      return { ...asTextResponse(`[security-mcp error] ${sanitizeErrorMessage(msg)}`), isError: true };
     }
   };
 }
@@ -487,7 +494,7 @@ const FortifySchema = z.object(FortifyParams);
 
 tool(
   "security.fortify",
-  "One-shot: fortify / lock down / harden a named surface (forms, login, an API, the AWS account, or the whole codebase) to enterprise production grade in a single call. Always auto-applies — no remediationMode question, no confirmation gate. Resolves the target to concrete files via repo search and pre-selects the specialist agent team (a generic core app-security team for any named surface, plus cloud/crypto/AI/mobile/supply-chain specialists when those domains are signaled). Use this for plain 'fortify'/'lock down X'/'harden to production grade' requests instead of chaining start_review manually.",
+  "One-shot: fortify / lock down / harden a named surface (forms, login, an API, the AWS account, or the whole codebase) to enterprise production grade. Resolves the target to concrete files via repo search, pre-selects the specialist agent team (a generic core app-security team for any named surface, plus cloud/crypto/AI/mobile/supply-chain specialists when those domains are signaled), and starts the run in auto-apply mode without a confirmation gate. Check `started` in the response: true means the agents are running and will write fixes; false means no local agent CLI was available, nothing has been changed yet, and `executor.call` carries the call to make. Use this for plain 'fortify'/'lock down X'/'harden to production grade' requests instead of chaining start_review manually.",
   FortifyParams as unknown as Record<string, z.ZodTypeAny>,
   safeTool(async (args: unknown, _extra: unknown) => {
     const { target, mode, targets, baseRef, headRef, stackContext } = FortifySchema.parse(args);
@@ -527,20 +534,39 @@ tool(
       agentNames: selection.wholeCodebase ? undefined : selection.agents
     });
 
-    // Probe the executor so the response can hand back a ready-to-run call instead of
-    // telling the host to spawn agents and hoping it does. Probing costs zero tokens.
+    // Probe the executor, then actually start the run when it can be started.
+    //
+    // This tool advertises that it hardens a surface in a single call and always
+    // auto-applies. It previously created a review record, created an agent run, and
+    // returned a roster, leaving the host to launch the agents. When the host did not,
+    // nothing was fixed and the caller had been told otherwise. A tool whose stated
+    // effect depends on a follow-up call the caller may never make is advisory wearing
+    // the description of an action.
     const status = await executorStatus({ refresh: false });
+    const rosterSize = selection.wholeCodebase
+      ? buildInitialAgentNames(effectiveStackContext).length
+      : selection.agents.length;
     const executor = {
       ready: status["ready"] === true,
       blockers: (status["blockers"] as string[] | undefined) ?? [],
       providers: ((status["providers"] as { id: string; available: boolean }[] | undefined) ?? [])
         .filter((p) => p.available).map((p) => p.id),
       expectedQuality: status["expectedQuality"],
-      estimate: estimateRun(
-        selection.wholeCodebase ? 84 : selection.agents.length,
-        Number(status["effectiveConcurrency"] ?? 1)
-      )
+      estimate: estimateRun(rosterSize, Number(status["effectiveConcurrency"] ?? 1))
     };
+
+    // When no local agent CLI is available the run cannot be executed here. Say so
+    // explicitly and hand back the call the host should make, rather than reporting a
+    // started run that never started.
+    let started: Record<string, unknown> | null = null;
+    let startError: string | null = null;
+    if (executor.ready) {
+      try {
+        started = await startAgentRun(StartAgentRunSchema.parse({ agentRunId: agentRun.agentRunId }));
+      } catch (err) {
+        startError = sanitizeErrorMessage(err instanceof Error ? err.message : String(err));
+      }
+    }
 
     return asTextResponse({
       _notice:
@@ -557,13 +583,19 @@ tool(
       operatingMandate:
         "90% fixing, 10% advisory. Write the fix. Implement the control. Enforce the policy. " +
         "Auto-apply was already chosen by calling security.fortify — do not ask the user for permission.",
+      // Whether the agents are running is a fact the caller must not have to infer.
+      started: started !== null,
+      startResult: started,
+      startError,
       executor: {
         available: executor.ready,
         blockers: executor.blockers,
         providers: executor.providers,
         expectedQuality: executor.expectedQuality,
         estimatedWallClock: executor.estimate,
-        call: executor.ready
+        // Present only when this call did NOT start the run, so the host has something
+        // to act on. A non-null value here means nothing has been fixed yet.
+        call: started === null
           ? {
             tool: "orchestration.start_agent_run",
             args: { agentRunId: agentRun.agentRunId, runId: run.id, remediationMode: "auto_apply" }
@@ -855,6 +887,10 @@ tool(
   SearchParams as unknown as Record<string, z.ZodTypeAny>,
   safeTool(async (args: unknown, _extra: unknown) => {
     const { query, isRegex, maxMatches } = SearchSchema.parse(args);
+    // The pattern comes from the caller, and this tool is child-safe, so a
+    // prompt-injected agent can reach it. Reject superlinear patterns before any file
+    // is opened rather than relying on the per-search time budget to cut it short.
+    if (isRegex) assertSafeCallerRegex(query);
     const matches = await searchRepo({ query, isRegex: !!isRegex, maxMatches: maxMatches ?? 200 });
     // Wrap results with an instruction/data separation notice so that LLMs processing
     // the results maintain the boundary between tool instructions and raw file content

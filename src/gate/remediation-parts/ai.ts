@@ -58,7 +58,9 @@ export const AI_REMEDIATIONS: Record<string, RemediationTemplate> = {
   },
   "AI_TOKEN_SMUGGLING": {
     pattern: "// source/prompt file contains zero-width chars: \"revie\\u200bw this\\u200b code\"",
-    fix: "const clean = input.normalize('NFKC').replace(/[\\u200b-\\u200f\\u202a-\\u202e\\u2060-\\u2069\\uFEFF\\uE0000-\\uE007F]/gu, '');\n// strip zero-width / bidi / Unicode-tag code points before the text reaches the model or is committed",
+    // Braced form required for the Unicode Tag block: under /u, "\\uE0000" parses as
+    // \\uE000 then a literal "0", turning the class into a range over ordinary text.
+    fix: "const clean = input.normalize('NFKC').replace(/[\\u200b-\\u200f\\u202a-\\u202e\\u2060-\\u2069\\uFEFF]|[\\u{E0000}-\\u{E007F}]/gu, '');\n// strip zero-width / bidi / Unicode-tag code points before the text reaches the model or is committed",
     explanation: "Zero-width and invisible Unicode characters are tokenized by the model but invisible to reviewers, letting attackers smuggle hidden instructions. Normalize to NFKC and strip invisible/bidi/tag code points before ingesting or committing text.",
     references: ["CWE-116", "OWASP LLM01:2025", "MITRE ATLAS AML.T0051"]
   },

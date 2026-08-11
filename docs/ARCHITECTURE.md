@@ -1,6 +1,6 @@
 # Architecture
 
-Last updated: 2026-07-27
+Last updated: 2026-07-29
 
 > **Version note:** 1.4.0, 1.5.0, 1.6.0, and 1.6.1 referenced throughout this document
 > are internal milestones that were never published to npm. All of them ship publicly in
@@ -36,7 +36,7 @@ flowchart TD
     CI["CI runner<br/>src/ci/pr-gate.ts"] --> GATE
     MCP --> GATE["Gate engine<br/>runAllChecks — src/gate/policy.ts"]
     GATE --> CC["Cloud-controls engine<br/>src/gate/cloud-controls/ (1,002 IaC rules)"]
-    GATE --> RM["Remediation map<br/>src/gate/remediation-map.ts (911 templates)"]
+    GATE --> RM["Remediation map<br/>src/gate/remediation-map.ts (914 templates)"]
     GATE --> VERDICT{{"PASS / FAIL"}}
 ```
 
@@ -593,7 +593,7 @@ module), plus the evaluability-gap templates and the gate-level findings in the 
 Coverage counts the IDs the gate itself emits rather than a check module
 (`GATE_CHECK_CRASHED`, `BASELINE_REGRESSION`, `SEARCH_RESULTS_TRUNCATED`, and the
 exceptions-integrity findings), which sat outside the claim until 2026-07-27. The result is
-911 fix templates covering 100% (911 of 911) of detection IDs, up from roughly 8% —
+914 fix templates covering 100% (914 of 914) of detection IDs, up from roughly 8% —
 every finding the gate can raise now has a concrete template to work from, so the "90%
 fixing, 10% advisory" mandate is no longer bottlenecked by missing templates. Applying a template is still the calling agent's responsibility: nothing in the
 engine itself writes the fix, and the re-verification step re-runs the same detection rule
@@ -614,6 +614,10 @@ coverage, checks for ghost/escalated agents, checks capability floors including 
 produce the final verdict that either blocks a merge or clears it.
 
 ## Change History
+
+- 2026-07-29 - Remediation template count restated as **914**. A new `DIFF_FILES_DROPPED`
+  finding covers changed files that git reported but the gate could not resolve on disk, and the
+  rule/remediation parity check requires a template for every emitted detection ID.
 
 - 2026-07-27 - Reconciled the gate-engine sections with `policy.ts`. The doc described a
   `CHECK_NAMES` array kept positionally aligned with a separate `Promise.allSettled([...])`

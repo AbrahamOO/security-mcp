@@ -1,6 +1,6 @@
 # security-mcp
 
-Last updated: 2026-07-27
+Last updated: 2026-07-29
 
 [![npm version](https://img.shields.io/npm/v/security-mcp.svg)](https://www.npmjs.com/package/security-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -119,7 +119,7 @@ security-mcp is honest about where its trust model stops: this is a single-tenan
 
 **Stale-install detection.** `security-mcp doctor` now detects a global install older than the running version and unpinned `npx security-mcp` launch entries across Claude Code, Cursor, VS Code, and Windsurf, and `ciso-orchestrator` halts with exact remediation instead of silently degrading to a deterministic-only run when the `orchestration.*` control plane is genuinely missing.
 
-For every prior release — the cloud controls engine, the vibe-coding and web-hardening modules, 911 remediation templates at 100% detection-ID coverage, capability-floor enforcement, and inter-agent payload integrity — see the [CHANGELOG](CHANGELOG.md).
+For every prior release — the cloud controls engine, the vibe-coding and web-hardening modules, 914 remediation templates at 100% detection-ID coverage, capability-floor enforcement, and inter-agent payload integrity — see the [CHANGELOG](CHANGELOG.md).
 
 ---
 
@@ -139,7 +139,7 @@ You drive security-mcp through two skills. One is your daily security engineer. 
 
 | | `/senior-security-engineer` | `/ciso-orchestrator` |
 | --- | --- | --- |
-| Shape | One elite engineer agent | 39 named agents, 40+ at runtime |
+| Shape | One elite engineer agent | 89 named agents, more at runtime |
 | Best for | Every PR, targeted hardening | Pre-release audits, compliance prep |
 | Scope | You pick: diff, full codebase, or specific paths | Full: every surface, every framework |
 | Speed | Seconds to minutes | Minutes to hours |
@@ -168,7 +168,7 @@ This is the daily driver. Use it on every PR.
 
 ### /ciso-orchestrator
 
-A full security program in one command, held to the same 90% fixing, 10% advisory mandate as the single agent: every specialist writes the fix rather than filing a finding. Nine specialist lead agents command 30 sub-agents, for 39 named agents in the static spawn tree. At runtime the orchestrator dynamically spawns additional ghost and coverage agents based on cross-domain findings, so a real run typically fields 40 or more. It draws on a registry of 91 specialist skills (registry version 1.6.1), loaded on demand based on your detected stack. `security.generate_compliance_report` provides partial control mappings for SOC 2, PCI DSS 4.0, NIST 800-53, and ISO 27001 — a control is marked satisfied only when a gate run completed its required steps with no adverse finding, never by default, and the report is an evidence-gathering aid, not an audit.
+A full security program in one command, held to the same 90% fixing, 10% advisory mandate as the single agent: every specialist writes the fix rather than filing a finding. Nine specialist lead agents command the rest, for 89 named agents in the static spawn tree at full stack detection. A run schedules only the specialists whose signal is present, so a repository with no cloud, mobile, or AI surface fields around 33 rather than paying for all of them. At runtime the orchestrator dynamically spawns additional ghost and coverage agents based on cross-domain findings. It draws on a registry of 91 specialist skills (registry version 1.6.1), loaded on demand based on your detected stack, and every one of them is reachable from a roster; the two entry-point personas are invoked directly rather than spawned. `security.generate_compliance_report` provides partial control mappings for SOC 2, PCI DSS 4.0, NIST 800-53, and ISO 27001 — a control is marked satisfied only when a gate run completed its required steps with no adverse finding, never by default, and the report is an evidence-gathering aid, not an audit.
 
 It runs in three phases:
 
@@ -650,6 +650,32 @@ The `security-mcp` binary exposes:
 ---
 
 ## Change History
+
+- 2026-07-29 - Corrected two self-measurement errors the docs had been asserting. The static
+  spawn tree names **89** agents at full stack detection, not 74: the `maxAgentCount` claim probe
+  hardcoded empty `languages`/`ciPlatform` and no web framework, so it never entered the web or CI
+  branches and reproduced the documented figure instead of measuring the system.
+  Remediation templates restated as **914** with the addition of a `DIFF_FILES_DROPPED` template.
+
+- 2026-07-28 - Roster reachability and coverage scoring. 50 of the 91 bundled specialist
+  personas could not be selected by any roster source, and five of those were absent from the
+  `AgentName` union entirely, so they were counted in the advertised total and could never run.
+  They are now attached to the roster as signal-gated specialists: a baseline set runs on every
+  repository, and the rest are scheduled only when the detected stack raises their signal, so a
+  bare library schedules only the baseline set while a full stack reaches the whole roster. Named-agent count 39 to 74.
+  Section coverage is now scored against the sections the run's roster can actually reach,
+  recorded on the manifest as `coverageDenominator`. Scoring against every section the product
+  defines put the floor out of reach for any repository lacking a cloud, mobile, and AI surface
+  at once, so an honest run could not pass and fabricating coverage was the only route to a PASS.
+  Remediation template count 911 to 913, for the two new scan-disclosure findings.
+  `security.fortify` now starts the run it prepares instead of returning a roster and
+  relying on the host to launch it, and reports `started` so a caller never has to infer
+  whether anything was applied. `senior-security-engineer`, `threat-modeler`, and
+  `agentic-instruction-auditor` are granted Edit and Write: each carries a fixing mandate
+  while the capability enforcer denied it the tools to write, so the mandate could not be
+  met. Tool handler failures now carry the protocol error flag; previously a refused
+  attestation, a blocked path traversal, and an incomplete-run assertion were all returned
+  to the caller as successes.
 
 - 2026-07-27 - Remediation template count 900 to 911. A `GATE_CHECK_CRASHED` template was added
   when the detection modules started reporting a crashed rule as a finding instead of returning an

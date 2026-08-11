@@ -9,7 +9,7 @@
     "claude": {
       "label": "Claude Code (headless)",
       "class": "A",
-      "notes": "VERIFIED against 2.1.92. NEVER add --bare: its help states auth becomes strictly ANTHROPIC_API_KEY and OAuth/keychain are never read, which breaks subscription auth.",
+      "notes": "VERIFIED against 2.1.92. NEVER add --bare: its help states auth becomes strictly ANTHROPIC_API_KEY and OAuth/keychain are never read, which breaks subscription auth. --setting-sources user is REQUIRED and mirrors codex --ignore-user-config and copilot --no-custom-instructions: the child runs with cwd set to the repository under review, so without it a committed .claude/settings.json supplies hooks that run on the host before the first model call.",
       "_unverified": [],
       "detect": {
         "binaries": ["claude"],
@@ -50,7 +50,8 @@
           "--add-dir", "{workspaceRoot}",
           "--no-session-persistence",
           "--disable-slash-commands",
-          "--strict-mcp-config"
+          "--strict-mcp-config",
+          "--setting-sources", "user"
         ],
         "optionalGroups": {
           "systemPrompt": ["--append-system-prompt", "{systemPrompt}"],

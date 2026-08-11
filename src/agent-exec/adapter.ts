@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import { execa } from "execa";
 import fg from "fast-glob";
+import { z } from "zod";
 import { getWorkspaceRoot } from "../repo/workspace.js";
 import {
   AdapterRegistrySchema, assertKnownTokens, tokensIn,
@@ -189,9 +190,63 @@ function expandHome(p: string): string {
   return p.startsWith("~/") ? join(homedir(), p.slice(2)) : p;
 }
 
+const BASE_ENV_ALLOWLIST = [
+  "PATH", "HOME", "USER", "SHELL", "LANG", "LC_ALL", "TMPDIR", "TERM",
+  "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME",
+  "CLAUDE_CONFIG_DIR", "CODEX_HOME", "NODE_OPTIONS"
+];
+
+/** Provider credentials that must never leak into a DIFFERENT provider's child. */
+const ALL_PROVIDER_CREDENTIALS = [
+  "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN",
+  "OPENAI_API_KEY",
+  "COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN",
+  "GEMINI_API_KEY", "GOOGLE_API_KEY"
+];
+
+/**
+ * Build the child env with `extendEnv:false` semantics.
+ *
+ * Credential passthrough is PER ADAPTER. A blanket strip of GITHUB_TOKEN would break
+ * Copilot, whose documented headless precedence is COPILOT_GITHUB_TOKEN > GH_TOKEN >
+ * GITHUB_TOKEN — while a Claude child has no business seeing a GitHub token at all.
+ * Everything else is dropped: the parent's HMAC/attestation keys, webhook and ticketing
+ * credentials, cloud keys. These children read untrusted repo content with tool access.
+ *
+ * Lives here rather than in executor.ts so the detection probes below can share it:
+ * they spawn the same third-party binaries and must not hand them the parent's secrets.
+ */
+export function buildChildEnv(cfg: AdapterConfig, extra: Record<string, string>): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const key of BASE_ENV_ALLOWLIST) {
+    const v = process.env[key];
+    if (v !== undefined) env[key] = v;
+  }
+
+  const permitted = new Set(cfg.auth.childCredentialEnv);
+  for (const key of ALL_PROVIDER_CREDENTIALS) {
+    if (!permitted.has(key)) continue;
+    const v = process.env[key];
+    if (v !== undefined && v.length > 0) env[key] = v;
+  }
+
+  for (const [k, v] of Object.entries(cfg.recursionGuard.env)) env[k] = v;
+  for (const [k, v] of Object.entries(cfg.invoke.env)) env[k] = v;
+  for (const [k, v] of Object.entries(extra)) env[k] = v;
+
+  env["CLAUDE_CODE_ENTRYPOINT"] = "security-mcp-executor";
+  return env;
+}
+
 async function probeVersion(bin: string, cfg: AdapterConfig): Promise<string | null> {
   try {
-    const r = await execa(bin, cfg.detect.versionArgs, { timeout: 10_000, reject: false, all: true });
+    // extendEnv:false + the adapter allowlist. These probes run on every
+    // executor_status and every security.fortify call; inheriting the parent env handed
+    // the vendor binary the attestation HMAC key, cloud keys, and every provider token.
+    const r = await execa(bin, cfg.detect.versionArgs, {
+      timeout: 10_000, reject: false, all: true,
+      extendEnv: false, env: buildChildEnv(cfg, {})
+    });
     const text = `${r.stdout ?? ""}\n${r.stderr ?? ""}`;
     const m = compileConfigRegex(cfg.detect.versionRegex).exec(text);
     return m?.[1] ?? (r.exitCode === 0 ? "" : null);
@@ -270,7 +325,12 @@ export async function probeAuth(cfg: AdapterConfig, binaryPath: string): Promise
   }
 
   try {
-    const r = await execa(binaryPath, cfg.auth.probeArgv, { timeout: 15_000, reject: false, all: true });
+    // Same isolation as probeVersion. The adapter's own childCredentialEnv still comes
+    // through, which is what an auth probe legitimately needs to report login state.
+    const r = await execa(binaryPath, cfg.auth.probeArgv, {
+      timeout: 15_000, reject: false, all: true,
+      extendEnv: false, env: buildChildEnv(cfg, {})
+    });
     const parse = cfg.auth.probeParse;
     const text = `${r.stdout ?? ""}\n${r.stderr ?? ""}`;
     if (!parse) return { mode: "probe", ok: r.exitCode === 0, presumed: false, detail: {} };
@@ -325,13 +385,42 @@ type CacheEntry = { id: string; binaryPath: string; version: string | null; mtim
 
 const CACHE_TTL_MS = 60 * 60 * 1000;
 
+const CacheEntrySchema = z.object({
+  id: z.string().min(1),
+  binaryPath: z.string().min(1),
+  version: z.string().nullable(),
+  mtimeMs: z.number().finite(),
+  at: z.number().finite()
+});
+
+/**
+ * The cache lives under the user's home directory, never under the workspace.
+ *
+ * It records which binary each adapter id resolved to, and `detectProviders` executes
+ * that path. Anything able to write the cache therefore chooses what gets executed, so
+ * the file must sit outside the repository under review. This is the same reasoning that
+ * puts `detect` in UNTRUSTED_OVERRIDE_DENIED_FIELDS: the sibling override file is
+ * sanitized rather than trusted, and a cache inside the workspace would reintroduce the
+ * identical path by another name.
+ */
 function cachePath(): string {
-  return join(getWorkspaceRoot(), ".mcp", "agent-clis", "detected.json");
+  return join(homedir(), ".security-mcp", "agent-clis", "detected.json");
 }
 
+/**
+ * Entries are validated individually. A malformed or partially corrupt cache degrades to
+ * a miss and a fresh probe, never to an unchecked path handed to execa.
+ */
 function readCache(): CacheEntry[] {
   try {
-    return JSON.parse(readFileSync(cachePath(), "utf-8")) as CacheEntry[];
+    const raw: unknown = JSON.parse(readFileSync(cachePath(), "utf-8"));
+    if (!Array.isArray(raw)) return [];
+    const out: CacheEntry[] = [];
+    for (const item of raw) {
+      const parsed = CacheEntrySchema.safeParse(item);
+      if (parsed.success) out.push(parsed.data);
+    }
+    return out;
   } catch {
     return [];
   }
@@ -344,10 +433,22 @@ function writeCache(entries: CacheEntry[]): void {
   } catch { /* cache is an optimisation; never fatal */ }
 }
 
+/** True when `p` resolves to the workspace root or anything beneath it. */
+function isInsideWorkspace(p: string): boolean {
+  const root = resolve(getWorkspaceRoot());
+  const target = resolve(p);
+  return target === root || target.startsWith(root + sep);
+}
+
 function cacheHit(entries: CacheEntry[], id: string): CacheEntry | null {
   const e = entries.find((x) => x.id === id);
   if (!e) return null;
-  if (Date.now() - e.at > CACHE_TTL_MS) return null;
+  // Two-sided, so a future timestamp expires rather than never expiring.
+  if (Math.abs(Date.now() - e.at) > CACHE_TTL_MS) return null;
+  // An agent CLI is installed on the machine, not shipped by the repository under
+  // review. A cached path inside the workspace is never a legitimate hit, and honouring
+  // one would let scanned content choose the binary that detectProviders executes.
+  if (isInsideWorkspace(e.binaryPath)) return null;
   if (!existsSync(e.binaryPath)) return null;
   // Invalidate when the binary is replaced (extension update, npm upgrade).
   try {
@@ -448,6 +549,9 @@ export async function detectProviders(opts?: { force?: boolean }): Promise<Provi
     }
 
     if (!binaryPath || version === null) continue;
+    // Belt and braces with the cacheHit guard: whichever way the path was produced, a
+    // binary inside the repository under review is never executed as an agent CLI.
+    if (isInsideWorkspace(binaryPath)) continue;
     if (cfg.detect.minVersion && version && !versionAtLeast(version, cfg.detect.minVersion)) continue;
 
     try {

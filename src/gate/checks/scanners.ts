@@ -25,8 +25,20 @@ function sanitize(s: string): string {
   return s.replace(SECRET_SANITIZE_RE, "[REDACTED]");
 }
 
+/**
+ * A scanner command is an executable name resolved through PATH, never a path.
+ *
+ * `commandExists` execs this value. A value containing a separator would resolve
+ * relative to the working directory, which in CI is the checkout root, so a path here
+ * would let the repository under review choose what the gate executes.
+ */
+const ScannerCommandSchema = z.string()
+  .regex(/^[a-z0-9][a-z0-9._-]*$/i, "scanner command must be a bare executable name")
+  .refine((v) => !v.includes("/") && !v.includes("\\") && v !== "." && v !== "..",
+    "scanner command must not contain a path separator");
+
 const ScannerSchema = z.object({
-  command: z.string(),
+  command: ScannerCommandSchema,
   args: z.array(z.string()).default(["--version"]),
   required_for: z.array(z.string()).default(["all"])
 });
@@ -51,13 +63,39 @@ async function loadScannerConfig(): Promise<ScannerConfig> {
     return ScannerConfigSchema.parse(JSON.parse(raw));
   }
 
+  const shipped = ScannerConfigSchema.parse(
+    JSON.parse(await readFile(join(PKG_ROOT, "defaults", "security-tools.json"), "utf-8"))
+  );
+
+  let inWorkspace: ScannerConfig;
   try {
     const raw = await readFile(join(getWorkspaceRoot(), ".mcp", "scanners", "security-tools.json"), "utf-8");
-    return ScannerConfigSchema.parse(JSON.parse(raw));
+    inWorkspace = ScannerConfigSchema.parse(JSON.parse(raw));
   } catch {
-    const raw = await readFile(join(PKG_ROOT, "defaults", "security-tools.json"), "utf-8");
-    return ScannerConfigSchema.parse(JSON.parse(raw));
+    return shipped;
   }
+  return reconcileWithShipped(inWorkspace, shipped);
+}
+
+/**
+ * Merge a workspace-supplied scanner config against the shipped one.
+ *
+ * The file lives inside the repository under review, so it is untrusted input, and its
+ * `command` decides what this module executes. A repo may therefore adjust `args` and
+ * `required_for` for a scanner the product already ships, and nothing else. An unknown
+ * scanner id, or a known id whose command has been changed, is dropped in favour of the
+ * shipped definition. This is the same rule adapter.ts applies to in-workspace adapter
+ * overrides: tuning that cannot change WHAT gets executed stays overridable.
+ */
+function reconcileWithShipped(inWorkspace: ScannerConfig, shipped: ScannerConfig): ScannerConfig {
+  const scanners: ScannerConfig["scanners"] = { ...shipped.scanners };
+  for (const [id, scanner] of Object.entries(inWorkspace.scanners)) {
+    const known = shipped.scanners[id];
+    if (!known) continue;
+    if (scanner.command !== known.command) continue;
+    scanners[id] = { ...known, args: scanner.args, required_for: scanner.required_for };
+  }
+  return { version: inWorkspace.version, fail_closed: inWorkspace.fail_closed, scanners };
 }
 
 function scannerApplies(requiredFor: string[], surfaces: SurfaceScope): boolean {

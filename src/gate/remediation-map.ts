@@ -308,7 +308,11 @@ const BASE_REMEDIATION_MAP: Record<string, RemediationTemplate> = {
   // ---------------------------------------------------------------------------
   "AI_INVISIBLE_UNICODE_INJECTION": {
     pattern: "const prompt = `Summarize: ${userText}` // userText may contain hidden tag chars",
-    fix: "const clean = userText.replace(/[\\u200b-\\u200f\\u202a-\\u202e\\u2060-\\u2064\\uE0000-\\uE007F]/gu, '');\nconst prompt = `Summarize: ${clean}`;",
+    // The Unicode Tag block needs the braced form. Under /u, "\\uE0000" parses as \\uE000
+    // followed by a literal "0", so the class silently became \\uE000 plus the range
+    // '0'-'\\uE007' — which matched ordinary digits and letters. The shipped fix deleted
+    // almost all of the user's text and removed none of the tag characters it targets.
+    fix: "const clean = userText.replace(/[\\u200b-\\u200f\\u202a-\\u202e\\u2060-\\u2064]|[\\u{E0000}-\\u{E007F}]/gu, '');\nconst prompt = `Summarize: ${clean}`;",
     explanation: "Zero-width and Unicode tag characters (U+E0000 block) are invisible to reviewers but tokenized by the model, letting an attacker smuggle hidden instructions. Strip invisible/bidi/tag code points before building the prompt.",
     references: ["CWE-116", "OWASP LLM01:2025", "MITRE ATLAS AML.T0051"]
   },
@@ -477,6 +481,24 @@ const BASE_REMEDIATION_MAP: Record<string, RemediationTemplate> = {
     fix: "# Scan in smaller slices: SECURITY_GATE_TARGETS=src/api then src/web, and SECURITY_GATE_IGNORE for vendored or generated trees",
     explanation: "A capped search and an exhausted search return the same result, so a rule that filters its hits (keep the ones without a sanitizer on the line) or intersects two searches by filename can miss the match that mattered. Expected on large monorepos; treat it as reduced confidence in the absence of findings, not as a vulnerability and not as a clean result.",
     references: ["CWE-1188", "NIST 800-218 RV-1"]
+  },
+  "SCAN_FILES_UNREADABLE": {
+    pattern: "# One or more files were enumerated as in scope and then could not be read, so no rule examined their contents",
+    fix: "# Resolve the cause (size cap, symlink leaving the workspace, non-regular file, permissions), or exclude the paths deliberately: SECURITY_GATE_IGNORE=path/to/tree",
+    explanation: "An unread file produces no matches, which is byte-for-byte the same result as a file that was read and was clean. The scope still lists it as scanned. Treat the named files as unexamined: the absence of findings in them is not evidence about their contents.",
+    references: ["CWE-1188", "NIST 800-218 RV-1"]
+  },
+  "DIFF_FILES_DROPPED": {
+    pattern: "# git listed a file as changed, but the gate could not find it on disk and scanned nothing in it",
+    fix: "# Run the gate from the repository root, or point it at the checkout git is reporting on:\n#   cd \"$(git rev-parse --show-toplevel)\" && security-mcp gate\n# In CI, drop `defaults.run.working-directory` for the gate step, or re-run over the full repo.",
+    explanation: "git emits paths relative to the repository root. A changed file that cannot be resolved is never handed to any rule, so the run reports on a smaller scope than the diff it claims to cover. A clean result for that scope says nothing about the dropped files.",
+    references: ["CWE-1188", "NIST 800-218 RV-1"]
+  },
+  "SEARCH_TIME_BUDGET_EXCEEDED": {
+    pattern: "# A detection query exhausted its wall-clock budget and stopped part-way through the repository",
+    fix: "# Narrow the run: SECURITY_GATE_TARGETS=src/api, and SECURITY_GATE_IGNORE for vendored or generated trees, then re-run",
+    explanation: "Unlike a per-query match cap, a time-budget stop means the files after the stopping point were never opened at all. The report describes a prefix of the repository. Re-run over a smaller scope rather than reading the result as complete.",
+    references: ["CWE-1188", "CWE-1333", "NIST 800-218 RV-1"]
   },
   "EVAL_UNAVAILABLE_BUSINESS_LOGIC": {
     pattern: "# An internal error aborted the business-logic check before any of its ~37 sub-checks (refund, inventory, race conditions, payments) could report — status is unknown, not confirmed clean",

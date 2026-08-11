@@ -6,7 +6,7 @@ description: >
   Spawns four sub-agents in parallel: stride-pasta-analyst, attack-navigator,
   business-logic-attacker, privacy-flow-analyst.
 user-invocable: false
-allowed-tools: Read, Glob, Grep, Bash, Agent, WebSearch, WebFetch
+allowed-tools: Read, Glob, Grep, Bash, Edit, Write, Agent, WebSearch, WebFetch
 ---
 
 # Threat Modeler — Agent 1 Lead

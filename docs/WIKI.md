@@ -1,6 +1,6 @@
 # Wiki
 
-Last updated: 2026-07-27
+Last updated: 2026-07-29
 
 A practical reference for running security-mcp, understanding how the gate decides
 PASS/FAIL, the full list of rule IDs added in 1.5.0, 1.6.0, and 1.6.1, how capability
@@ -366,7 +366,7 @@ writing the returned template's fix directly into the working tree, then re-runn
 check to confirm the finding cleared. As of 1.6.1, `REMEDIATION_MAP` is composed from six
 domain partials under `src/gate/remediation-parts/` — `cloud.ts` (256 templates), `ai.ts`
 (69), `data.ts` (172), `web.ts` (203), `misc.ts` (112), and `web-hardening-remediations.ts`
-(6), plus the evaluability-gap and gate-level templates in the base map — for **911 fix templates covering 100% (911/911) of detection IDs**, up from just 71
+(6), plus the evaluability-gap and gate-level templates in the base map — for **914 fix templates covering 100% (914/914) of detection IDs**, up from just 71
 templates (roughly 8% of finding IDs) before this release. Each template pairs a realistic
 vulnerable pattern with a concrete secure fix in the correct language, a plain-language
 explanation, and standards references (CWE plus OWASP Top 10 / API Security Top 10 / LLM
@@ -598,6 +598,9 @@ rejects unknown argv tokens. Which adapters have actually been driven end to end
 ship as best-effort guesses, is recorded in [LIMITATIONS.md](LIMITATIONS.md).
 
 ## Change History
+
+- 2026-07-29 - Fix-template coverage restated as **914** templates / 100% (914/914) of detection
+  IDs, following the `DIFF_FILES_DROPPED` template added alongside the diff-scope fix.
 
 - 2026-07-27 - Fix-template coverage restated as **911** templates / 100% (911/911) of detection
   IDs. The coverage probe previously read `src/gate/checks/**` only, so the ids the gate itself

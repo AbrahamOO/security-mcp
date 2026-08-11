@@ -59,7 +59,7 @@
         "temporal threat evolution",
         "formal verification triggers"
       ],
-      "sha256": "dbdbb89a0e69472e047f686b3deddab4a7d887e8da60daaaa4996fb8561d95b7"
+      "sha256": "17ed0a8ea898a8d612a28989ea64927a7fcca5a1f64b0e3acb541f88dec71dfd"
     },
     "stride-pasta-analyst": {
       "version": "1.0.0",
@@ -1111,7 +1111,7 @@
         "post-quantum readiness",
         "AI-assisted adversary simulation"
       ],
-      "sha256": "311b8064e6a049c8eb292c130733cdddb070e7fbf9f23be0cb204aba606a968e"
+      "sha256": "a7f0860b2ad5786b7a095cd08a47277e666b7e4cba3516c8fbd0c9df3720e627"
     },
     "linddun-privacy-analyst": {
       "version": "1.0.0",
@@ -1938,7 +1938,7 @@
         "number precision loss enabling price rounding exploit",
         "prototype pollution via JSON merge patch operations"
       ],
-      "sha256": "839110f3e27455d02aff1ab147c3f98ac508ed96908d6f9e006614186d495add"
+      "sha256": "f2e3a8f1f79c52c8499f10ff4f57f0946357a088c7f3a7bdcb411b7997dee779"
     },
     "multipart-abuse-tester": {
       "version": "1.0.0",
@@ -2293,7 +2293,7 @@
         "base64-in-base64 and Trojan-Source bidi payloads in instruction files",
         "conditional / time-delayed triggers gated on branch, date, or CI"
       ],
-      "sha256": "6e77cb54dfcce2aafee2fa2dad592bde280ae9087f251846235140f235d1c01e"
+      "sha256": "2837e9e92c949e4ba4ceb84f832faacccc4ebb5ca58178d89b2f1a298aba4c01"
     },
     "mobile-webview-auditor": {
       "version": "1.0.0",

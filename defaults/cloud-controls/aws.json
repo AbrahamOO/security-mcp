@@ -114,10 +114,8 @@
         "require": "storage_encrypted\\s*=\\s*true"
       },
       "remediate": {
-        "strategy": "set-attr",
-        "ensure": {
-          "storage_encrypted": "true"
-        }
+        "strategy": "manual",
+        "manualReason": "storage_encrypted is ForceNew on aws_db_instance. AWS cannot enable encryption on an existing instance, so auto-writing it makes terraform apply plan a destroy and recreate of the database. Rebuild from an encrypted snapshot instead, exactly as this rule requiredActions already states."
       },
       "requiredActions": [
         "Set storage_encrypted = true (and kms_key_id) on the aws_db_instance. Note: encryption can only be enabled at creation; rebuild from an encrypted snapshot if the instance already exists."
@@ -2588,7 +2586,7 @@
       "detect": {
         "target": "terraform",
         "resourceType": "aws_cloudfront_distribution",
-        "require": "minimum_protocol_version\\s*=\\s*\"TLSv1.2"
+        "require": "minimum_protocol_version\\s*=\\s*\"TLSv1\\.[2-9]"
       },
       "remediate": {
         "strategy": "manual",
@@ -4004,7 +4002,7 @@
       "detect": {
         "target": "cloudformation",
         "resourceType": "AWS::CloudFront::Distribution",
-        "require": "\"?MinimumProtocolVersion\"?\\s*:\\s*\"?TLSv1.2"
+        "require": "\"?MinimumProtocolVersion\"?\\s*:\\s*\"?TLSv1\\.[2-9]"
       },
       "remediate": {
         "strategy": "manual",
@@ -5125,10 +5123,8 @@
         "require": "object_lock_enabled\\s*=\\s*true"
       },
       "remediate": {
-        "strategy": "set-attr",
-        "ensure": {
-          "object_lock_enabled": "true"
-        }
+        "strategy": "manual",
+        "manualReason": "object_lock_enabled is ForceNew on aws_s3_bucket. Auto-writing it makes terraform apply destroy and recreate the bucket, deleting every object in it. Object Lock can only be set at bucket creation, exactly as this rule requiredActions already states."
       },
       "requiredActions": [
         "Set object_lock_enabled = true at bucket creation and configure a retention rule via aws_s3_bucket_object_lock_configuration for WORM buckets."
@@ -10302,7 +10298,7 @@
       "detect": {
         "target": "terraform",
         "resourceType": "aws_opensearch_domain",
-        "require": "tls_security_policy\\s*=\\s*\"Policy-Min-TLS-1-2"
+        "require": "tls_security_policy\\s*=\\s*\"Policy-Min-TLS-1-[2-9]"
       },
       "remediate": {
         "strategy": "manual",
@@ -10323,7 +10319,7 @@
       "detect": {
         "target": "terraform",
         "resourceType": "aws_elasticsearch_domain",
-        "require": "tls_security_policy\\s*=\\s*\"Policy-Min-TLS-1-2"
+        "require": "tls_security_policy\\s*=\\s*\"Policy-Min-TLS-1-[2-9]"
       },
       "remediate": {
         "strategy": "manual",
@@ -10591,7 +10587,7 @@
       "detect": {
         "target": "terraform",
         "resourceType": "aws_api_gateway_domain_name",
-        "require": "security_policy\\s*=\\s*\"TLS_1_2\""
+        "require": "security_policy\\s*=\\s*\"TLS_1_[2-9]\""
       },
       "remediate": {
         "strategy": "set-attr",
@@ -10614,7 +10610,7 @@
       "detect": {
         "target": "terraform",
         "resourceType": "aws_apigatewayv2_domain_name",
-        "require": "security_policy\\s*=\\s*\"TLS_1_2\""
+        "require": "security_policy\\s*=\\s*\"TLS_1_[2-9]\""
       },
       "remediate": {
         "strategy": "manual",

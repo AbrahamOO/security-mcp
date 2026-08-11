@@ -2,8 +2,8 @@ import { z } from "zod";
 import { createHmac, timingSafeEqual, randomUUID } from "node:crypto";
 import { scopedFg as fg } from "./scan-scope.js";
 import { GateResult, Finding, FindingSeverity, ControlCoverage, sanitizeErrorMessage } from "./result.js";
-import { getChangedFiles } from "./diff.js";
-import { consumeSearchTruncations } from "../repo/search.js";
+import { getChangedFiles, consumeDiffDrops } from "./diff.js";
+import { consumeSearchTruncations, consumeSearchSkips, consumeSearchTimeouts } from "../repo/search.js";
 import { detectSurfaces } from "./findings.js";
 import { checkRequiredArtifacts } from "./checks/required-artifacts.js";
 import { checkSecrets } from "./checks/secrets.js";
@@ -384,9 +384,11 @@ async function runAllChecks(opts: {
 }): Promise<Finding[]> {
   const ctx: CheckCtx = { ...opts, stagingUrl: process.env["SECURITY_STAGING_URL"] };
 
-  // Discard anything left over from an earlier run so the ledger below describes
+  // Discard anything left over from an earlier run so the ledgers below describe
   // this run only.
   consumeSearchTruncations();
+  consumeSearchSkips();
+  consumeSearchTimeouts();
 
   const settled = await Promise.allSettled(
     CHECKS.map((def) => (def.when && !def.when(ctx) ? Promise.resolve([]) : def.run(ctx)))
@@ -435,6 +437,68 @@ async function runAllChecks(opts: {
         `${truncated.length} detection quer(ies) reached the match cap. Every rule driven by them saw a prefix of the matching lines, not all of them, so a finding those rules would have raised on a later line is absent from this report.`,
         "Narrow the run so each query stays under the cap: scan a subdirectory at a time (SECURITY_GATE_TARGETS), or exclude vendored/generated trees with SECURITY_GATE_IGNORE.",
         "This is expected on large monorepos and is not itself a vulnerability. Treat it as reduced confidence in the absence of findings, not as a clean result."
+      ]
+    });
+  }
+
+  // A file that could not be read produced no matches, exactly like a file that was read
+  // and was clean. Report the difference rather than letting the scan claim coverage it
+  // did not have.
+  const skipped = consumeSearchSkips();
+  if (skipped.length > 0) {
+    findings.push({
+      id: "SCAN_FILES_UNREADABLE",
+      title: "Files in scope could not be read — their contents were never examined",
+      severity: "HIGH",
+      sla: "7d",
+      evidence: skipped
+        .slice(0, 10)
+        .map((s) => `${s.file}: ${s.reason}`)
+        .concat(skipped.length > 10 ? [`… and ${skipped.length - 10} more unreadable file(s)`] : []),
+      requiredActions: [
+        `${skipped.length} file(s) were enumerated as in scope and then could not be read, so no rule examined them. Absence of findings in those files is not evidence that they are clean.`,
+        "Common causes: the file exceeds the read size cap, it is a symlink leaving the workspace, it is not a regular file, or the process lacks permission.",
+        "Resolve the cause or exclude the paths deliberately with SECURITY_GATE_IGNORE, so the exclusion is a recorded decision rather than a silent gap."
+      ]
+    });
+  }
+
+  // A file git listed as changed that never reached the scanners narrows the scan's
+  // scope. Report it rather than letting an empty changed-file set read as "nothing
+  // changed".
+  const dropped = consumeDiffDrops();
+  if (dropped.length > 0) {
+    findings.push({
+      id: "DIFF_FILES_DROPPED",
+      title: "Changed files reported by git were never scanned",
+      severity: "HIGH",
+      sla: "7d",
+      evidence: dropped
+        .slice(0, 10)
+        .map((d) => `${d.file}: ${d.reason}`)
+        .concat(dropped.length > 10 ? [`… and ${dropped.length - 10} more dropped file(s)`] : []),
+      requiredActions: [
+        `${dropped.length} file(s) appeared in the diff and were then discarded before any rule ran. A clean result for this scope is not evidence that those changes are safe.`,
+        "Confirm the gate is running against the same checkout git is reporting on, and that the working tree contains the head commit's files.",
+        "Re-run the gate over the full repository if the dropped paths cannot be resolved."
+      ]
+    });
+  }
+
+  // A search that ran out of wall clock stopped mid-repository. Later files were never
+  // examined at all, which is a larger gap than a per-query match cap.
+  const timedOut = consumeSearchTimeouts();
+  if (timedOut.length > 0) {
+    findings.push({
+      id: "SEARCH_TIME_BUDGET_EXCEEDED",
+      title: "Content search exceeded its time budget — the remaining files were not examined",
+      severity: "HIGH",
+      sla: "7d",
+      evidence: timedOut.slice(0, 10).map((q) => `/${q}/`),
+      requiredActions: [
+        `${timedOut.length} detection quer(ies) hit the search time budget and stopped early. Files after the stopping point contributed nothing to this report.`,
+        "Narrow the run with SECURITY_GATE_TARGETS, or exclude vendored and generated trees with SECURITY_GATE_IGNORE, then re-run.",
+        "Treat this as an incomplete scan, not as a clean result."
       ]
     });
   }
@@ -569,9 +633,20 @@ export async function runPrGate(opts: {
     evaluateEvidenceCoverage({ policy, surfaces })
   ]);
 
-  // Collect raw findings — docs tier runs secrets-only to reduce overhead
+  // Collect raw findings.
+  //
+  // The docs tier runs a reduced set to keep a prose-only change cheap. It must still
+  // run every module whose subject matter IS documentation. checkAgenticInstructions
+  // exists for exactly the files this tier used to skip: CLAUDE.md, AGENTS.md, and
+  // SKILL.md are Markdown, so a change that introduced a poisoned instruction file took
+  // the secrets-only path and returned PASS with zero findings, while the module in
+  // isolation returned two CRITICALs on the same content. A tier may be cheaper. It may
+  // not be blind to the thing it is made of.
   const rawChecked = changeType === "docs"
-    ? await checkSecrets({ changedFiles })
+    ? (await Promise.all([
+        checkSecrets({ changedFiles }),
+        checkAgenticInstructions({ changedFiles })
+      ])).flat()
     : await runAllChecks({ policy, changedFiles, targets, surfaces, scannerReadiness, evidenceCoverage });
 
   const rawFindings = assignRiskSlas(rawChecked);

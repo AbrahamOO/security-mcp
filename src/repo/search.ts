@@ -16,13 +16,27 @@ type SearchOptions = {
 const MAX_REGEX_LEN = 500;
 
 /**
- * Detects regex patterns that risk catastrophic backtracking (ReDoS).
- * Covers nested quantifiers, ambiguous alternation with outer quantifiers,
- * counted repetition inside groups, and overlapping wildcard groups.
- * CWE-1333 / MITRE ATT&CK T1499.
+ * Upper bound on unbounded quantifiers in one pattern.
+ *
+ * Backtracking cost grows with the number of quantified atoms that can match the same
+ * input, and a sequence of them is as expensive as nesting them. Legitimate search
+ * patterns are well under this; the bound is what makes the cost of a rejected pattern
+ * a refusal rather than a stalled process.
+ */
+const MAX_QUANTIFIERS = 4;
+
+/**
+ * Rejects regex patterns whose backtracking cost is superlinear. CWE-1333.
+ *
+ * The group-shape tests below are necessary but not sufficient on their own: they all
+ * require a parenthesised group, so a flat sequence of quantified atoms is equally
+ * expensive and matches none of them. The quantifier budget and the adjacency test are
+ * what make the guard hold for patterns that use no groups at all. Matching is
+ * additionally bounded at runtime by REGEX_TIME_BUDGET_MS and MAX_SCANNED_LINE_LEN, so
+ * a pattern this function does not anticipate still cannot run without limit.
  */
 function isCatastrophicRegex(pattern: string): boolean {
-	// Original: nested quantifiers like (a+)+, (a*)*, (\w+)+
+	// Nested quantifiers like (a+)+, (a*)*, (\w+)+
 	if (/\([^)]*[+*][^)]*\)[+*?{]/.test(pattern)) return true;
 
 	// Ambiguous alternation with outer quantifier: (a|aa)+ or (a|b)+
@@ -36,6 +50,49 @@ function isCatastrophicRegex(pattern: string): boolean {
 	if (/\(\\[wWdDsS][+*][^)]*\)[+*]/.test(pattern)) return true;
 
 	return false;
+}
+
+/**
+ * Additional pattern rules applied only to caller-supplied regexes.
+ *
+ * The shape tests above all require a parenthesised group, so a flat sequence of
+ * quantified atoms is equally expensive and matches none of them. That gap is only
+ * reachable from a caller that chooses its own pattern, which today means the
+ * `repo.search` MCP tool. That tool is child-safe, so a prompt-injected agent can reach
+ * it and stall the parent process.
+ *
+ * These rules are deliberately not applied to the engine's own detection patterns. Those
+ * are authored in this repository, reviewed, and corpus-tested, and several legitimately
+ * use more quantifiers than a caller ever should. Their cost is bounded instead by
+ * REGEX_TIME_BUDGET_MS and MAX_SCANNED_LINE_LEN, which apply to every search.
+ */
+export function assertSafeCallerRegex(pattern: string): void {
+	if (pattern.length > MAX_REGEX_LEN) {
+		throw new Error(`Regex pattern too long (max ${MAX_REGEX_LEN} chars)`);
+	}
+	if (isCatastrophicRegex(pattern)) {
+		throw new Error("Regex pattern contains nested quantifiers that risk catastrophic backtracking (ReDoS)");
+	}
+
+	// Collapse escapes and character classes to a single placeholder atom, so the tests
+	// below compare atoms rather than re-parsing syntax. Both replacements are linear,
+	// which matters: a guard that is itself superlinear is not a guard. Input is already
+	// bounded to MAX_REGEX_LEN above.
+	const flattened = pattern.replace(/\\./g, "a").replace(/\[[^\]]*\]/g, "a");
+
+	// The same atom quantified twice in sequence: x+x+, .*.*, [a-z]+[a-z]*. Ambiguous in
+	// exactly the way a nested quantifier is, and it needs no group to be expensive.
+	if (/(.)[+*]\1[+*]/.test(flattened)) {
+		throw new Error("Regex pattern repeats a quantified atom, which risks catastrophic backtracking (ReDoS)");
+	}
+
+	// Budget on unbounded quantifiers, counting + * and open-ended {n,}.
+	const quantifiers = flattened.match(/[+*]|\{\d+,\}/g);
+	if (quantifiers && quantifiers.length > MAX_QUANTIFIERS) {
+		throw new Error(
+			`Regex pattern uses more than ${MAX_QUANTIFIERS} unbounded quantifiers, which risks catastrophic backtracking (ReDoS)`
+		);
+	}
 }
 
 /**
@@ -62,6 +119,24 @@ function redactSecrets(s: string): string {
 	return s.replace(SECRET_REDACT_RE, "[REDACTED]");
 }
 
+/**
+ * Ceiling on the input length a single regex is applied to.
+ *
+ * Backtracking cost is a function of input length as well as pattern shape, and a
+ * minified bundle or a generated file can put a whole program on one line. Bounding the
+ * input bounds the cost of any single match attempt.
+ */
+const MAX_SCANNED_LINE_LEN = 8192;
+
+/**
+ * Wall-clock ceiling for one search.
+ *
+ * The pattern guard rejects the shapes it knows. This bounds the ones it does not, so an
+ * unanticipated pattern costs a truncated search rather than a process that never
+ * returns. It is checked between lines, which is where a search can be interrupted.
+ */
+const REGEX_TIME_BUDGET_MS = 5000;
+
 function isHit(line: string, query: string, re: RegExp | null): boolean {
 	return re ? re.test(line) : line.includes(query);
 }
@@ -71,12 +146,15 @@ function scanLines(
 	lines: string[],
 	opts: SearchOptions,
 	re: RegExp | null,
-	matches: RepoMatch[]
-): void {
+	matches: RepoMatch[],
+	deadline: number
+): boolean {
 	for (let i = 0; i < lines.length; i++) {
-		if (matches.length >= opts.maxMatches) return;
+		if (matches.length >= opts.maxMatches) return true;
+		if (Date.now() > deadline) return false;
 
-		const line = lines[i];
+		const raw = lines[i];
+		const line = raw.length > MAX_SCANNED_LINE_LEN ? raw.slice(0, MAX_SCANNED_LINE_LEN) : raw;
 		if (!isHit(line, opts.query, re)) continue;
 
 		matches.push({
@@ -85,6 +163,7 @@ function scanLines(
 			preview: redactSecrets(line.slice(0, MAX_PREVIEW_LEN))
 		});
 	}
+	return true;
 }
 
 /**
@@ -119,6 +198,52 @@ export function consumeSearchTruncations(): SearchTruncation[] {
 	return truncations.splice(0, truncations.length);
 }
 
+/**
+ * Skip ledger.
+ *
+ * A file the scanner could not read contributes no matches, which is the same output as
+ * a file that was read and contained nothing. Every such file was previously discarded
+ * by a bare `catch { continue; }`, so an oversized, unreadable, or non-regular file was
+ * reported as clean while `scope.changedFiles` still asserted it had been scanned.
+ *
+ * The reasons a read fails are ordinary: over the size cap, a symlink leaving the
+ * workspace, a socket or device node, a permission error, a file deleted mid-scan. None
+ * of them mean the file is safe. They mean it is unknown, and unknown is recorded.
+ */
+export type SearchSkip = { file: string; reason: string };
+
+const skips: SearchSkip[] = [];
+/** Cap on remembered entries — the ledger must not grow without bound on a huge repo. */
+const MAX_REMEMBERED_SKIPS = 500;
+
+function recordSkip(file: string, err: unknown): void {
+	if (skips.length >= MAX_REMEMBERED_SKIPS) return;
+	if (skips.some((s) => s.file === file)) return;
+	const raw = err instanceof Error ? err.message : String(err);
+	skips.push({ file: file.slice(0, 300), reason: raw.slice(0, 200) });
+}
+
+/** Returns every skip recorded since the last call, and clears the ledger. */
+export function consumeSearchSkips(): SearchSkip[] {
+	return skips.splice(0, skips.length);
+}
+
+/** Wall-clock budget exhaustion, recorded so a cut-short search cannot read as complete. */
+let timedOutQueries: string[] = [];
+
+function recordSearchTimeout(query: string): void {
+	if (timedOutQueries.length >= MAX_REMEMBERED_TRUNCATIONS) return;
+	if (timedOutQueries.includes(query)) return;
+	timedOutQueries.push(query.slice(0, 120));
+}
+
+/** Returns every timed-out query since the last call, and clears the ledger. */
+export function consumeSearchTimeouts(): string[] {
+	const out = timedOutQueries;
+	timedOutQueries = [];
+	return out;
+}
+
 export async function searchRepo(opts: SearchOptions): Promise<RepoMatch[]> {
 	// "**/*" (not "**/*.*") — the dotted form silently excludes every
 	// extensionless file (Dockerfile, Makefile, Jenkinsfile, Procfile, ...),
@@ -151,6 +276,7 @@ export async function searchRepo(opts: SearchOptions): Promise<RepoMatch[]> {
 
 	const re = opts.isRegex ? compileUserRegex(opts.query) : null;
 	const matches: RepoMatch[] = [];
+	const deadline = Date.now() + REGEX_TIME_BUDGET_MS;
 
 	for (const file of files) {
 		if (matches.length >= opts.maxMatches) break;
@@ -158,11 +284,16 @@ export async function searchRepo(opts: SearchOptions): Promise<RepoMatch[]> {
 		let text = "";
 		try {
 			text = await readFileSafe(file);
-		} catch {
+		} catch (err) {
+			// Not skipped silently: an unread file is unknown, not clean.
+			recordSkip(file, err);
 			continue;
 		}
 
-		scanLines(file, text.split("\n"), opts, re, matches);
+		if (!scanLines(file, text.split("\n"), opts, re, matches, deadline)) {
+			recordSearchTimeout(opts.query);
+			break;
+		}
 	}
 
 	if (matches.length >= opts.maxMatches && opts.maxMatches >= EVIDENCE_CAP_THRESHOLD) {

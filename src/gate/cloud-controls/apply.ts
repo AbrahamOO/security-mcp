@@ -196,14 +196,17 @@ export async function autoHardenTree(opts?: { write?: boolean }): Promise<Harden
     }
     const { text, applied, manual } = hardenText(file, original, rules);
 
-    for (const v of applied) {
-      report.applied.push({
-        ruleId: v.rule.ruleId,
-        file,
-        resource: `${v.rule.detect.resourceType}.${v.block?.name ?? "?"}`,
-        frameworks: v.rule.frameworks
-      });
-    }
+    // Staged, not reported. "Applied" must mean the bytes reached the disk. These entries
+    // were previously pushed straight into the report, and both bail-outs below leave
+    // them there: a run that refused to write on structural damage, and a run whose write
+    // threw, each printed a list of fixes it had applied to a file it had not changed.
+    const stagedApplied = applied.map((v) => ({
+      ruleId: v.rule.ruleId,
+      file,
+      resource: `${v.rule.detect.resourceType}.${v.block?.name ?? "?"}`,
+      frameworks: v.rule.frameworks
+    }));
+
     for (const v of manual) {
       report.manual.push({
         ruleId: v.rule.ruleId,
@@ -239,6 +242,7 @@ export async function autoHardenTree(opts?: { write?: boolean }): Promise<Harden
         const abs = join(getWorkspaceRoot(), file);
         try {
           await writeIacFileSafely(abs, original, text);
+          report.applied.push(...stagedApplied);
         } catch (e) {
           report.manual.push({
             ruleId: "APPLY_WRITE_FAILED",
@@ -251,6 +255,11 @@ export async function autoHardenTree(opts?: { write?: boolean }): Promise<Harden
           // caller with a stack trace and no record of the files already modified.
           report.filesChanged.pop();
         }
+      } else {
+        // Dry run: nothing is written, so these are the fixes that WOULD be applied.
+        // Reporting them is the point of the mode, and filesChanged already records
+        // that the file would have changed.
+        report.applied.push(...stagedApplied);
       }
     }
   }

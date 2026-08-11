@@ -4,7 +4,9 @@
     {
       "ruleId": "GCP_SQL_NO_PUBLIC_IP",
       "threat": "A Cloud SQL instance with a public IP and open authorized networks is directly reachable from the internet for brute force and CVE exploitation.",
-      "frameworks": ["CIS GCP Foundations Benchmark 6.5"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 6.5"
+      ],
       "severity": "HIGH",
       "title": "Cloud SQL instance must not expose a public IP",
       "detect": {
@@ -14,7 +16,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "settings.ip_configuration.ipv4_enabled": "false" }
+        "ensure": {
+          "settings.ip_configuration.ipv4_enabled": "false"
+        }
       },
       "requiredActions": [
         "Set settings { ip_configuration { ipv4_enabled = false } } and connect via Private Service Connect / private IP only."
@@ -23,7 +27,9 @@
     {
       "ruleId": "GCP_STORAGE_UNIFORM_ACCESS",
       "threat": "Without uniform bucket-level access, object ACLs can re-expose data even when IAM looks locked down.",
-      "frameworks": ["CIS GCP Foundations Benchmark 5.2"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 5.2"
+      ],
       "severity": "MEDIUM",
       "title": "GCS bucket must enforce uniform bucket-level access",
       "detect": {
@@ -33,7 +39,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "uniform_bucket_level_access": "true" }
+        "ensure": {
+          "uniform_bucket_level_access": "true"
+        }
       },
       "requiredActions": [
         "Set uniform_bucket_level_access = true on the google_storage_bucket so legacy object ACLs cannot grant access."
@@ -42,7 +50,9 @@
     {
       "ruleId": "GCP_SQL_REQUIRE_SSL",
       "threat": "A Cloud SQL instance that does not require SSL accepts plaintext connections, exposing credentials and data on the wire.",
-      "frameworks": ["CIS GCP Foundations Benchmark 6.4"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 6.4"
+      ],
       "severity": "MEDIUM",
       "title": "Cloud SQL instance must require SSL",
       "detect": {
@@ -52,7 +62,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "settings.ip_configuration.require_ssl": "true" }
+        "ensure": {
+          "settings.ip_configuration.require_ssl": "true"
+        }
       },
       "requiredActions": [
         "Set settings { ip_configuration { require_ssl = true } } (or ssl_mode = ENCRYPTED_ONLY on newer providers) on the google_sql_database_instance."
@@ -61,7 +73,9 @@
     {
       "ruleId": "GCP_GKE_SHIELDED_NODES",
       "threat": "GKE nodes without Shielded Nodes lack verified boot and kernel integrity, enabling rootkit persistence on a compromised node.",
-      "frameworks": ["CIS GCP Foundations Benchmark 7.10"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.10"
+      ],
       "severity": "MEDIUM",
       "title": "GKE cluster must enable Shielded Nodes",
       "detect": {
@@ -71,7 +85,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "enable_shielded_nodes": "true" }
+        "ensure": {
+          "enable_shielded_nodes": "true"
+        }
       },
       "requiredActions": [
         "Set enable_shielded_nodes = true on the google_container_cluster."
@@ -80,7 +96,9 @@
     {
       "ruleId": "GCP_GKE_NETWORK_POLICY",
       "threat": "Without a network policy, any compromised pod can move laterally to every other pod in the cluster.",
-      "frameworks": ["CIS GCP Foundations Benchmark 7.7"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.7"
+      ],
       "severity": "MEDIUM",
       "title": "GKE cluster must enable network policy",
       "detect": {
@@ -90,7 +108,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "network_policy.enabled": "true" }
+        "ensure": {
+          "network_policy.enabled": "true"
+        }
       },
       "requiredActions": [
         "Add network_policy { enabled = true } to the google_container_cluster and enforce NetworkPolicies per namespace."
@@ -99,7 +119,9 @@
     {
       "ruleId": "GCP_COMPUTE_SHIELDED_VM",
       "threat": "A Compute Engine VM without Secure Boot can be persisted by a boot-level rootkit after compromise.",
-      "frameworks": ["CIS GCP Foundations Benchmark 4.8"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.8"
+      ],
       "severity": "LOW",
       "title": "Compute instance must enable Shielded VM secure boot",
       "detect": {
@@ -109,7 +131,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "shielded_instance_config.enable_secure_boot": "true" }
+        "ensure": {
+          "shielded_instance_config.enable_secure_boot": "true"
+        }
       },
       "requiredActions": [
         "Add shielded_instance_config { enable_secure_boot = true } to the google_compute_instance."
@@ -118,7 +142,9 @@
     {
       "ruleId": "GCP_BIGQUERY_NO_PUBLIC",
       "threat": "A BigQuery dataset granting allUsers/allAuthenticatedUsers lets anonymous or any Google account query and exfiltrate the data.",
-      "frameworks": ["CIS GCP Foundations Benchmark 7.1"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.1"
+      ],
       "severity": "CRITICAL",
       "title": "BigQuery dataset must not be publicly accessible",
       "detect": {
@@ -137,7 +163,9 @@
     {
       "ruleId": "GCP_COMPUTE_NO_IP_FORWARD",
       "threat": "IP forwarding lets a compromised VM act as a router and intercept or redirect other instances' traffic.",
-      "frameworks": ["CIS GCP Foundations Benchmark 4.6"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.6"
+      ],
       "severity": "MEDIUM",
       "title": "Compute instance must not enable IP forwarding",
       "detect": {
@@ -147,7 +175,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "can_ip_forward": "false" }
+        "ensure": {
+          "can_ip_forward": "false"
+        }
       },
       "requiredActions": [
         "Set can_ip_forward = false on the google_compute_instance unless it is an intentional NAT/router appliance."
@@ -156,7 +186,9 @@
     {
       "ruleId": "GCP_SQL_BACKUP_ENABLED",
       "threat": "A Cloud SQL instance without automated backups cannot be recovered after a destructive or ransomware event.",
-      "frameworks": ["CIS GCP Foundations Benchmark 6.7"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 6.7"
+      ],
       "severity": "MEDIUM",
       "title": "Cloud SQL instance must enable automated backups",
       "detect": {
@@ -166,7 +198,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "settings.backup_configuration.enabled": "true" }
+        "ensure": {
+          "settings.backup_configuration.enabled": "true"
+        }
       },
       "requiredActions": [
         "Add settings { backup_configuration { enabled = true } } to the google_sql_database_instance."
@@ -175,7 +209,9 @@
     {
       "ruleId": "GCP_KMS_KEY_ROTATION",
       "threat": "A KMS key without a rotation period means a single key compromise exposes all historical ciphertext.",
-      "frameworks": ["CIS GCP Foundations Benchmark 1.9"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 1.9"
+      ],
       "severity": "MEDIUM",
       "title": "KMS crypto key must set a rotation period",
       "detect": {
@@ -185,7 +221,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "rotation_period": "\"7776000s\"" }
+        "ensure": {
+          "rotation_period": "\"7776000s\""
+        }
       },
       "requiredActions": [
         "Set rotation_period = \"7776000s\" (90 days) or shorter on the google_kms_crypto_key."
@@ -194,7 +232,9 @@
     {
       "ruleId": "GCP_DNS_DNSSEC",
       "threat": "A managed DNS zone without DNSSEC can be spoofed via cache poisoning, redirecting users to attacker infrastructure.",
-      "frameworks": ["CIS GCP Foundations Benchmark 3.3"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 3.3"
+      ],
       "severity": "LOW",
       "title": "Cloud DNS managed zone must enable DNSSEC",
       "detect": {
@@ -204,7 +244,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "dnssec_config.state": "\"on\"" }
+        "ensure": {
+          "dnssec_config.state": "\"on\""
+        }
       },
       "requiredActions": [
         "Add dnssec_config { state = \"on\" } to the google_dns_managed_zone."
@@ -213,7 +255,9 @@
     {
       "ruleId": "GCP_REDIS_AUTH",
       "threat": "A Memorystore Redis instance without AUTH accepts unauthenticated commands from anyone who can reach it on the network.",
-      "frameworks": ["CIS GCP Foundations Benchmark 6.x"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 6.x"
+      ],
       "severity": "MEDIUM",
       "title": "Memorystore Redis must enable AUTH",
       "detect": {
@@ -223,7 +267,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "auth_enabled": "true" }
+        "ensure": {
+          "auth_enabled": "true"
+        }
       },
       "requiredActions": [
         "Set auth_enabled = true on the google_redis_instance (and enable transit_encryption_mode)."
@@ -232,7 +278,9 @@
     {
       "ruleId": "GCP_GKE_PRIVATE_NODES",
       "threat": "GKE nodes with public IPs enlarge the attack surface and expose the kubelet/node to internet scanning.",
-      "frameworks": ["CIS GCP Foundations Benchmark 7.15"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.15"
+      ],
       "severity": "MEDIUM",
       "title": "GKE cluster should use private nodes",
       "detect": {
@@ -251,7 +299,9 @@
     {
       "ruleId": "GCP_SQL_NO_OPEN_AUTH_NET",
       "threat": "A Cloud SQL authorized network of 0.0.0.0/0 exposes the database to the entire internet.",
-      "frameworks": ["CIS GCP Foundations Benchmark 6.5"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 6.5"
+      ],
       "severity": "HIGH",
       "title": "Cloud SQL must not authorize 0.0.0.0/0",
       "detect": {
@@ -270,7 +320,9 @@
     {
       "ruleId": "GCP_GKE_NODE_AUTO_REPAIR",
       "threat": "Node pools without auto-repair can run degraded/compromised nodes indefinitely without remediation.",
-      "frameworks": ["CIS GCP Foundations Benchmark 7.8"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.8"
+      ],
       "severity": "LOW",
       "title": "GKE node pool must enable auto-repair",
       "detect": {
@@ -280,7 +332,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "management.auto_repair": "true" }
+        "ensure": {
+          "management.auto_repair": "true"
+        }
       },
       "requiredActions": [
         "Add management { auto_repair = true } to the google_container_node_pool."
@@ -289,7 +343,9 @@
     {
       "ruleId": "GCP_GKE_NODE_AUTO_UPGRADE",
       "threat": "Node pools without auto-upgrade keep running known-vulnerable Kubernetes/OS versions.",
-      "frameworks": ["CIS GCP Foundations Benchmark 7.9"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.9"
+      ],
       "severity": "MEDIUM",
       "title": "GKE node pool must enable auto-upgrade",
       "detect": {
@@ -299,7 +355,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "management.auto_upgrade": "true" }
+        "ensure": {
+          "management.auto_upgrade": "true"
+        }
       },
       "requiredActions": [
         "Add management { auto_upgrade = true } to the google_container_node_pool."
@@ -308,7 +366,10 @@
     {
       "ruleId": "GCP_FIREWALL_NO_OPEN_ADMIN",
       "threat": "A firewall rule allowing 0.0.0.0/0 ingress exposes admin/database ports to internet-wide scanning and brute force.",
-      "frameworks": ["CIS GCP Foundations Benchmark 3.6", "CIS GCP Foundations Benchmark 3.7"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 3.6",
+        "CIS GCP Foundations Benchmark 3.7"
+      ],
       "severity": "HIGH",
       "title": "Firewall must not allow 0.0.0.0/0 to admin ports",
       "detect": {
@@ -327,7 +388,9 @@
     {
       "ruleId": "GCP_GKE_BINARY_AUTHORIZATION",
       "threat": "Without Binary Authorization, unsigned or untrusted container images can be deployed to the cluster.",
-      "frameworks": ["CIS GCP Foundations Benchmark 7.12"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.12"
+      ],
       "severity": "MEDIUM",
       "title": "GKE cluster should enable Binary Authorization",
       "detect": {
@@ -346,7 +409,9 @@
     {
       "ruleId": "GCP_COMPUTE_OSLOGIN",
       "threat": "Without OS Login, SSH keys are managed in metadata rather than IAM, weakening access control and auditing.",
-      "frameworks": ["CIS GCP Foundations Benchmark 4.4"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.4"
+      ],
       "severity": "LOW",
       "title": "Compute instance should enable OS Login",
       "detect": {
@@ -365,7 +430,9 @@
     {
       "ruleId": "GCP_KMS_KEY_NOT_PUBLIC",
       "threat": "A KMS key IAM binding to allUsers/allAuthenticatedUsers lets anyone use the key to decrypt or sign.",
-      "frameworks": ["CIS GCP Foundations Benchmark 1.10"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 1.10"
+      ],
       "severity": "CRITICAL",
       "title": "KMS key must not be publicly accessible",
       "detect": {
@@ -384,7 +451,9 @@
     {
       "ruleId": "GCP_GKE_INTRANODE_VISIBILITY",
       "threat": "Without intranode visibility, pod-to-pod traffic on the same node bypasses VPC flow logging and firewall enforcement.",
-      "frameworks": ["CIS GCP Foundations Benchmark 7.16"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.16"
+      ],
       "severity": "LOW",
       "title": "GKE cluster should enable intranode visibility",
       "detect": {
@@ -394,7 +463,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "enable_intranode_visibility": "true" }
+        "ensure": {
+          "enable_intranode_visibility": "true"
+        }
       },
       "requiredActions": [
         "Set enable_intranode_visibility = true on the google_container_cluster."
@@ -403,7 +474,9 @@
     {
       "ruleId": "GCP_GKE_NODE_SECURE_BOOT",
       "threat": "GKE nodes without Secure Boot can be persisted by a boot-level rootkit after compromise.",
-      "frameworks": ["CIS GCP Foundations Benchmark 7.10"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.10"
+      ],
       "severity": "LOW",
       "title": "GKE node pool should enable Secure Boot",
       "detect": {
@@ -413,7 +486,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "shielded_instance_config.enable_secure_boot": "true" }
+        "ensure": {
+          "shielded_instance_config.enable_secure_boot": "true"
+        }
       },
       "requiredActions": [
         "Add shielded_instance_config { enable_secure_boot = true } to the google_container_node_pool."
@@ -422,7 +497,9 @@
     {
       "ruleId": "GCP_NO_SERVICE_ACCOUNT_KEY",
       "threat": "A user-managed service account key is a long-lived static credential with no expiry — the top GCP breach vector.",
-      "frameworks": ["CIS GCP Foundations Benchmark 1.4"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 1.4"
+      ],
       "severity": "HIGH",
       "title": "Avoid user-managed service account keys",
       "detect": {
@@ -441,7 +518,10 @@
     {
       "ruleId": "GCP_IAM_NO_PRIMITIVE_ROLES",
       "threat": "Granting roles/owner or roles/editor at the project level gives broad, hard-to-audit privilege — ideal for lateral movement.",
-      "frameworks": ["CIS GCP Foundations Benchmark 1.5", "CIS GCP Foundations Benchmark 1.6"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 1.5",
+        "CIS GCP Foundations Benchmark 1.6"
+      ],
       "severity": "MEDIUM",
       "title": "Avoid primitive roles/owner and roles/editor bindings",
       "detect": {
@@ -460,7 +540,9 @@
     {
       "ruleId": "GCP_CLOUD_RUN_NO_PUBLIC",
       "threat": "A Cloud Run service granting allUsers the invoker role is an unauthenticated internet endpoint.",
-      "frameworks": ["CIS GCP Foundations Benchmark 4.x"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.x"
+      ],
       "severity": "HIGH",
       "title": "Cloud Run service must not allow unauthenticated (allUsers) invocation",
       "detect": {
@@ -479,7 +561,9 @@
     {
       "ruleId": "GCP_SQL_PITR",
       "threat": "Without point-in-time recovery, a Cloud SQL instance cannot be restored to a moment before a destructive or ransomware event.",
-      "frameworks": ["CIS GCP Foundations Benchmark 6.7"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 6.7"
+      ],
       "severity": "MEDIUM",
       "title": "Cloud SQL instance should enable point-in-time recovery",
       "detect": {
@@ -489,7 +573,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "settings.backup_configuration.point_in_time_recovery_enabled": "true" }
+        "ensure": {
+          "settings.backup_configuration.point_in_time_recovery_enabled": "true"
+        }
       },
       "requiredActions": [
         "Set settings { backup_configuration { point_in_time_recovery_enabled = true } } on the google_sql_database_instance (Postgres) or enable binary logging (MySQL)."
@@ -498,7 +584,9 @@
     {
       "ruleId": "GCP_GKE_RELEASE_CHANNEL",
       "threat": "A cluster not subscribed to a release channel falls behind on security patches and CVE fixes.",
-      "frameworks": ["CIS GCP Foundations Benchmark 7.x"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.x"
+      ],
       "severity": "LOW",
       "title": "GKE cluster should subscribe to a release channel",
       "detect": {
@@ -508,7 +596,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "release_channel.channel": "\"REGULAR\"" }
+        "ensure": {
+          "release_channel.channel": "\"REGULAR\""
+        }
       },
       "requiredActions": [
         "Add release_channel { channel = \"REGULAR\" } to the google_container_cluster."
@@ -517,7 +607,9 @@
     {
       "ruleId": "GCP_DATAPROC_INTERNAL_IP",
       "threat": "A Dataproc cluster with public IPs on its nodes enlarges the attack surface and exposes workers to the internet.",
-      "frameworks": ["CIS GCP Foundations Benchmark 7.x"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.x"
+      ],
       "severity": "MEDIUM",
       "title": "Dataproc cluster should use internal IPs only",
       "detect": {
@@ -536,7 +628,9 @@
     {
       "ruleId": "GCP_GCS_BUCKET_CMEK",
       "threat": "A bucket without a customer-managed encryption key relies on Google-managed keys, reducing key control and revocation.",
-      "frameworks": ["CIS GCP Foundations Benchmark 5.x"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 5.x"
+      ],
       "severity": "LOW",
       "title": "GCS bucket should use a customer-managed encryption key",
       "detect": {
@@ -555,7 +649,9 @@
     {
       "ruleId": "GCP_COMPUTE_NO_PUBLIC_IP",
       "threat": "A Compute instance with an external IP (access_config) is directly reachable from the internet, widening the attack surface.",
-      "frameworks": ["CIS GCP Foundations Benchmark 4.9"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.9"
+      ],
       "severity": "MEDIUM",
       "title": "Compute instance should not have a public IP",
       "detect": {
@@ -574,7 +670,9 @@
     {
       "ruleId": "GCP_NOTEBOOK_NO_PUBLIC_IP",
       "threat": "A Vertex AI / AI Platform notebook with a public IP is internet-reachable and a prime target for compromise and data exfiltration.",
-      "frameworks": ["CIS GCP Foundations Benchmark 4.x"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.x"
+      ],
       "severity": "MEDIUM",
       "title": "AI notebook instance must not have a public IP",
       "detect": {
@@ -584,7 +682,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "no_public_ip": "true" }
+        "ensure": {
+          "no_public_ip": "true"
+        }
       },
       "requiredActions": [
         "Set no_public_ip = true on the google_notebooks_instance."
@@ -593,7 +693,9 @@
     {
       "ruleId": "GCP_GKE_MASTER_AUTHORIZED_NETWORKS",
       "threat": "A GKE control plane reachable from any IP is exposed to credential stuffing and API exploitation.",
-      "frameworks": ["CIS GCP Foundations Benchmark 7.14"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.14"
+      ],
       "severity": "MEDIUM",
       "title": "GKE cluster should restrict master authorized networks",
       "detect": {
@@ -612,7 +714,9 @@
     {
       "ruleId": "GCP_GKE_DATABASE_ENCRYPTION",
       "threat": "Without application-layer secrets encryption, Kubernetes Secrets are stored only base64-encoded in etcd.",
-      "frameworks": ["CIS GCP Foundations Benchmark 7.13"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.13"
+      ],
       "severity": "MEDIUM",
       "title": "GKE cluster should enable application-layer secrets encryption",
       "detect": {
@@ -631,7 +735,9 @@
     {
       "ruleId": "GCP_COMPUTE_CONFIDENTIAL_VM",
       "threat": "Without Confidential VM, memory is not encrypted in use — a hypervisor-level compromise can read sensitive in-memory data.",
-      "frameworks": ["CIS GCP Foundations Benchmark 4.11"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.11"
+      ],
       "severity": "LOW",
       "title": "Compute instance may enable Confidential VM",
       "detect": {
@@ -650,7 +756,9 @@
     {
       "ruleId": "GCP_GKE_CLIENT_CERT_DISABLED",
       "threat": "A GKE client certificate is a long-lived, non-revocable credential that bypasses IAM if it leaks.",
-      "frameworks": ["CIS GCP Foundations Benchmark 7.x"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.x"
+      ],
       "severity": "MEDIUM",
       "title": "GKE cluster must disable client certificate auth",
       "detect": {
@@ -660,7 +768,9 @@
       },
       "remediate": {
         "strategy": "set-attr",
-        "ensure": { "master_auth.client_certificate_config.issue_client_certificate": "false" }
+        "ensure": {
+          "master_auth.client_certificate_config.issue_client_certificate": "false"
+        }
       },
       "requiredActions": [
         "Set master_auth { client_certificate_config { issue_client_certificate = false } } on the google_container_cluster."
@@ -669,7 +779,9 @@
     {
       "ruleId": "GCP_PUBSUB_CMEK",
       "threat": "A Pub/Sub topic without a CMK relies on Google-managed keys, reducing key control over message data at rest.",
-      "frameworks": ["CIS GCP Foundations Benchmark 5.x"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 5.x"
+      ],
       "severity": "LOW",
       "title": "Pub/Sub topic should use a customer-managed key",
       "detect": {
@@ -688,7 +800,9 @@
     {
       "ruleId": "GCP_FUNCTION_INTERNAL_INGRESS",
       "threat": "A Cloud Function accepting all ingress is internet-exposed; internal-only ingress shrinks the attack surface.",
-      "frameworks": ["CIS GCP Foundations Benchmark 4.x"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.x"
+      ],
       "severity": "LOW",
       "title": "Cloud Function should restrict ingress",
       "detect": {
@@ -707,7 +821,9 @@
     {
       "ruleId": "GCP_DATAPROC_KMS",
       "threat": "A Dataproc cluster without CMEK relies on Google-managed keys for PD and job data at rest.",
-      "frameworks": ["CIS GCP Foundations Benchmark 7.x"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.x"
+      ],
       "severity": "LOW",
       "title": "Dataproc cluster should use a customer-managed key",
       "detect": {
@@ -726,7 +842,9 @@
     {
       "ruleId": "GCP_VPC_FLOW_LOGS",
       "threat": "Without VPC flow logs there is no network-level record of exfiltration or lateral movement between subnets.",
-      "frameworks": ["CIS GCP Foundations Benchmark 3.8"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 3.8"
+      ],
       "severity": "LOW",
       "title": "VPC subnet should enable flow logs",
       "detect": {
@@ -745,7 +863,9 @@
     {
       "ruleId": "GCP_COMPUTE_BLOCK_PROJECT_SSH",
       "threat": "Allowing project-wide SSH keys widens blast radius: any project SSH key can log into this VM.",
-      "frameworks": ["CIS GCP Foundations Benchmark 4.3"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.3"
+      ],
       "severity": "LOW",
       "title": "Compute instance should block project-wide SSH keys",
       "detect": {
@@ -764,7 +884,9 @@
     {
       "ruleId": "GCP_BIGQUERY_CMEK",
       "threat": "A BigQuery dataset without a customer-managed key relies on Google-managed keys, reducing key control over data at rest.",
-      "frameworks": ["CIS GCP Foundations Benchmark 7.2"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.2"
+      ],
       "severity": "LOW",
       "title": "BigQuery dataset should use a customer-managed key",
       "detect": {
@@ -783,7 +905,9 @@
     {
       "ruleId": "GCP_COMPUTE_DISK_CMEK",
       "threat": "A persistent disk without a customer-managed key relies on Google-managed keys, reducing key control over data at rest.",
-      "frameworks": ["CIS GCP Foundations Benchmark 4.7"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.7"
+      ],
       "severity": "LOW",
       "title": "Compute disk should use a customer-managed encryption key",
       "detect": {
@@ -802,7 +926,9 @@
     {
       "ruleId": "GCP_SPANNER_CMEK",
       "threat": "A Spanner database without CMEK relies on Google-managed keys for data at rest.",
-      "frameworks": ["CIS GCP Foundations Benchmark 5.x"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 5.x"
+      ],
       "severity": "LOW",
       "title": "Spanner database should use a customer-managed key",
       "detect": {
@@ -821,7 +947,9 @@
     {
       "ruleId": "GCP_LOGGING_BUCKET_RETENTION_LOCK",
       "threat": "An unlocked log bucket can be shortened or purged by an attacker covering tracks; a locked retention prevents tampering.",
-      "frameworks": ["CIS GCP Foundations Benchmark 2.3"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 2.3"
+      ],
       "severity": "LOW",
       "title": "Logging bucket should lock its retention policy",
       "detect": {
@@ -840,7 +968,9 @@
     {
       "ruleId": "GCP_SECRET_MANAGER_CMEK",
       "threat": "A Secret Manager secret without CMEK relies on Google-managed keys, reducing key control and revocation over secret material.",
-      "frameworks": ["CIS GCP Foundations Benchmark 1.x"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 1.x"
+      ],
       "severity": "LOW",
       "title": "Secret Manager secret should use a customer-managed key",
       "detect": {
@@ -859,7 +989,9 @@
     {
       "ruleId": "GCP_ARTIFACT_REGISTRY_CMEK",
       "threat": "An Artifact Registry without CMEK relies on Google-managed keys for stored images/packages at rest.",
-      "frameworks": ["CIS GCP Foundations Benchmark 5.x"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 5.x"
+      ],
       "severity": "LOW",
       "title": "Artifact Registry should use a customer-managed key",
       "detect": {
@@ -878,7 +1010,9 @@
     {
       "ruleId": "GCP_GKE_COS_IMAGE",
       "threat": "Non-COS node images have a larger attack surface and weaker default hardening than Container-Optimized OS.",
-      "frameworks": ["CIS GCP Foundations Benchmark 7.x"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.x"
+      ],
       "severity": "LOW",
       "title": "GKE node pool should use a Container-Optimized OS image",
       "detect": {
@@ -897,7 +1031,9 @@
     {
       "ruleId": "GCP_GKE_LEGACY_ABAC",
       "threat": "Legacy ABAC grants broad, static permissions that bypass fine-grained RBAC; any leaked node or pod token inherits sweeping cluster access.",
-      "frameworks": ["CIS GCP Foundations Benchmark 7.3"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.3"
+      ],
       "severity": "MEDIUM",
       "title": "GKE cluster must not enable legacy ABAC",
       "detect": {
@@ -916,7 +1052,9 @@
     {
       "ruleId": "GCP_STORAGE_VERSIONING",
       "threat": "Without object versioning, a malicious or accidental overwrite/delete of bucket objects is unrecoverable — no ransomware rollback.",
-      "frameworks": ["CIS GCP Foundations Benchmark 5.3"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 5.3"
+      ],
       "severity": "LOW",
       "title": "Storage bucket should enable object versioning",
       "detect": {
@@ -935,7 +1073,9 @@
     {
       "ruleId": "GCP_STORAGE_BUCKET_LOGGING",
       "threat": "Without access/storage logging, bulk object reads (data exfiltration) leave no audit trail on the bucket.",
-      "frameworks": ["CIS GCP Foundations Benchmark 5.3"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 5.3"
+      ],
       "severity": "LOW",
       "title": "Storage bucket should enable access logging",
       "detect": {
@@ -954,7 +1094,9 @@
     {
       "ruleId": "GCP_COMPUTE_DISABLE_SERIAL_PORT",
       "threat": "An enabled interactive serial console lets anyone with the project metadata permission attach and gain interactive access to the instance, bypassing SSH controls.",
-      "frameworks": ["CIS GCP Foundations Benchmark 4.5"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.5"
+      ],
       "severity": "MEDIUM",
       "title": "Compute instance must disable serial port access",
       "detect": {
@@ -973,7 +1115,9 @@
     {
       "ruleId": "GCP_GKE_PRIVATE_ENDPOINT",
       "threat": "A GKE cluster with a public control-plane endpoint exposes the Kubernetes API server to internet-wide credential stuffing and CVE exploitation.",
-      "frameworks": ["CIS GCP Foundations Benchmark 7.15"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.15"
+      ],
       "severity": "MEDIUM",
       "title": "GKE cluster should enable a private control-plane endpoint",
       "detect": {
@@ -992,7 +1136,9 @@
     {
       "ruleId": "GCP_COMPUTE_ENABLE_VTPM",
       "threat": "Without a virtual TPM, the instance cannot attest boot integrity, so a rootkit altering the boot chain goes undetected.",
-      "frameworks": ["CIS GCP Foundations Benchmark 4.8"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 4.8"
+      ],
       "severity": "LOW",
       "title": "Compute instance should enable vTPM",
       "detect": {
@@ -1011,7 +1157,9 @@
     {
       "ruleId": "GCP_SQL_CMEK",
       "threat": "A Cloud SQL instance without a customer-managed encryption key is encrypted only with Google-managed keys, leaving no customer-controlled revocation if the data must be cryptographically shredded.",
-      "frameworks": ["CIS GCP Foundations Benchmark 6.3.x"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 6.3.x"
+      ],
       "severity": "MEDIUM",
       "title": "Cloud SQL instance should use a customer-managed encryption key",
       "detect": {
@@ -1030,7 +1178,10 @@
     {
       "ruleId": "GCP_DNS_NO_RSASHA1",
       "threat": "DNSSEC signing with the broken RSASHA1 algorithm lets an attacker who can forge signatures spoof DNS responses for the zone.",
-      "frameworks": ["CIS GCP Foundations Benchmark 3.4", "CIS GCP Foundations Benchmark 3.5"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 3.4",
+        "CIS GCP Foundations Benchmark 3.5"
+      ],
       "severity": "MEDIUM",
       "title": "DNS zone must not sign DNSSEC with RSASHA1",
       "detect": {
@@ -1049,7 +1200,9 @@
     {
       "ruleId": "GCP_CLOUD_RUN_INGRESS_INTERNAL",
       "threat": "A Cloud Run service that accepts all ingress is directly reachable from the internet, widening the attack surface beyond a load balancer or internal callers.",
-      "frameworks": ["CIS GCP Foundations Benchmark"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark"
+      ],
       "severity": "MEDIUM",
       "title": "Cloud Run service should restrict ingress to internal/load-balancer",
       "detect": {
@@ -1068,7 +1221,9 @@
     {
       "ruleId": "GCP_GKE_WORKLOAD_IDENTITY",
       "threat": "Without Workload Identity, pods authenticate using the node service account or exported keys, so a compromised pod inherits broad node-level GCP permissions.",
-      "frameworks": ["CIS GCP Foundations Benchmark 7.12"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 7.12"
+      ],
       "severity": "MEDIUM",
       "title": "GKE cluster should enable Workload Identity",
       "detect": {
@@ -1087,7 +1242,9 @@
     {
       "ruleId": "GCP_STORAGE_PUBLIC_ACCESS_PREVENTION",
       "threat": "Without enforced public access prevention, a future IAM binding or ACL can grant allUsers/allAuthenticatedUsers and silently expose the bucket.",
-      "frameworks": ["CIS GCP Foundations Benchmark 5.1"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark 5.1"
+      ],
       "severity": "MEDIUM",
       "title": "Storage bucket must enforce public access prevention",
       "detect": {
@@ -1108,7 +1265,9 @@
     {
       "ruleId": "GCP_FUNCTION_NO_PUBLIC_INVOKER",
       "threat": "A Cloud Function IAM binding granting roles/cloudfunctions.invoker to allUsers makes the function an unauthenticated internet endpoint reaching its service account.",
-      "frameworks": ["CIS GCP Foundations Benchmark"],
+      "frameworks": [
+        "CIS GCP Foundations Benchmark"
+      ],
       "severity": "HIGH",
       "title": "Cloud Function must not grant invoker to allUsers",
       "detect": {

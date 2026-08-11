@@ -102,7 +102,15 @@ export type AgentName =
   | "threat-infrastructure-analyst"
   | "slsa-level3-enforcer"
   | "quantum-migration-planner"
-  | "zero-trust-architect";
+  | "zero-trust-architect"
+  // Personas that shipped in skills/ without ever being added here. Absent from this
+  // union, no roster source could name them and no run could schedule them, while
+  // listBundledSkills() still counted them toward the advertised persona total.
+  | "agentic-instruction-auditor"
+  | "container-hardening-auditor"
+  | "data-platform-auditor"
+  | "gitops-delivery-auditor"
+  | "iac-security-auditor";
 
 /**
  * `completed_na` is a TERMINAL state meaning "this agent determined its domain does
@@ -238,6 +246,21 @@ export type AgentRunManifest = {
    * Provenance so a reviewer can tell a deliberately scoped run from a full sweep.
    */
   rosterSource?: "auto" | "explicit";
+  /**
+   * The SKILL.md sections this run's roster is capable of covering, computed at
+   * creation from the union of the rostered personas' own sections.
+   *
+   * Coverage was previously scored against every section the product defines, including
+   * sections that only exist in personas the run never scheduled. A repository with no
+   * cloud, mobile, or AI surface therefore could not reach the floor no matter how well
+   * its agents performed, and the only way to PASS was to fabricate coverage. Scoring
+   * against what the roster can reach measures the agents; scoring against the global
+   * list measured the stack.
+   *
+   * Recorded on the manifest so a reviewer can see the denominator rather than infer it,
+   * and so a deliberately narrow roster is visible as a narrow denominator.
+   */
+  coverageDenominator?: string[];
 };
 
 // ---------------------------------------------------------------------------

@@ -20,7 +20,7 @@ import { getModelForTask, trackUsage, recordProviderFailure } from "../mcp/model
 import type { UsageInput } from "../mcp/model-router.js";
 import type { AgentExecutionRecord, AgentFinding, AgentName } from "../types/agent-run.js";
 import {
-  renderArgv, joinTools, modelForTier, effortForTier, compileConfigRegex,
+  renderArgv, joinTools, modelForTier, effortForTier, compileConfigRegex, buildChildEnv,
   type CapabilityTier
 } from "./adapter.js";
 import type { AdapterConfig } from "./adapter-schema.js";
@@ -111,50 +111,10 @@ export function resolveTools(cfg: AdapterConfig, opts: {
 // Child environment
 // ---------------------------------------------------------------------------
 
-const BASE_ENV_ALLOWLIST = [
-  "PATH", "HOME", "USER", "SHELL", "LANG", "LC_ALL", "TMPDIR", "TERM",
-  "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME",
-  "CLAUDE_CONFIG_DIR", "CODEX_HOME", "NODE_OPTIONS"
-];
-
-/** Provider credentials that must never leak into a DIFFERENT provider's child. */
-const ALL_PROVIDER_CREDENTIALS = [
-  "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN",
-  "OPENAI_API_KEY",
-  "COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN",
-  "GEMINI_API_KEY", "GOOGLE_API_KEY"
-];
-
-/**
- * Build the child env with `extendEnv:false` semantics.
- *
- * Credential passthrough is PER ADAPTER. A blanket strip of GITHUB_TOKEN would break
- * Copilot, whose documented headless precedence is COPILOT_GITHUB_TOKEN > GH_TOKEN >
- * GITHUB_TOKEN — while a Claude child has no business seeing a GitHub token at all.
- * Everything else is dropped: the parent's HMAC/attestation keys, webhook and ticketing
- * credentials, cloud keys. These children read untrusted repo content with tool access.
- */
-export function buildChildEnv(cfg: AdapterConfig, extra: Record<string, string>): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {};
-  for (const key of BASE_ENV_ALLOWLIST) {
-    const v = process.env[key];
-    if (v !== undefined) env[key] = v;
-  }
-
-  const permitted = new Set(cfg.auth.childCredentialEnv);
-  for (const key of ALL_PROVIDER_CREDENTIALS) {
-    if (!permitted.has(key)) continue;
-    const v = process.env[key];
-    if (v !== undefined && v.length > 0) env[key] = v;
-  }
-
-  for (const [k, v] of Object.entries(cfg.recursionGuard.env)) env[k] = v;
-  for (const [k, v] of Object.entries(cfg.invoke.env)) env[k] = v;
-  for (const [k, v] of Object.entries(extra)) env[k] = v;
-
-  env["CLAUDE_CODE_ENTRYPOINT"] = "security-mcp-executor";
-  return env;
-}
+// buildChildEnv now lives in adapter.ts so the detection probes there can use it too
+// without importing this module (executor already imports adapter — the reverse would
+// be a cycle). Re-exported here because this has been its import path since it shipped.
+export { buildChildEnv };
 
 // ---------------------------------------------------------------------------
 // Output extraction
@@ -494,9 +454,14 @@ export async function runAgent(opts: RunAgentOptions): Promise<AgentOutcome> {
   const rateLimited = isRateLimited(cfg, exitCode, combined);
 
   // ── Failure paths ────────────────────────────────────────────────────────
-  const hardFailure =
-    timedOut || exitCode === null || (exitCode !== 0 && parsed.result === null) || parsed.isError;
-  if (hardFailure && parsed.result === null) {
+  // A kill, a crash, or an explicit error flag is a failure whether or not the CLI also
+  // managed to emit something parseable. Gating the whole branch on `result === null`
+  // let a timed-out or error-flagged agent be recorded as `completed` with an empty
+  // degradation list, which is the shape this project exists to prevent: a truncated run
+  // that reads as a finished one.
+  const hardFailure = timedOut || exitCode === null || parsed.isError;
+  const unusableExit = exitCode !== 0 && parsed.result === null;
+  if (hardFailure || unusableExit) {
     execution.degradationReasons = [...degradation, timedOut ? "timeout" : "cli_error"];
     if (rateLimited) {
       try { await recordProviderFailure(providerFor(opts.adapterId)); } catch { /* advisory */ }
@@ -572,8 +537,12 @@ export async function runAgent(opts: RunAgentOptions): Promise<AgentOutcome> {
     modelUsed: execution.model,
     capabilityTierUsed: tier,
     taskType,
-    toolsAvailable: tools.allowed,
-    toolsUsed: tools.allowed
+    toolsAvailable: tools.allowed
+    // `toolsUsed` is deliberately absent. Nothing here observes which tools the child
+    // actually invoked, so setting it to the grant asserted use that never happened, and
+    // did so inside the payload hash. The capability enforcer treats a missing value as
+    // unverified and raises an advisory, which is the honest outcome. Populate this only
+    // from real observed use, never from the allowlist.
   };
   await attestAgent({
     agentRunId, agentName: agent, findings,
@@ -582,7 +551,17 @@ export async function runAgent(opts: RunAgentOptions): Promise<AgentOutcome> {
     capability: attestedCapability
   });
 
-  const partial = (parsed.salvaged && promisedStructured) || parsed.permissionDenials.length > 0;
+  // The CLI exited non-zero but still produced a parseable result. The findings are
+  // usable, so the run continues, but it is not a clean completion and must not read as
+  // one. Recording the reason keeps the exit code visible to whoever reads the manifest.
+  const nonzeroExitWithResult = exitCode !== 0 && exitCode !== null;
+  if (nonzeroExitWithResult) degradation.add("cli_nonzero_exit");
+  execution.degradationReasons = [...degradation];
+
+  const partial = (parsed.salvaged && promisedStructured)
+    || parsed.permissionDenials.length > 0
+    || nonzeroExitWithResult
+    || normalized.degradationReasons.length > 0;
   const fileName = `${agent}.json`;
   const findingsPath = join(runDir, fileName);
   const payload = {

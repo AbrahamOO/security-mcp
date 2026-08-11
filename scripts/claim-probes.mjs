@@ -109,18 +109,27 @@ export function controlCatalogCount() {
 }
 
 /**
- * Maximum agents buildInitialAgentNames() can name in one run — every
- * conditional branch (cloud, AI, mobile) enabled. This is the "39 named
- * agents" ceiling the README states, not the AgentName type's full universe
- * (which includes agents outside the spawn tree).
+ * Maximum agents buildInitialAgentNames() can name in one run: every conditional
+ * branch enabled. This is the static-spawn-tree ceiling the README states, not the
+ * AgentName type's full universe (which includes agents outside the spawn tree).
+ *
+ * Every signal set must be populated. Leaving languages/frameworks/ciPlatform empty
+ * skipped the web branch (11 agents) and the CI branch (4), so this probe returned 74
+ * while the real ceiling is 89, and verify:claims confirmed the README against a number
+ * the probe itself was under-measuring. A probe that reproduces the documented figure
+ * rather than measuring the system verifies nothing.
  */
 export async function maxAgentCount() {
   const mod = await import(join(ROOT, "dist/mcp/orchestration.js"));
   const names = mod.buildInitialAgentNames({
-    languages: [], frameworks: ["kubernetes"], databases: [],
-    cloudProvider: ["aws", "gcp", "azure"], paymentProcessor: [],
+    languages: ["typescript", "python", "go", "java"],
+    frameworks: ["kubernetes", "react", "express", "django", "spring"],
+    databases: ["postgres", "mongodb", "redis"],
+    cloudProvider: ["aws", "gcp", "azure"],
+    paymentProcessor: ["stripe"],
     hasAI: true, hasMobile: true, hasPII: true, hasPayments: true,
-    packageManagers: [], ciPlatform: []
+    packageManagers: ["npm", "pip"],
+    ciPlatform: ["github-actions", "gitlab-ci"]
   });
   return new Set(names).size;
 }

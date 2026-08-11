@@ -49,7 +49,7 @@
         "file": "README.md",
         "line": 118
       },
-      "verbatim": "911 remediation templates",
+      "verbatim": "914 remediation templates",
       "probe": "remediationTemplateCount",
       "owner": "security-mcp-team"
     },
@@ -61,7 +61,7 @@
         "file": "docs/ARCHITECTURE.md",
         "line": 39
       },
-      "verbatim": "911 templates",
+      "verbatim": "914 templates",
       "probe": "remediationTemplateCount",
       "owner": "security-mcp-team"
     },
@@ -73,7 +73,7 @@
         "file": "docs/WIKI.md",
         "line": 368
       },
-      "verbatim": "911 fix templates",
+      "verbatim": "914 fix templates",
       "probe": "remediationTemplateCount",
       "owner": "security-mcp-team"
     },
@@ -85,7 +85,7 @@
         "file": "README.md",
         "line": 138
       },
-      "verbatim": "39 named agents",
+      "verbatim": "89 named agents",
       "probe": "maxAgentCount",
       "owner": "security-mcp-team"
     },
@@ -97,7 +97,7 @@
         "file": "README.md",
         "line": 167
       },
-      "verbatim": "39 named agents in the static spawn tree",
+      "verbatim": "89 named agents in the static spawn tree",
       "probe": "maxAgentCount",
       "owner": "security-mcp-team"
     },
@@ -299,7 +299,7 @@
         "file": "docs/WIKI.md",
         "line": 368
       },
-      "verbatim": "911 fix templates covering 100% (911/911) of detection IDs",
+      "verbatim": "914 fix templates covering 100% (914/914) of detection IDs",
       "probeA": "ruleIds",
       "probeB": "remediationTemplateIds",
       "mode": "set-equal",
