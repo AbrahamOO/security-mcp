@@ -129,11 +129,19 @@ function redactSecrets(s: string): string {
 const MAX_SCANNED_LINE_LEN = 8192;
 
 /**
- * Wall-clock ceiling for one search.
+ * Scanning-time ceiling for one search.
  *
  * The pattern guard rejects the shapes it knows. This bounds the ones it does not, so an
  * unanticipated pattern costs a truncated search rather than a process that never
  * returns. It is checked between lines, which is where a search can be interrupted.
+ *
+ * This budget counts time spent inside scanLines, not elapsed wall clock. The gate issues
+ * its ~495 searches in concurrent Promise.all batches, so a wall-clock deadline taken at
+ * call time is shared by every search in flight: once the batch as a whole ran longer than
+ * the budget, all of them tripped at the same instant and reported a timeout, having each
+ * done almost no work. That produced 200 spurious SEARCH_TIME_BUDGET_EXCEEDED reports in a
+ * CI job that finished in 14 seconds, which is the opposite of what the finding is for —
+ * it is supposed to mark a genuinely incomplete scan.
  */
 const REGEX_TIME_BUDGET_MS = 5000;
 
@@ -147,11 +155,25 @@ function scanLines(
 	opts: SearchOptions,
 	re: RegExp | null,
 	matches: RepoMatch[],
-	deadline: number
+	budget: { remainingMs: number }
 ): boolean {
+	const started = Date.now();
+	const spend = (): void => {
+		const now = Date.now();
+		budget.remainingMs -= now - started;
+	};
+
 	for (let i = 0; i < lines.length; i++) {
-		if (matches.length >= opts.maxMatches) return true;
-		if (Date.now() > deadline) return false;
+		if (matches.length >= opts.maxMatches) {
+			spend();
+			return true;
+		}
+		// Charge only this search's own scanning against the budget, so a concurrent
+		// batch cannot bill one query for another's time.
+		if (Date.now() - started >= budget.remainingMs) {
+			spend();
+			return false;
+		}
 
 		const raw = lines[i];
 		const line = raw.length > MAX_SCANNED_LINE_LEN ? raw.slice(0, MAX_SCANNED_LINE_LEN) : raw;
@@ -163,6 +185,7 @@ function scanLines(
 			preview: redactSecrets(line.slice(0, MAX_PREVIEW_LEN))
 		});
 	}
+	spend();
 	return true;
 }
 
@@ -276,7 +299,7 @@ export async function searchRepo(opts: SearchOptions): Promise<RepoMatch[]> {
 
 	const re = opts.isRegex ? compileUserRegex(opts.query) : null;
 	const matches: RepoMatch[] = [];
-	const deadline = Date.now() + REGEX_TIME_BUDGET_MS;
+	const budget = { remainingMs: REGEX_TIME_BUDGET_MS };
 
 	for (const file of files) {
 		if (matches.length >= opts.maxMatches) break;
@@ -290,7 +313,7 @@ export async function searchRepo(opts: SearchOptions): Promise<RepoMatch[]> {
 			continue;
 		}
 
-		if (!scanLines(file, text.split("\n"), opts, re, matches, deadline)) {
+		if (!scanLines(file, text.split("\n"), opts, re, matches, budget)) {
 			recordSearchTimeout(opts.query);
 			break;
 		}
