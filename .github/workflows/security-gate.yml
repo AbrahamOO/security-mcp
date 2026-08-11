@@ -155,5 +155,12 @@ jobs:
           # excluded those paths from EVERY reviewed project, not just this one. Stating
           # them here keeps this repo's self-scan quiet while every other project gets its
           # src/gate/ and .claude/ trees scanned like any other source.
-          SECURITY_GATE_IGNORE: "fixtures,skills,prompts,defaults,skills-manifest.json,.github/security-exceptions-ci.json,**/remediation-parts/**,src/gate,.claude,src/tests"
+          # .cache is the Trivy step's own working directory. Trivy runs earlier in this
+          # job and downloads a ~1.2GB vulnerability database into .cache/trivy/, which is
+          # then sitting in the workspace when the gate enumerates it. That single tree was
+          # enough to exhaust the content-search time budget for 200 detection queries, so
+          # the gate was scanning a scanner's cache instead of this repository and stopping
+          # early. It is another tool's build artifact, not source, and never belonged in
+          # scope.
+          SECURITY_GATE_IGNORE: "fixtures,skills,prompts,defaults,skills-manifest.json,.github/security-exceptions-ci.json,**/remediation-parts/**,src/gate,.claude,src/tests,.cache"
         run: npm run ci:pr-gate
