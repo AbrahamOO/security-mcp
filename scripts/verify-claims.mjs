@@ -175,7 +175,10 @@ function runDelegatedSuite() {
   let stdout = "";
   let exitOk = true;
   try {
-    stdout = execFileSync(process.execPath, ["--test", "dist/tests/legacy.test.js"], {
+    // Pin the reporter. Node 22 changed the `node --test` default from tap to spec, so
+    // relying on the default made every delegated claim fail to parse on Node 22+ while
+    // still passing on 20 — the claims reported unverified only on the CI runtime.
+    stdout = execFileSync(process.execPath, ["--test", "--test-reporter=tap", "dist/tests/legacy.test.js"], {
       cwd: ROOT, stdio: "pipe", encoding: "utf8", maxBuffer: 64 * 1024 * 1024
     });
   } catch (err) {
