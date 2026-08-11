@@ -92,7 +92,7 @@ jobs:
       #    so this condition correctly fires only when real IaC is added to the repo.
       - name: Checkov
         if: hashFiles('**/*.tf', 'k8s/**') != ''
-        uses: bridgecrewio/checkov-action@a7683e7b72a04503521247973281ec8142e1ac1f  # bridgecrewio/checkov-action@v12
+        uses: bridgecrewio/checkov-action@9b70310bcd306d11740313070b940167d6b23085  # bridgecrewio/checkov-action@v12
         with:
           directory: .
           framework: terraform,kubernetes,cloudformation
